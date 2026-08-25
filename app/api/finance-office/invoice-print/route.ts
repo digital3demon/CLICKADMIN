@@ -44,6 +44,12 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
+  const docsRaw =
+    body && typeof body === "object"
+      ? String((body as { documents?: unknown }).documents || "invoices")
+      : "invoices";
+  const documents =
+    docsRaw === "upd" || docsRaw === "both" ? docsRaw : "invoices";
   const orderIds = parseOrderIds(
     body && typeof body === "object"
       ? (body as { orderIds?: unknown }).orderIds
@@ -59,11 +65,20 @@ export async function POST(req: Request) {
       tenantId,
       id: { in: orderIds },
       archivedAt: null,
-      invoiceAttachmentId: { not: null },
+      OR:
+        documents === "upd"
+          ? [{ updAttachmentId: { not: null } }]
+          : documents === "both"
+            ? [
+                { invoiceAttachmentId: { not: null } },
+                { updAttachmentId: { not: null } },
+              ]
+            : [{ invoiceAttachmentId: { not: null } }],
     },
     select: {
       id: true,
       invoiceAttachmentId: true,
+      updAttachmentId: true,
     },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -74,9 +89,12 @@ export async function POST(req: Request) {
   const capped = ordered.slice(0, FINANCE_OFFICE_INVOICE_PRINT_MAX);
   const truncated = ordered.length - capped.length;
 
-  const attIds = capped
-    .map((r) => r.invoiceAttachmentId)
-    .filter((id): id is string => Boolean(id));
+  const attIds = capped.flatMap((r) => {
+    const ids: string[] = [];
+    if (documents !== "upd" && r.invoiceAttachmentId) ids.push(r.invoiceAttachmentId);
+    if (documents !== "invoices" && r.updAttachmentId) ids.push(r.updAttachmentId);
+    return ids;
+  });
   const attachments = attIds.length
     ? await prisma.orderAttachment.findMany({
         where: { id: { in: attIds } },
@@ -92,22 +110,38 @@ export async function POST(req: Request) {
   const buffers: Uint8Array[] = [];
   const printedIds: string[] = [];
   for (const order of capped) {
-    const attId = order.invoiceAttachmentId;
-    if (!attId) continue;
-    const att = attById.get(attId);
-    if (!att) continue;
-    try {
-      const buf = await readOrderAttachmentBytes(att);
-      buffers.push(new Uint8Array(buf));
-      printedIds.push(order.id);
-    } catch {
-      /* нет байтов — пропускаем */
+    const ids: string[] = [];
+    if (documents !== "upd" && order.invoiceAttachmentId) {
+      ids.push(order.invoiceAttachmentId);
     }
+    if (documents !== "invoices" && order.updAttachmentId) {
+      ids.push(order.updAttachmentId);
+    }
+    let any = false;
+    for (const attId of ids) {
+      const att = attById.get(attId);
+      if (!att) continue;
+      try {
+        const buf = await readOrderAttachmentBytes(att);
+        buffers.push(new Uint8Array(buf));
+        any = true;
+      } catch {
+        /* нет байтов — пропускаем */
+      }
+    }
+    if (any) printedIds.push(order.id);
   }
 
   if (printedIds.length === 0) {
     return NextResponse.json(
-      { error: "У выбранных нарядов нет файла счёта" },
+      {
+        error:
+          documents === "upd"
+            ? "У выбранных нарядов нет файла УПД"
+            : documents === "both"
+              ? "У выбранных нарядов нет файла счёта или УПД"
+              : "У выбранных нарядов нет файла счёта",
+      },
       { status: 400 },
     );
   }
@@ -118,7 +152,13 @@ export async function POST(req: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": "inline; filename=\"invoices.pdf\"",
+        "Content-Disposition":
+          documents === "upd"
+            ? "inline; filename=\"upd.pdf\""
+            : documents === "both"
+              ? "inline; filename=\"invoices-upd.pdf\""
+              : "inline; filename=\"invoices.pdf\"",
+        "X-Invoice-Print-Documents": documents,
         "Cache-Control": "private, no-store",
         "X-Invoice-Print-Order-Ids": printedIds.join(","),
         "X-Invoice-Print-Skipped": String(skippedNoFile),

@@ -122,6 +122,10 @@ export async function DELETE(_req: Request, ctx: Ctx) {
         invoiceParsedLines: Prisma.DbNull,
       },
     });
+    await prisma.order.updateMany({
+      where: { id: orderId, updAttachmentId: attachmentId },
+      data: { updAttachmentId: null },
+    });
     await prisma.orderAttachment.delete({ where: { id: attachmentId } });
     await deleteOrderAttachmentFile(diskRelPath);
     return NextResponse.json({ ok: true });

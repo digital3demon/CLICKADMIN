@@ -53,6 +53,10 @@ export const LIST_TAG_KAITEN_BLOCKED = "kaiten-blocked";
 export const LIST_TAG_INVOICE = "invoice";
 /** Отметка «Счёт распечатан» (`invoicePrinted`) */
 export const LIST_TAG_INVOICE_PRINTED = "invoice-printed";
+/** Загружен файл УПД (`updAttachmentId`) */
+export const LIST_TAG_UPD = "upd";
+/** Отметка «УПД распечатан» */
+export const LIST_TAG_UPD_PRINTED = "upd-printed";
 /** Жёлтый треугольник: непринятые корректировки «!!!» или расхождение суммы счёта с составом */
 export const LIST_TAG_ORDER_ATTENTION = "order-attention";
 /** Непустая пометка смен в колонке «ПА» (`Order.listAdminMemo`) */
@@ -112,6 +116,8 @@ export type ParsedListTag =
   | { kind: "kaitenBlocked" }
   | { kind: "invoice" }
   | { kind: "invoicePrinted" }
+  | { kind: "upd" }
+  | { kind: "updPrinted" }
   | { kind: "orderAttention" }
   | { kind: "adminMemo" }
   | { kind: "kaitenLabMention" }
@@ -176,6 +182,8 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_KAITEN_BLOCKED) return { kind: "kaitenBlocked" };
   if (t === LIST_TAG_INVOICE) return { kind: "invoice" };
   if (t === LIST_TAG_INVOICE_PRINTED) return { kind: "invoicePrinted" };
+  if (t === LIST_TAG_UPD) return { kind: "upd" };
+  if (t === LIST_TAG_UPD_PRINTED) return { kind: "updPrinted" };
   if (t === LIST_TAG_ORDER_ATTENTION) return { kind: "orderAttention" };
   if (t === LIST_TAG_ADMIN_MEMO) return { kind: "adminMemo" };
   if (t === LIST_TAG_KAITEN_LAB_MENTION) return { kind: "kaitenLabMention" };
@@ -291,6 +299,10 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
       return { invoiceAttachmentId: { not: null } };
     case "invoicePrinted":
       return { invoicePrinted: true };
+    case "upd":
+      return { updAttachmentId: { not: null } };
+    case "updPrinted":
+      return { updPrinted: true };
     case "adminMemo":
       return {
         AND: [
@@ -384,6 +396,10 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "СЧЕТ";
     case "invoicePrinted":
       return "Счёт распечатан";
+    case "upd":
+      return "УПД";
+    case "updPrinted":
+      return "УПД распечатан";
     case "orderAttention":
       return "Внимание: корректировки или расхождение сумм";
     case "adminMemo":
@@ -529,6 +545,20 @@ export function relatedOrdersListTagQuickFilters(
         {
           label: humanListTagLabel({ kind: "invoice" }),
           tag: LIST_TAG_INVOICE,
+        },
+      ];
+    case "upd":
+      return [
+        {
+          label: humanListTagLabel({ kind: "updPrinted" }),
+          tag: LIST_TAG_UPD_PRINTED,
+        },
+      ];
+    case "updPrinted":
+      return [
+        {
+          label: humanListTagLabel({ kind: "upd" }),
+          tag: LIST_TAG_UPD,
         },
       ];
     case "financeCalculated":

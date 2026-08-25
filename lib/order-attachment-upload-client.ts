@@ -123,6 +123,7 @@ export async function postOrderAttachmentWithRetries(
   file: File,
   options?: {
     asInvoice?: boolean;
+    asUpd?: boolean;
     /** Только бух-блок: не в общем списке файлов и без Kaiten. */
     paymentSlip?: boolean;
     /** Заголовок X-Upload-Context: kanban — проверка KANBAN_ATTACH_FILES в middleware. */
@@ -160,6 +161,9 @@ export async function postOrderAttachmentWithRetries(
       if (options?.asInvoice) {
         headers["x-as-invoice"] = "1";
       }
+      if (options?.asUpd) {
+        headers["x-as-upd"] = "1";
+      }
       if (options?.paymentSlip) {
         headers["x-attachment-scope"] = "payment-slip";
       }
@@ -191,6 +195,7 @@ export async function postOrderAttachmentWithRetries(
         const syncKaiten =
           options?.syncKaitenAfter !== false &&
           !options?.asInvoice &&
+          !options?.asUpd &&
           !options?.paymentSlip;
         if (syncKaiten) {
           void requestOrderKaitenAttachmentSync(orderId);

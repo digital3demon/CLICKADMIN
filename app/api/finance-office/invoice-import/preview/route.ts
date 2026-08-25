@@ -72,14 +72,14 @@ export async function POST(req: Request) {
   }
 
   const prisma = await getOrdersPrisma();
-  const rows = await buildFinanceInvoiceImportPreview(
+  const { rows, updPool } = await buildFinanceInvoiceImportPreview(
     prisma,
     tenantId,
     expanded.pdfs,
   );
 
   return NextResponse.json(
-    { rows },
+    { rows, updPool },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

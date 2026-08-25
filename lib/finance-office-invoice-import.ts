@@ -3,6 +3,9 @@
  * Apply счетов: NDJSON phase/row/done — живой прогресс в модалке, не одно «Сохранение…».
  */
 
+import { normalizeUpdDigitsInput } from "@/lib/extract-upd-number";
+import { assignmentFromKeys } from "@/lib/finance-office-upd-match";
+
 export type FinanceOfficeDropKind = "bank" | "invoices" | "mixed" | "empty" | "unknown";
 
 export type FinanceOfficeDropFile = { name: string; type?: string };
@@ -104,6 +107,13 @@ export function invoiceImportSourceFileNames(
   return [...names];
 }
 
+export type FinanceUpdPoolItemDto = {
+  key: string;
+  number: string;
+  fileName: string;
+  sourceArchive: string | null;
+};
+
 export type FinanceInvoiceImportPreviewRow = {
   key: string;
   fileName: string;
@@ -113,9 +123,15 @@ export type FinanceInvoiceImportPreviewRow = {
   orderId: string | null;
   orderLabel: string | null;
   alreadyHasInvoice: boolean;
+  alreadyHasUpd?: boolean;
   apply: boolean;
   errors: string[];
   basisSnippet: string;
+  sourceKind?: "drop-invoice" | "crm-invoice";
+  invoiceAttachmentId?: string | null;
+  updNumberRaw?: string;
+  updMatch?: "none" | "one" | "many";
+  updItems?: FinanceUpdPoolItemDto[];
 };
 
 export type FinanceInvoiceImportApplyRow = {
@@ -125,7 +141,50 @@ export type FinanceInvoiceImportApplyRow = {
   orderNumber: string;
   invoiceNumberRaw: string;
   apply: boolean;
+  sourceKind?: "drop-invoice" | "crm-invoice";
+  updKeys?: string[];
+  updNumberRaw?: string;
 };
+
+export function financeInvoiceRowIsRecognized(
+  row: Pick<
+    FinanceInvoiceImportPreviewRow,
+    "orderId" | "errors" | "updMatch"
+  >,
+): boolean {
+  return (
+    Boolean(row.orderId) &&
+    row.errors.length === 0 &&
+    row.updMatch === "one"
+  );
+}
+
+export function findUpdDtosByNumber(
+  pool: readonly FinanceUpdPoolItemDto[],
+  rawNumber: string,
+): FinanceUpdPoolItemDto[] {
+  const want = normalizeUpdDigitsInput(rawNumber);
+  if (!want) return [];
+  return pool.filter((p) => normalizeUpdDigitsInput(p.number) === want);
+}
+
+export function withPreviewRowUpdItems(
+  row: FinanceInvoiceImportPreviewRow,
+  items: FinanceUpdPoolItemDto[],
+): FinanceInvoiceImportPreviewRow {
+  const asg = assignmentFromKeys(items.map((i) => i.key));
+  const next: FinanceInvoiceImportPreviewRow = {
+    ...row,
+    updItems: items,
+    updMatch: asg.match,
+    updNumberRaw:
+      asg.match === "one"
+        ? (items[0]?.number ?? row.updNumberRaw ?? "")
+        : (row.updNumberRaw ?? ""),
+  };
+  next.apply = financeInvoiceRowIsRecognized(next);
+  return next;
+}
 
 export type FinanceInvoiceImportApplyResult = {
   key: string;

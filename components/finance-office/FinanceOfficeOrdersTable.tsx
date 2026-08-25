@@ -42,6 +42,9 @@ export type FinanceOfficeOrderTableRow = {
   invoiceIssued: boolean;
   invoiceNumber: string | null;
   invoicePrinted: boolean;
+  updAttachmentId: string | null;
+  updNumber: string | null;
+  updPrinted: boolean;
   invoicePaperDocs: boolean;
   invoiceSentToEdo: boolean;
   invoiceEdoSigned: boolean;
@@ -85,6 +88,10 @@ export function FinanceOfficeOrdersTable({
     visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
   const orderIdsWithInvoice = useMemo(
     () => orders.filter((o) => o.invoiceAttachmentId).map((o) => o.id),
+    [orders],
+  );
+  const orderIdsWithUpd = useMemo(
+    () => orders.filter((o) => o.updAttachmentId).map((o) => o.id),
     [orders],
   );
   const kaitenOrderIds = useMemo(
@@ -141,6 +148,7 @@ export function FinanceOfficeOrdersTable({
                 ) : null}
                 <FinanceOfficePrintInvoicesButton
                   orderIdsWithInvoice={orderIdsWithInvoice}
+                  orderIdsWithUpd={orderIdsWithUpd}
                 />
               </div>
             ) : null}

@@ -8,20 +8,41 @@ import "server-only";
 import { OrderAttachmentScope, Prisma, type PrismaClient } from "@prisma/client";
 import { applyInvoiceParseToOrder } from "@/lib/apply-invoice-parse-to-order";
 import {
+  financeInvoiceRowIsRecognized,
   financeOfficeInvoiceRowKey,
   type FinanceInvoiceImportApplyResult,
   type FinanceInvoiceImportApplyRow,
   type FinanceInvoiceImportPreviewRow,
+  type FinanceUpdPoolItemDto,
 } from "@/lib/finance-office-invoice-import";
 import type { ExpandedInvoicePdf } from "@/lib/finance-office-invoice-zip";
 import {
+  buildDocFingerprint,
+  fingerprintFromStoredInvoice,
+  type DocFingerprint,
+} from "@/lib/finance-office-doc-fingerprint";
+import {
+  assignmentFromKeys,
+  assignUpdsByFingerprint,
+  type UpdPoolItem,
+} from "@/lib/finance-office-upd-match";
+import { resolveFinanceOfficePdfKind } from "@/lib/finance-office-pdf-kind";
+import {
+  extractUpdDigitsFromDocumentText,
+  extractUpdDigitsFromFileName,
+} from "@/lib/extract-upd-number";
+import {
   buildInvoiceCaptionRuFromDocumentText,
   buildInvoiceCaptionRuFromFileName,
+  formatInvoiceCaptionRu,
+  moscowTodayYmd,
 } from "@/lib/format-invoice-number-ru";
+import { getClientsPrisma } from "@/lib/get-domain-prisma";
 import {
   extractInvoiceNumberFromDocumentText,
   extractInvoiceNumberFromFileName,
 } from "@/lib/invoice-number-extract";
+import { normalizeInvoiceParsedLines } from "@/lib/invoice-parsed-types";
 import { extractInvoicePdfText } from "@/lib/parse-invoice-pdf-lines";
 import {
   extractOrderNumberFromInvoiceBasisText,
@@ -60,45 +81,280 @@ function snippetBasis(text: string): string {
   return formatInvoiceBasisFoundLabel(text);
 }
 
+function updCaptionFromPdf(fileName: string, pdfText: string): string {
+  const prettyName = invoiceFileNameForNumberExtract(fileName);
+  const digits =
+    extractUpdDigitsFromFileName(prettyName) ??
+    extractUpdDigitsFromDocumentText(pdfText);
+  if (!digits) return "";
+  return formatInvoiceCaptionRu(digits, moscowTodayYmd());
+}
+
+function finishRow(
+  row: FinanceInvoiceImportPreviewRow,
+): FinanceInvoiceImportPreviewRow {
+  const apply = financeInvoiceRowIsRecognized(row);
+  return { ...row, apply };
+}
+
+function orderLabelOf(order: {
+  orderNumber: string;
+  patientName: string | null;
+  doctor: { fullName: string };
+  clinic: { name: string } | null;
+}): string {
+  const patient = personNameSurnameInitials(order.patientName);
+  const doctor = personNameSurnameInitials(order.doctor.fullName ?? "");
+  const clinic = order.clinic?.name?.trim() || "";
+  return [order.orderNumber, patient || "без пациента", doctor, clinic]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export async function buildFinanceInvoiceImportPreview(
   prisma: PrismaClient,
   tenantId: string,
   pdfs: ExpandedInvoicePdf[],
-): Promise<FinanceInvoiceImportPreviewRow[]> {
-  const parsed: Array<{
+): Promise<{
+  rows: FinanceInvoiceImportPreviewRow[];
+  updPool: FinanceUpdPoolItemDto[];
+}> {
+  type ParsedPdf = {
     pdf: ExpandedInvoicePdf;
-    orderNumber: string;
-    invoiceNumberRaw: string;
-    basisSnippet: string;
-    errors: string[];
-  }> = [];
+    text: string;
+    kind: "invoice" | "upd";
+    extractError: string | null;
+    fingerprint: DocFingerprint;
+  };
 
+  const parsed: ParsedPdf[] = [];
   for (const pdf of pdfs) {
     const extracted = await extractInvoicePdfText(pdf.buf);
-    const errors: string[] = [];
-    if (extracted.error) errors.push(extracted.error);
-    else if (!extracted.text.trim()) {
-      errors.push("В PDF не найден текст (возможно, скан без OCR)");
-    }
-    const orderNumber = extractOrderNumberFromInvoiceBasisText(extracted.text) ?? "";
-    if (!orderNumber && errors.length === 0) {
-      errors.push("Не найден номер наряда в «Основание»");
-    }
+    const text = extracted.text || "";
+    const extractError = extracted.error
+      ? extracted.error
+      : !text.trim()
+        ? "В PDF не найден текст (возможно, скан без OCR)"
+        : null;
+    const kind = resolveFinanceOfficePdfKind(pdf.fileName, text);
     parsed.push({
       pdf,
-      orderNumber,
-      invoiceNumberRaw: invoiceCaptionFromPdf(pdf.fileName, extracted.text),
-      basisSnippet: snippetBasis(extracted.text),
-      errors,
+      text,
+      kind,
+      extractError,
+      fingerprint: buildDocFingerprint(text),
     });
   }
 
-  const numbers = Array.from(
-    new Set(parsed.map((p) => p.orderNumber).filter((n) => ORDER_NUMBER_PATTERN.test(n))),
-  );
-  const orders = numbers.length
-    ? await prisma.order.findMany({
-        where: { tenantId, archivedAt: null, orderNumber: { in: numbers } },
+  const invoiceParsed = parsed.filter((p) => p.kind === "invoice");
+  const updParsed = parsed.filter((p) => p.kind === "upd");
+
+  const updPoolItems: UpdPoolItem[] = updParsed.map((p) => {
+    const key = financeOfficeInvoiceRowKey(p.pdf.fileName, p.pdf.sourceArchive);
+    return {
+      key,
+      number:
+        extractUpdDigitsFromFileName(p.pdf.fileName) ??
+        extractUpdDigitsFromDocumentText(p.text) ??
+        "",
+      fileName: p.pdf.fileName,
+      fingerprint: p.fingerprint,
+    };
+  });
+  const updPoolDto: FinanceUpdPoolItemDto[] = updPoolItems.map((u) => {
+    const src = updParsed.find(
+      (p) =>
+        financeOfficeInvoiceRowKey(p.pdf.fileName, p.pdf.sourceArchive) === u.key,
+    );
+    return {
+      key: u.key,
+      number: u.number,
+      fileName: u.fileName,
+      sourceArchive: src?.pdf.sourceArchive ?? null,
+    };
+  });
+  const updDtoByKey = new Map(updPoolDto.map((u) => [u.key, u]));
+
+  const attachUpdFields = (
+    rowKey: string,
+    assigned: Map<string, string[]>,
+  ): Pick<
+    FinanceInvoiceImportPreviewRow,
+    "updNumberRaw" | "updMatch" | "updItems"
+  > => {
+    const keys = assigned.get(rowKey) ?? [];
+    const asg = assignmentFromKeys(keys);
+    const items = asg.keys
+      .map((k) => updDtoByKey.get(k))
+      .filter((x): x is FinanceUpdPoolItemDto => Boolean(x));
+    return {
+      updNumberRaw: items.length === 1 ? items[0]!.number : "",
+      updMatch: asg.match,
+      updItems: items,
+    };
+  };
+
+  if (invoiceParsed.length > 0) {
+    const invoiceWork: Array<{
+      pdf: ExpandedInvoicePdf;
+      orderNumber: string;
+      invoiceNumberRaw: string;
+      basisSnippet: string;
+      errors: string[];
+      fingerprint: DocFingerprint;
+    }> = [];
+
+    for (const p of invoiceParsed) {
+      const errors: string[] = [];
+      if (p.extractError) errors.push(p.extractError);
+      const orderNumber = extractOrderNumberFromInvoiceBasisText(p.text) ?? "";
+      if (!orderNumber && errors.length === 0) {
+        errors.push("Не найден номер наряда в «Основание»");
+      }
+      invoiceWork.push({
+        pdf: p.pdf,
+        orderNumber,
+        invoiceNumberRaw: invoiceCaptionFromPdf(p.pdf.fileName, p.text),
+        basisSnippet: snippetBasis(p.text),
+        errors,
+        fingerprint: p.fingerprint,
+      });
+    }
+
+    const numbers = Array.from(
+      new Set(
+        invoiceWork.map((p) => p.orderNumber).filter((n) => ORDER_NUMBER_PATTERN.test(n)),
+      ),
+    );
+    const orders = numbers.length
+      ? await prisma.order.findMany({
+          where: { tenantId, archivedAt: null, orderNumber: { in: numbers } },
+          select: {
+            id: true,
+            orderNumber: true,
+            patientName: true,
+            invoiceAttachmentId: true,
+            invoiceIssued: true,
+            invoiceNumber: true,
+            updAttachmentId: true,
+            doctor: { select: { fullName: true } },
+            clinic: { select: { name: true } },
+          },
+        })
+      : [];
+    const byNumber = new Map(orders.map((o) => [o.orderNumber, o]));
+    const fpMap = new Map<string, DocFingerprint>();
+    for (const p of invoiceWork) {
+      fpMap.set(
+        financeOfficeInvoiceRowKey(p.pdf.fileName, p.pdf.sourceArchive),
+        p.fingerprint,
+      );
+    }
+    const assigned = assignUpdsByFingerprint(fpMap, updPoolItems);
+
+    const rows = invoiceWork.map((p) => {
+      const key = financeOfficeInvoiceRowKey(p.pdf.fileName, p.pdf.sourceArchive);
+      const errors = [...p.errors];
+      const order = p.orderNumber ? byNumber.get(p.orderNumber) : undefined;
+      if (p.orderNumber && !order) {
+        errors.push("Наряд с таким номером не найден");
+      }
+      const alreadyHasInvoice = Boolean(
+        order &&
+          (order.invoiceAttachmentId ||
+            order.invoiceIssued ||
+            String(order.invoiceNumber || "").trim()),
+      );
+      return finishRow({
+        key,
+        fileName: p.pdf.fileName,
+        sourceArchive: p.pdf.sourceArchive,
+        invoiceNumberRaw: p.invoiceNumberRaw,
+        orderNumber: p.orderNumber,
+        orderId: order?.id ?? null,
+        orderLabel: order ? orderLabelOf(order) : null,
+        alreadyHasInvoice,
+        alreadyHasUpd: Boolean(order?.updAttachmentId),
+        apply: false,
+        errors,
+        basisSnippet: p.basisSnippet,
+        sourceKind: "drop-invoice",
+        invoiceAttachmentId: order?.invoiceAttachmentId ?? null,
+        ...attachUpdFields(key, assigned),
+      });
+    });
+    return { rows, updPool: updPoolDto };
+  }
+
+  const crmRows = await buildCrmInvoiceRowsForUpdPool({
+    prisma,
+    tenantId,
+    updPoolItems,
+    updPoolDto,
+    attachUpdFields,
+  });
+  return { rows: crmRows, updPool: updPoolDto };
+}
+
+async function buildCrmInvoiceRowsForUpdPool(opts: {
+  prisma: PrismaClient;
+  tenantId: string;
+  updPoolItems: UpdPoolItem[];
+  updPoolDto: FinanceUpdPoolItemDto[];
+  attachUpdFields: (
+    rowKey: string,
+    assigned: Map<string, string[]>,
+  ) => Pick<
+    FinanceInvoiceImportPreviewRow,
+    "updNumberRaw" | "updMatch" | "updItems"
+  >;
+}): Promise<FinanceInvoiceImportPreviewRow[]> {
+  const inns = [
+    ...new Set(
+      opts.updPoolItems
+        .map((u) => u.fingerprint.buyerInn)
+        .filter((x): x is string => Boolean(x)),
+    ),
+  ];
+  if (inns.length === 0) {
+    return opts.updPoolItems.map((u) =>
+      finishRow({
+        key: `orphan::${u.key}`,
+        fileName: "",
+        sourceArchive: null,
+        invoiceNumberRaw: "",
+        orderNumber: "",
+        orderId: null,
+        orderLabel: null,
+        alreadyHasInvoice: false,
+        apply: false,
+        errors: ["Счёт не найден (нет ИНН покупателя в УПД)"],
+        basisSnippet: "",
+        sourceKind: "crm-invoice",
+        invoiceAttachmentId: null,
+        updNumberRaw: u.number,
+        updMatch: "none",
+        updItems: opts.updPoolDto.filter((d) => d.key === u.key),
+      }),
+    );
+  }
+
+  const clients = await getClientsPrisma();
+  const clinics = await clients.clinic.findMany({
+    where: { tenantId: opts.tenantId, inn: { in: inns } },
+    select: { id: true, inn: true, name: true },
+  });
+  const clinicIds = clinics.map((c) => c.id);
+  const orders = clinicIds.length
+    ? await opts.prisma.order.findMany({
+        where: {
+          tenantId: opts.tenantId,
+          archivedAt: null,
+          invoiceAttachmentId: { not: null },
+          clinicId: { in: clinicIds },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 400,
         select: {
           id: true,
           orderNumber: true,
@@ -106,48 +362,83 @@ export async function buildFinanceInvoiceImportPreview(
           invoiceAttachmentId: true,
           invoiceIssued: true,
           invoiceNumber: true,
+          invoiceParsedTotalRub: true,
+          invoiceParsedLines: true,
+          updAttachmentId: true,
+          clinicId: true,
           doctor: { select: { fullName: true } },
           clinic: { select: { name: true } },
         },
       })
     : [];
-  const byNumber = new Map(orders.map((o) => [o.orderNumber, o]));
 
-  return parsed.map((p) => {
-    const key = financeOfficeInvoiceRowKey(p.pdf.fileName, p.pdf.sourceArchive);
-    const errors = [...p.errors];
-    const order = p.orderNumber ? byNumber.get(p.orderNumber) : undefined;
-    if (p.orderNumber && !order) {
-      errors.push("Наряд с таким номером не найден");
-    }
-    const alreadyHasInvoice = Boolean(
-      order &&
-        (order.invoiceAttachmentId ||
-          order.invoiceIssued ||
-          String(order.invoiceNumber || "").trim()),
+  const innByClinic = new Map(clinics.map((c) => [c.id, (c.inn || "").trim()]));
+  const fpMap = new Map<string, DocFingerprint>();
+  const orderByRowKey = new Map<(typeof orders)[number]["id"], (typeof orders)[number]>();
+  for (const o of orders) {
+    const lines = normalizeInvoiceParsedLines(o.invoiceParsedLines) ?? [];
+    const fp = fingerprintFromStoredInvoice({
+      buyerInn: o.clinicId ? innByClinic.get(o.clinicId) ?? null : null,
+      totalRub: o.invoiceParsedTotalRub,
+      invoiceNumber: o.invoiceNumber,
+      codes: lines.map((l) => l.code || "").filter((c) => /^-\d{4,5}$/.test(c)),
+    });
+    const key = `crm::${o.id}`;
+    fpMap.set(key, fp);
+    orderByRowKey.set(o.id, o);
+  }
+  const assigned = assignUpdsByFingerprint(fpMap, opts.updPoolItems);
+  const usedUpd = new Set<string>();
+  const rows: FinanceInvoiceImportPreviewRow[] = [];
+  for (const o of orders) {
+    const key = `crm::${o.id}`;
+    const updPart = opts.attachUpdFields(key, assigned);
+    if (updPart.updItems?.length === 0) continue;
+    for (const it of updPart.updItems ?? []) usedUpd.add(it.key);
+    rows.push(
+      finishRow({
+        key,
+        fileName: o.invoiceNumber?.trim() || "Счёт в CRM",
+        sourceArchive: null,
+        invoiceNumberRaw: o.invoiceNumber ?? "",
+        orderNumber: o.orderNumber,
+        orderId: o.id,
+        orderLabel: orderLabelOf(o),
+        alreadyHasInvoice: true,
+        alreadyHasUpd: Boolean(o.updAttachmentId),
+        apply: false,
+        errors: [],
+        basisSnippet: "Счёт уже в наряде",
+        sourceKind: "crm-invoice",
+        invoiceAttachmentId: o.invoiceAttachmentId,
+        ...updPart,
+      }),
     );
-    const patient = personNameSurnameInitials(order?.patientName);
-    const doctor = personNameSurnameInitials(order?.doctor.fullName ?? "");
-    const clinic = order?.clinic?.name?.trim() || "";
-    const orderLabel = order
-      ? [order.orderNumber, patient || "без пациента", doctor, clinic]
-          .filter(Boolean)
-          .join(" · ")
-      : null;
-    return {
-      key,
-      fileName: p.pdf.fileName,
-      sourceArchive: p.pdf.sourceArchive,
-      invoiceNumberRaw: p.invoiceNumberRaw,
-      orderNumber: p.orderNumber,
-      orderId: order?.id ?? null,
-      orderLabel,
-      alreadyHasInvoice,
-      apply: errors.length === 0 && Boolean(order),
-      errors,
-      basisSnippet: p.basisSnippet,
-    };
-  });
+  }
+  for (const u of opts.updPoolItems) {
+    if (usedUpd.has(u.key)) continue;
+    rows.push(
+      finishRow({
+        key: `orphan::${u.key}`,
+        fileName: "",
+        sourceArchive: null,
+        invoiceNumberRaw: "",
+        orderNumber: "",
+        orderId: null,
+        orderLabel: null,
+        alreadyHasInvoice: false,
+        apply: false,
+        errors: ["Счёт не найден"],
+        basisSnippet: "",
+        sourceKind: "crm-invoice",
+        invoiceAttachmentId: null,
+        updNumberRaw: u.number,
+        updMatch: "none",
+        updItems: opts.updPoolDto.filter((d) => d.key === u.key),
+      }),
+    );
+  }
+  return rows;
 }
 
 async function storeInvoiceBytes(
@@ -247,6 +538,67 @@ export async function attachInvoicePdfToOrder(opts: {
   }
 }
 
+export async function attachUpdPdfToOrder(opts: {
+  prisma: PrismaClient;
+  tenantId: string;
+  orderId: string;
+  fileName: string;
+  buf: Buffer;
+  updNumberRaw: string;
+}): Promise<void> {
+  const order = await opts.prisma.order.findFirst({
+    where: { id: opts.orderId, tenantId: opts.tenantId, archivedAt: null },
+    select: { id: true, updAttachmentId: true },
+  });
+  if (!order) {
+    throw new Error("ORDER_NOT_FOUND");
+  }
+  const prevId = order.updAttachmentId;
+  const attachmentId = newOrderAttachmentId();
+  const mimeType = "application/pdf";
+  const stored = await storeInvoiceBytes(order.id, attachmentId, opts.buf, mimeType);
+  const prettyName = invoiceFileNameForNumberExtract(opts.fileName);
+  const digits =
+    extractUpdDigitsFromFileName(prettyName) ??
+    (String(opts.updNumberRaw || "").replace(/\D/g, "") || null);
+  const caption = digits ? formatInvoiceCaptionRu(digits, moscowTodayYmd()) : null;
+
+  const row = await opts.prisma.orderAttachment.create({
+    data: {
+      id: attachmentId,
+      orderId: order.id,
+      scope: OrderAttachmentScope.UPD,
+      fileName: opts.fileName,
+      mimeType,
+      size: opts.buf.byteLength,
+      data: new Uint8Array(stored.dataForDb),
+      diskRelPath: stored.diskRelPath,
+    },
+    select: { id: true },
+  });
+
+  await opts.prisma.order.update({
+    where: { id: order.id },
+    data: {
+      updAttachmentId: row.id,
+      ...(caption ? { updNumber: caption } : {}),
+    },
+  });
+
+  if (prevId && prevId !== row.id) {
+    try {
+      const doomed = await opts.prisma.orderAttachment.findUnique({
+        where: { id: prevId },
+        select: { diskRelPath: true },
+      });
+      await opts.prisma.orderAttachment.deleteMany({ where: { id: prevId } });
+      await deleteOrderAttachmentFile(doomed?.diskRelPath ?? null);
+    } catch (e) {
+      console.error("[invoice-import] replace old UPD", order.id, e);
+    }
+  }
+}
+
 export async function applyFinanceInvoiceImport(opts: {
   prisma: PrismaClient;
   tenantId: string;
@@ -298,8 +650,29 @@ export async function applyFinanceInvoiceImport(opts: {
       });
       continue;
     }
-    const pdf = byKey.get(row.key);
-    if (!pdf) {
+    const sourceKind = row.sourceKind === "crm-invoice" ? "crm-invoice" : "drop-invoice";
+    const updKeys = (row.updKeys ?? []).filter(Boolean);
+    if (updKeys.length !== 1) {
+      await pushTracked({
+        key: row.key,
+        orderNumber,
+        ok: false,
+        message: updKeys.length === 0 ? "Нет УПД" : "Несколько УПД",
+      });
+      continue;
+    }
+    const updPdf = byKey.get(updKeys[0]!);
+    if (!updPdf) {
+      await pushTracked({
+        key: row.key,
+        orderNumber,
+        ok: false,
+        message: "Файл УПД не найден в пакете",
+      });
+      continue;
+    }
+    const invoicePdf = sourceKind === "drop-invoice" ? byKey.get(row.key) : null;
+    if (sourceKind === "drop-invoice" && !invoicePdf) {
       await pushTracked({
         key: row.key,
         orderNumber,
@@ -326,20 +699,30 @@ export async function applyFinanceInvoiceImport(opts: {
       continue;
     }
     try {
-      await attachInvoicePdfToOrder({
+      if (invoicePdf) {
+        await attachInvoicePdfToOrder({
+          prisma: opts.prisma,
+          tenantId: opts.tenantId,
+          orderId: order.id,
+          fileName: invoicePdf.fileName,
+          buf: invoicePdf.buf,
+          invoiceNumberRaw: row.invoiceNumberRaw,
+        });
+        parseOrderIds.push(order.id);
+      }
+      await attachUpdPdfToOrder({
         prisma: opts.prisma,
         tenantId: opts.tenantId,
         orderId: order.id,
-        fileName: pdf.fileName,
-        buf: pdf.buf,
-        invoiceNumberRaw: row.invoiceNumberRaw,
+        fileName: updPdf.fileName,
+        buf: updPdf.buf,
+        updNumberRaw: row.updNumberRaw ?? "",
       });
-      parseOrderIds.push(order.id);
       await pushTracked({
         key: row.key,
         orderNumber,
         ok: true,
-        message: "Счёт прикреплён",
+        message: invoicePdf ? "Счёт и УПД прикреплены" : "УПД прикреплён",
       });
     } catch (e) {
       console.error("[invoice-import] apply", orderNumber, e);
@@ -347,7 +730,7 @@ export async function applyFinanceInvoiceImport(opts: {
         key: row.key,
         orderNumber,
         ok: false,
-        message: "Не удалось сохранить файл счёта",
+        message: "Не удалось сохранить файлы",
       });
     }
   }

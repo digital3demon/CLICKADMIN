@@ -1,4 +1,7 @@
-import { formatInvoiceListPillLabel } from "@/lib/format-invoice-number-ru";
+import {
+  formatInvoiceListPillLabel,
+  formatUpdListPillLabel,
+} from "@/lib/format-invoice-number-ru";
 
 type Props = {
   prostheticsOrdered: boolean;
@@ -8,6 +11,9 @@ type Props = {
   invoiceNumber?: string | null;
   /** Счёт распечатан (кнопка на вкладке «Документооборот») */
   invoicePrinted?: boolean;
+  hasUpdAttachment?: boolean;
+  updNumber?: string | null;
+  updPrinted?: boolean;
   adminShippedOtpr: boolean;
   /** Узкая ячейка таблицы: чуть плотнее отступы */
   density?: "default" | "table";
@@ -23,6 +29,9 @@ export function OrderHeadlinePills({
   hasInvoiceAttachment = false,
   invoiceNumber = null,
   invoicePrinted = false,
+  hasUpdAttachment = false,
+  updNumber = null,
+  updPrinted = false,
   adminShippedOtpr,
   density = "default",
   className = "",
@@ -60,6 +69,24 @@ export function OrderHeadlinePills({
           }
         >
           {invoicePillLabel}
+        </span>
+      ) : null}
+      {hasUpdAttachment || Boolean((updNumber ?? "").trim()) ? (
+        <span
+          className={`rounded-full border border-sky-300 bg-sky-50 font-semibold text-sky-950 shadow-sm dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 ${pad}${
+            formatUpdListPillLabel(updNumber) !== "УПД"
+              ? " tracking-normal"
+              : " tracking-wide"
+          }`}
+        >
+          {formatUpdListPillLabel(updNumber)}
+        </span>
+      ) : null}
+      {updPrinted ? (
+        <span
+          className={`rounded-full border border-violet-300 bg-violet-50 font-semibold text-violet-950 shadow-sm dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-100 ${pad}`}
+        >
+          УПД распечатан
         </span>
       ) : null}
       {invoicePrinted ? (

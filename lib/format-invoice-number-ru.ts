@@ -127,6 +127,15 @@ export function formatInvoiceListPillLabel(
   return "СЧЕТ";
 }
 
+/** Пилюля «УПД №1654 от 25.08.2026». Без номера — «УПД». */
+export function formatUpdListPillLabel(
+  updNumber: string | null | undefined,
+): string {
+  const asInvoice = formatInvoiceListPillLabel(updNumber);
+  if (asInvoice === "СЧЕТ") return "УПД";
+  return asInvoice.replace(/^СЧЕТ/u, "УПД");
+}
+
 /**
  * Ищет в тексте фрагмент «от 10.02.2026» или «от 10 февраля 2026» (первое совпадение).
  */

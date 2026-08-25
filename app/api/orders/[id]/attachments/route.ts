@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { extractInvoiceNumberFromPdfBuffer } from "@/lib/extract-invoice-number-from-pdf";
+import {
+  extractUpdDigitsFromDocumentText,
+  extractUpdDigitsFromFileName,
+} from "@/lib/extract-upd-number";
+import { formatInvoiceCaptionRu, moscowTodayYmd } from "@/lib/format-invoice-number-ru";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
@@ -50,6 +55,7 @@ type ParsedUpload = {
   mimeType: string;
   data: Buffer;
   asInvoiceRaw: string | null;
+  asUpdRaw: string | null;
   attachmentScopeRaw: string | null;
 };
 
@@ -60,6 +66,7 @@ async function parseRawUpload(
   const fileNameHeader = req.headers.get("x-upload-filename") ?? "";
   const rawMime = req.headers.get("x-upload-mime")?.trim();
   const asInvoiceRaw = req.headers.get("x-as-invoice");
+  const asUpdRaw = req.headers.get("x-as-upd");
   const attachmentScopeRaw = req.headers.get("x-attachment-scope");
   let fileName = "file";
   if (fileNameHeader.trim()) {
@@ -119,6 +126,7 @@ async function parseRawUpload(
     mimeType,
     data: buf,
     asInvoiceRaw,
+    asUpdRaw,
     attachmentScopeRaw,
   };
 }
@@ -313,6 +321,11 @@ export async function POST(req: Request, ctx: Ctx) {
       asInvoiceRaw === "1" ||
       asInvoiceRaw === "true" ||
       String(asInvoiceRaw ?? "").toLowerCase() === "on";
+    const asUpdRaw = parsed.asUpdRaw;
+    const asUpd =
+      asUpdRaw === "1" ||
+      asUpdRaw === "true" ||
+      String(asUpdRaw ?? "").toLowerCase() === "on";
 
     const scopeNorm = String(parsed.attachmentScopeRaw ?? "")
       .trim()
@@ -338,9 +351,17 @@ export async function POST(req: Request, ctx: Ctx) {
         { status: 400 },
       );
     }
+    if (asInvoice && asUpd) {
+      return NextResponse.json(
+        { error: "Счёт и УПД нельзя загрузить одним запросом" },
+        { status: 400 },
+      );
+    }
     const attachmentScope = isPaymentSlipScope
       ? OrderAttachmentScope.PAYMENT_SLIP
-      : OrderAttachmentScope.GENERAL;
+      : asUpd
+        ? OrderAttachmentScope.UPD
+        : OrderAttachmentScope.GENERAL;
 
     const fileBuf = parsed.data;
     const mimeType = parsed.mimeType;
@@ -359,12 +380,14 @@ export async function POST(req: Request, ctx: Ctx) {
     } | null = null;
     let replacedInvoiceAttachmentId: string | null = null;
 
-    if (asInvoice) {
+    if (asInvoice || asUpd) {
       const prevOrder = await prisma.order.findFirst({
         where: { id: orderId, tenantId },
-        select: { invoiceAttachmentId: true },
+        select: { invoiceAttachmentId: true, updAttachmentId: true },
       });
-      const prevId = prevOrder?.invoiceAttachmentId ?? null;
+      const prevId = asInvoice
+        ? (prevOrder?.invoiceAttachmentId ?? null)
+        : (prevOrder?.updAttachmentId ?? null);
       replacedInvoiceAttachmentId = prevId;
       if (prevId) {
         const prevRow = await prisma.orderAttachment.findUnique({
@@ -498,6 +521,23 @@ export async function POST(req: Request, ctx: Ctx) {
           "order.update invoice",
         );
       }
+      if (asUpd) {
+        const updDigits = extractUpdDigitsFromFileName(fileName);
+        const updCaption = updDigits
+          ? formatInvoiceCaptionRu(updDigits, moscowTodayYmd())
+          : null;
+        await withTransientWriteRetry(
+          () =>
+            prisma.order.update({
+              where: { id: orderId },
+              data: {
+                updAttachmentId: row.id,
+                ...(updCaption ? { updNumber: updCaption } : {}),
+              },
+            }),
+          "order.update upd",
+        );
+      }
     } catch (e) {
       if (diskRelPath) {
         await deleteOrderAttachmentFile(diskRelPath).catch(() => {});
@@ -514,16 +554,24 @@ export async function POST(req: Request, ctx: Ctx) {
           select: { invoiceNumber: true, invoiceIssued: true },
         })
       : null;
+    const updSnapshot = asUpd
+      ? await prisma.order.findFirst({
+          where: { id: orderId, tenantId },
+          select: { updNumber: true, updAttachmentId: true },
+        })
+      : null;
 
-    const withInvoice = <T extends Record<string, unknown>>(base: T) =>
-      asInvoice && invoiceSnapshot
-        ? { ...base, ...invoiceSnapshot }
-        : base;
+    const withInvoice = <T extends Record<string, unknown>>(base: T) => {
+      let next = base;
+      if (asInvoice && invoiceSnapshot) next = { ...next, ...invoiceSnapshot };
+      if (asUpd && updSnapshot) next = { ...next, ...updSnapshot };
+      return next;
+    };
 
     const deferredKaitenHint = prevInvoiceForKaiten;
     const deferredTryPdfInvoice =
-      asInvoice &&
-      fromName == null &&
+      ((asInvoice && fromName == null) ||
+        (asUpd && extractUpdDigitsFromFileName(fileName) == null)) &&
       isProbablyPdf(mimeType, fileName);
     const deferredMime = mimeType;
     const deferredFileName = fileName;
@@ -573,22 +621,43 @@ export async function POST(req: Request, ctx: Ctx) {
         });
         if (!att) return;
         const pdfBuf = await readOrderAttachmentBytes(att);
-        const n = await extractInvoiceNumberFromPdfBuffer(
-          pdfBuf,
-          deferredMime,
-          deferredFileName,
-        );
-        if (!n) return;
-        const ord = await db.order.findUnique({
-          where: { id: deferredOrderId },
-          select: { invoiceNumber: true, invoiceAttachmentId: true },
-        });
-        if (ord?.invoiceAttachmentId !== deferredAttachmentId) return;
-        if ((ord.invoiceNumber ?? "").trim() !== "") return;
-        await db.order.update({
-          where: { id: deferredOrderId },
-          data: { invoiceNumber: n },
-        });
+        if (asInvoice) {
+          const n = await extractInvoiceNumberFromPdfBuffer(
+            pdfBuf,
+            deferredMime,
+            deferredFileName,
+          );
+          if (!n) return;
+          const ord = await db.order.findUnique({
+            where: { id: deferredOrderId },
+            select: { invoiceNumber: true, invoiceAttachmentId: true },
+          });
+          if (ord?.invoiceAttachmentId !== deferredAttachmentId) return;
+          if ((ord.invoiceNumber ?? "").trim() !== "") return;
+          await db.order.update({
+            where: { id: deferredOrderId },
+            data: { invoiceNumber: n },
+          });
+          return;
+        }
+        if (asUpd) {
+          const { extractPdfPlainText } = await import("@/lib/extract-pdf-plain-text");
+          const extracted = await extractPdfPlainText(pdfBuf);
+          const digits =
+            extractUpdDigitsFromDocumentText(extracted.text || "") ??
+            extractUpdDigitsFromFileName(deferredFileName);
+          if (!digits) return;
+          const ord = await db.order.findUnique({
+            where: { id: deferredOrderId },
+            select: { updNumber: true, updAttachmentId: true },
+          });
+          if (ord?.updAttachmentId !== deferredAttachmentId) return;
+          if ((ord.updNumber ?? "").trim() !== "") return;
+          await db.order.update({
+            where: { id: deferredOrderId },
+            data: { updNumber: formatInvoiceCaptionRu(digits, moscowTodayYmd()) },
+          });
+        }
       } catch (e) {
         console.error("[attachments deferred] PDF invoice number", e);
       }

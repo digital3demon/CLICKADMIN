@@ -7,11 +7,15 @@ import { Spinner } from "@/components/ui/Spinner";
 import {
   classifyFinanceOfficeDropFiles,
   filterInvoiceRowsForRetry,
+  financeInvoiceRowIsRecognized,
+  findUpdDtosByNumber,
   invoiceImportSourceFileNames,
   isFinanceInvoiceImportRetryable,
   readFinanceInvoiceImportApplyResponse,
+  withPreviewRowUpdItems,
   type FinanceInvoiceImportApplyResult,
   type FinanceInvoiceImportPreviewRow,
+  type FinanceUpdPoolItemDto,
 } from "@/lib/finance-office-invoice-import";
 import { blobForFinanceInvoicePreviewRow } from "@/lib/finance-office-invoice-preview-blob";
 
@@ -65,6 +69,7 @@ export function FinanceOfficeBankImportPanel({
   const [invoiceRows, setInvoiceRows] = useState<FinanceInvoiceImportPreviewRow[]>(
     [],
   );
+  const [updPool, setUpdPool] = useState<FinanceUpdPoolItemDto[]>([]);
   const [bankResults, setBankResults] = useState<BankApplyResult[]>([]);
   const [invoiceResults, setInvoiceResults] = useState<
     FinanceInvoiceImportApplyResult[]
@@ -147,23 +152,43 @@ export function FinanceOfficeBankImportPanel({
     });
     const data = (await res.json().catch(() => ({}))) as {
       rows?: FinanceInvoiceImportPreviewRow[];
+      updPool?: FinanceUpdPoolItemDto[];
       error?: string;
     };
     if (!res.ok) throw new Error(data.error || "Не удалось прочитать счета");
-    return Array.isArray(data.rows) ? data.rows : [];
+    return {
+      rows: Array.isArray(data.rows) ? data.rows : [],
+      updPool: Array.isArray(data.updPool) ? data.updPool : [],
+    };
   };
 
   const onFiles = (list: FileList | File[] | null) => {
-    const next = list ? Array.from(list).filter((f) => f.size > 0) : [];
+    const incoming = list ? Array.from(list).filter((f) => f.size > 0) : [];
+    const kindIn = classifyFinanceOfficeDropFiles(
+      incoming.map((f) => ({ name: f.name, type: f.type })),
+    );
+    const merging =
+      invoiceRows.length > 0 &&
+      !invoiceResultOpen &&
+      kindIn.kind === "invoices";
+    const next = merging
+      ? [
+          ...files,
+          ...incoming.filter((f) => !files.some((p) => p.name === f.name && p.size === f.size)),
+        ]
+      : incoming;
     abortPreview();
     setFiles(next);
-    setBankRows([]);
-    setInvoiceRows([]);
-    setBankResults([]);
-    setInvoiceResults([]);
-    setInvoiceResultOpen(false);
+    if (!merging) {
+      setBankRows([]);
+      setInvoiceRows([]);
+      setUpdPool([]);
+      setBankResults([]);
+      setInvoiceResults([]);
+      setInvoiceResultOpen(false);
+      setMode(null);
+    }
     setError(null);
-    setMode(null);
     if (next.length === 0) return;
     void runPreview(next);
   };
@@ -196,9 +221,10 @@ export function FinanceOfficeBankImportPanel({
         setInvoiceRows([]);
         setMode("bank");
       } else {
-        const rows = await previewInvoices(pack, ac.signal);
+        const preview = await previewInvoices(pack, ac.signal);
         if (gen !== previewGenRef.current) return;
-        setInvoiceRows(rows);
+        setInvoiceRows(preview.rows);
+        setUpdPool(preview.updPool);
         setBankRows([]);
         setMode("invoices");
       }
@@ -232,7 +258,15 @@ export function FinanceOfficeBankImportPanel({
     setSaveProgress({ phase: "upload", done: 0, total: applyCount });
     const form = new FormData();
     for (const f of files) form.append("files", f);
-    form.set("rows", JSON.stringify(invoiceRows));
+    form.set(
+      "rows",
+      JSON.stringify(
+        invoiceRows.map((r) => ({
+          ...r,
+          updKeys: (r.updItems ?? []).map((i) => i.key),
+        })),
+      ),
+    );
     const res = await fetch("/api/finance-office/invoice-import/apply", {
       method: "POST",
       headers: { Accept: "application/x-ndjson" },
@@ -296,7 +330,20 @@ export function FinanceOfficeBankImportPanel({
 
   const openInvoicePdf = async (row: FinanceInvoiceImportPreviewRow) => {
     setError(null);
-    const blob = await blobForFinanceInvoicePreviewRow(row, files);
+    let blob: Blob | null = null;
+    if (
+      row.sourceKind === "crm-invoice" &&
+      row.orderId &&
+      row.invoiceAttachmentId
+    ) {
+      const res = await fetch(
+        `/api/orders/${row.orderId}/attachments/${row.invoiceAttachmentId}`,
+        { credentials: "include" },
+      );
+      if (res.ok) blob = await res.blob();
+    } else {
+      blob = await blobForFinanceInvoicePreviewRow(row, files);
+    }
     if (!blob) {
       setError("Не удалось открыть PDF счёта");
       return;
@@ -304,14 +351,66 @@ export function FinanceOfficeBankImportPanel({
     const url = URL.createObjectURL(blob);
     setPdfPreview((prev) => {
       if (prev?.url) URL.revokeObjectURL(prev.url);
-      return { url, title: row.fileName };
+      return { url, title: row.fileName || "Счёт" };
     });
+  };
+
+  const openUpdPdf = async (item: FinanceUpdPoolItemDto) => {
+    setError(null);
+    const blob = await blobForFinanceInvoicePreviewRow(
+      { fileName: item.fileName, sourceArchive: item.sourceArchive },
+      files,
+    );
+    if (!blob) {
+      setError("Не удалось открыть PDF УПД");
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    setPdfPreview((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return { url, title: item.fileName };
+    });
+  };
+
+  const setRowUpdNumber = (idx: number, value: string) => {
+    const found = findUpdDtosByNumber(updPool, value);
+    const taken = new Set(found.map((i) => i.key));
+    setInvoiceRows((prev) =>
+      prev.map((row, i) => {
+        if (i === idx) {
+          return withPreviewRowUpdItems({ ...row, updNumberRaw: value }, found);
+        }
+        if (found.length === 1) {
+          const leftover = (row.updItems ?? []).filter((x) => !taken.has(x.key));
+          if (leftover.length !== (row.updItems ?? []).length) {
+            return withPreviewRowUpdItems(row, leftover);
+          }
+        }
+        return row;
+      }),
+    );
+    setInvoiceResults([]);
+  };
+
+  const removeUpdFromRow = (idx: number, updKey: string) => {
+    setInvoiceRows((prev) =>
+      prev.map((row, i) =>
+        i === idx
+          ? withPreviewRowUpdItems(
+              row,
+              (row.updItems ?? []).filter((x) => x.key !== updKey),
+            )
+          : row,
+      ),
+    );
+    setInvoiceResults([]);
   };
 
   const closeInvoicePreview = () => {
     if (saving) return;
     abortPreview();
     setInvoiceRows([]);
+    setUpdPool([]);
     setError(null);
     setFiles([]);
     setMode(null);
@@ -727,9 +826,10 @@ export function FinanceOfficeBankImportPanel({
               <col className="w-[5.5rem]" />
               <col className="w-[14rem]" />
               <col className="w-[9rem]" />
+              <col className="w-[10rem]" />
               <col className="w-[8.5rem]" />
-              <col className="w-[16rem]" />
-              <col className="w-[12rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[11rem]" />
               <col className="w-[9rem]" />
             </colgroup>
             <thead className="bg-[var(--surface-subtle)] text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
@@ -737,6 +837,7 @@ export function FinanceOfficeBankImportPanel({
                 <th className="px-2 py-2">Применить</th>
                 <th className="px-2 py-2">Файл</th>
                 <th className="px-2 py-2">№ счёта</th>
+                <th className="px-2 py-2">УПД</th>
                 <th className="px-2 py-2">Наряд</th>
                 <th className="px-2 py-2">Что найдено</th>
                 <th className="px-2 py-2">Найден</th>
@@ -747,7 +848,11 @@ export function FinanceOfficeBankImportPanel({
               {invoiceRows.map((row, idx) => (
                 <tr
                   key={row.key}
-                  className={row.errors.length ? "bg-amber-500/10" : ""}
+                  className={
+                    row.errors.length || row.updMatch === "many"
+                      ? "bg-amber-500/10"
+                      : ""
+                  }
                 >
                   <td className="px-2 py-2 align-top text-center">
                     <input
@@ -791,6 +896,62 @@ export function FinanceOfficeBankImportPanel({
                     />
                   </td>
                   <td className="px-2 py-2 align-top">
+                    {row.updMatch === "many" ? (
+                      <div className="space-y-1.5">
+                        {(row.updItems ?? []).map((item) => (
+                          <div
+                            key={item.key}
+                            className="flex flex-wrap items-center gap-1"
+                          >
+                            <span className="font-mono text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+                              {item.number || "—"}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void openUpdPdf(item)}
+                              className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-1.5 py-0.5 text-[10px] font-semibold"
+                            >
+                              Открыть УПД
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              aria-label="Удалить УПД со строки"
+                              onClick={() => removeUpdFromRow(idx, item.key)}
+                              className="rounded px-1 text-[12px] font-bold text-red-600"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          value={row.updNumberRaw ?? ""}
+                          disabled={busy}
+                          onChange={(e) => setRowUpdNumber(idx, e.target.value)}
+                          className={`w-full rounded border px-2 py-1 font-mono disabled:opacity-60 ${
+                            row.updMatch === "one"
+                              ? "border-emerald-500 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+                              : "border-red-500 bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-100"
+                          }`}
+                        />
+                        {row.updMatch === "one" && row.updItems?.[0] ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void openUpdPdf(row.updItems![0]!)}
+                            className="mt-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-[10px] font-semibold"
+                          >
+                            Открыть УПД
+                          </button>
+                        ) : null}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 align-top">
                     <input
                       value={row.orderNumber}
                       disabled={busy}
@@ -809,9 +970,14 @@ export function FinanceOfficeBankImportPanel({
                   </td>
                   <td className="px-2 py-2 align-top text-[10px] leading-snug text-[var(--text-muted)]">
                     {row.orderLabel ?? "—"}
-                    {row.alreadyHasInvoice ? (
+                    {row.alreadyHasInvoice && row.sourceKind !== "crm-invoice" ? (
                       <div className="mt-1 font-medium text-amber-700 dark:text-amber-300">
                         Заменит старый счёт
+                      </div>
+                    ) : null}
+                    {row.alreadyHasUpd ? (
+                      <div className="mt-1 font-medium text-amber-700 dark:text-amber-300">
+                        Заменит старый УПД
                       </div>
                     ) : null}
                   </td>
@@ -836,6 +1002,14 @@ export function FinanceOfficeBankImportPanel({
                     ) : row.errors.length ? (
                       <span className="font-medium text-amber-700 dark:text-amber-300">
                         {row.errors.join("; ")}
+                      </span>
+                    ) : row.updMatch === "many" ? (
+                      <span className="font-medium text-amber-700 dark:text-amber-300">
+                        Несколько УПД
+                      </span>
+                    ) : !financeInvoiceRowIsRecognized(row) ? (
+                      <span className="font-medium text-red-700 dark:text-red-300">
+                        Нет УПД
                       </span>
                     ) : (
                       <span className="font-medium text-emerald-700 dark:text-emerald-300">

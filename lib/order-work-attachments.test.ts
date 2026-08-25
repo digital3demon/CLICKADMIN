@@ -32,6 +32,12 @@ describe("isOrderWorkAttachment", () => {
         null,
       ),
     ).toBe(true);
+    expect(
+      isOrderWorkAttachment(
+        { id: "u", scope: OrderAttachmentScope.UPD },
+        null,
+      ),
+    ).toBe(false);
   });
 });
 

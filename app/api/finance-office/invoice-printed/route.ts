@@ -48,9 +48,19 @@ export async function POST(req: Request) {
   }
 
   const prisma = await getOrdersPrisma();
+  const markRaw =
+    body && typeof body === "object"
+      ? String((body as { mark?: unknown }).mark || "invoice")
+      : "invoice";
+  const data =
+    markRaw === "upd"
+      ? { updPrinted: true }
+      : markRaw === "both"
+        ? { invoicePrinted: true, updPrinted: true }
+        : { invoicePrinted: true };
   const result = await prisma.order.updateMany({
     where: { tenantId, id: { in: orderIds } },
-    data: { invoicePrinted: true },
+    data,
   });
   return NextResponse.json({ ok: true, updated: result.count });
 }

@@ -401,6 +401,10 @@ export function ShipmentsOrdersTable({
                     o.listPendingProstheticsRequests
                   }
                   invoicePrinted={o.invoicePrinted}
+                  hasUpdAttachment={o.updAttachmentId != null}
+                  updNumber={o.updNumber}
+                  updPrinted={o.updPrinted}
+                  updAttachmentId={o.updAttachmentId}
                   hasInvoiceAttachment={o.invoiceAttachmentId != null}
                   invoiceNumber={o.invoiceNumber}
                   invoiceAttachmentId={o.invoiceAttachmentId}

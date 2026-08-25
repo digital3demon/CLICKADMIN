@@ -178,6 +178,8 @@ type PatchBody = {
   invoiceSentToEdo?: boolean;
   invoiceEdoSigned?: boolean;
   invoicePrinted?: boolean;
+  updNumber?: string | null;
+  updPrinted?: boolean;
   narjadPrinted?: boolean;
   adminShippedOtpr?: boolean;
   /** Что отгружено (текст) */
@@ -755,6 +757,13 @@ export async function PATCH(
   }
   if (body.invoicePrinted !== undefined) {
     scalarData.invoicePrinted = Boolean(body.invoicePrinted);
+  }
+  if (body.updNumber !== undefined) {
+    const t = body.updNumber === null ? "" : String(body.updNumber).trim();
+    scalarData.updNumber = normalizeInvoiceNumberFieldRu(t);
+  }
+  if (body.updPrinted !== undefined) {
+    scalarData.updPrinted = Boolean(body.updPrinted);
   }
   if (body.narjadPrinted !== undefined) {
     scalarData.narjadPrinted = Boolean(body.narjadPrinted);

@@ -41,6 +41,12 @@ function parseRows(raw: unknown): FinanceInvoiceImportApplyRow[] {
       orderNumber: String(o.orderNumber || "").trim(),
       invoiceNumberRaw: String(o.invoiceNumberRaw || "").trim(),
       apply: o.apply === true,
+      sourceKind:
+        o.sourceKind === "crm-invoice" ? "crm-invoice" : "drop-invoice",
+      updKeys: Array.isArray(o.updKeys)
+        ? o.updKeys.map((k) => String(k || "").trim()).filter(Boolean)
+        : [],
+      updNumberRaw: String(o.updNumberRaw || "").trim(),
     });
   }
   return out.filter((r) => r.key);

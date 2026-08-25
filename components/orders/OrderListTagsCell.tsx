@@ -24,6 +24,8 @@ import {
   LIST_TAG_FINANCE_NOT_CALCULATED,
   LIST_TAG_INVOICE,
   LIST_TAG_INVOICE_PRINTED,
+  LIST_TAG_UPD,
+  LIST_TAG_UPD_PRINTED,
   LIST_TAG_KAITEN_BLOCKED,
   LIST_TAG_PAYMENT_EXPECTED,
   LIST_TAG_PAYMENT_PAID,
@@ -50,7 +52,10 @@ import {
   clinicDocChannelLabel,
   clinicDocChannelListTag,
 } from "@/lib/clinic-doc-channel";
-import { formatInvoiceListPillLabel } from "@/lib/format-invoice-number-ru";
+import {
+  formatInvoiceListPillLabel,
+  formatUpdListPillLabel,
+} from "@/lib/format-invoice-number-ru";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
 import {
   isReconciliationPaymentStatus,
@@ -98,6 +103,10 @@ type Props = {
   listPendingProstheticsRequests?: boolean;
   /** Отметка «Счёт распечатан» (как в наряде) */
   invoicePrinted?: boolean;
+  updPrinted?: boolean;
+  hasUpdAttachment?: boolean;
+  updNumber?: string | null;
+  updAttachmentId?: string | null;
   /** Загружен файл счёта (вкладка «Документооборот») */
   hasInvoiceAttachment: boolean;
   /** Номер счёта из наряда — пилюля «СЧЕТ №… от D.MM.YYYY» (Заказы, Отгрузки, ФинОтдел). */
@@ -366,6 +375,10 @@ export function OrderListTagsCell({
   kaitenTrackLane = null,
   prostheticsOrdered,
   invoicePrinted = false,
+  updPrinted = false,
+  hasUpdAttachment = false,
+  updNumber = null,
+  updAttachmentId = null,
   hasInvoiceAttachment,
   invoiceNumber = null,
   invoiceAttachmentId = null,
@@ -421,10 +434,17 @@ export function OrderListTagsCell({
   const [localInvoiceAttachmentId, setLocalInvoiceAttachmentId] = useState<
     string | null
   >(invoiceAttachmentId);
+  const [localUpdAttachmentId, setLocalUpdAttachmentId] = useState<
+    string | null
+  >(updAttachmentId);
 
   useEffect(() => {
     setLocalInvoiceAttachmentId(invoiceAttachmentId);
   }, [invoiceAttachmentId]);
+
+  useEffect(() => {
+    setLocalUpdAttachmentId(updAttachmentId);
+  }, [updAttachmentId]);
 
   const closeAdd = useCallback(() => {
     setAddOpen(false);
@@ -876,6 +896,60 @@ export function OrderListTagsCell({
     [applyQuickPatch, localInvoiceAttachmentId, orderId],
   );
 
+  const printUpdAndMark = useCallback(
+    async (attachmentId: string | null) => {
+      const attId = (attachmentId || localUpdAttachmentId || "").trim();
+      if (!attId) {
+        setErr("Сначала загрузите PDF УПД в блок ниже");
+        return;
+      }
+      setErr(null);
+      setBusy(true);
+      const printUrl = `/api/orders/${orderId}/attachments/${attId}?inline=1`;
+      try {
+        const printed = await new Promise<boolean>((resolve) => {
+          const iframe = document.createElement("iframe");
+          let settled = false;
+          const settle = (ok: boolean) => {
+            if (settled) return;
+            settled = true;
+            window.setTimeout(() => iframe.remove(), 1_000);
+            resolve(ok);
+          };
+          iframe.style.cssText =
+            "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none";
+          iframe.onload = () => {
+            const win = iframe.contentWindow;
+            if (!win) {
+              window.open(printUrl, "_blank", "noopener,noreferrer");
+              settle(true);
+              return;
+            }
+            try {
+              win.focus();
+              win.print();
+              settle(true);
+            } catch {
+              window.open(printUrl, "_blank", "noopener,noreferrer");
+              settle(true);
+            }
+          };
+          iframe.onerror = () => settle(false);
+          iframe.src = printUrl;
+          document.body.appendChild(iframe);
+        });
+        if (!printed) {
+          setErr("Печать УПД не завершена — отметка не поставлена");
+          return;
+        }
+        await applyQuickPatch({ updPrinted: true });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [applyQuickPatch, localUpdAttachmentId, orderId],
+  );
+
   const onMissingTagAction = useCallback(
     (action: MissingTagAction) => {
       if (action.kind === "patch") {
@@ -1144,6 +1218,46 @@ export function OrderListTagsCell({
       });
     }
 
+    if (hasUpdAttachment || (updNumber ?? "").trim()) {
+      const updPillLabel = formatUpdListPillLabel(updNumber);
+      const updPillLong = updPillLabel !== "УПД";
+      items.push({
+        key: "upd",
+        slot: updPillLong ? "large" : "small",
+        node: (
+          <Link prefetch={false}
+            href={href(LIST_TAG_UPD)}
+            title={
+              updPillLong
+                ? updPillLabel
+                : "Показать наряды с загруженным УПД"
+            }
+            className={`rounded-full border border-sky-300 bg-sky-50 font-semibold text-sky-950 shadow-sm outline-none focus-visible:outline-none dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 ${padTable}${
+              updPillLong ? " whitespace-nowrap tracking-normal" : " tracking-wide"
+            }`}
+          >
+            {updPillLabel}
+          </Link>
+        ),
+      });
+    }
+
+    if (updPrinted) {
+      items.push({
+        key: "updpr",
+        slot: "large",
+        node: (
+          <Link prefetch={false}
+            href={href(LIST_TAG_UPD_PRINTED)}
+            title="Показать наряды с отметкой «УПД распечатан»"
+            className={`rounded-full border border-violet-300 bg-violet-50 font-semibold text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-100 ${padTable}`}
+          >
+            УПД распечатан
+          </Link>
+        ),
+      });
+    }
+
     if (invoicePrinted) {
       items.push({
         key: "invpr",
@@ -1268,6 +1382,9 @@ export function OrderListTagsCell({
     hasInvoiceAttachment,
     invoiceNumber,
     invoicePrinted,
+    hasUpdAttachment,
+    updNumber,
+    updPrinted,
     invoicePaperDocs,
     invoiceSentToEdo,
     invoiceEdoSigned,
@@ -1531,13 +1648,18 @@ export function OrderListTagsCell({
             <OrderPaymentModalAccountingUpload
               orderId={orderId}
               invoiceAttachmentId={localInvoiceAttachmentId}
+              updAttachmentId={localUpdAttachmentId}
               printBusy={busy}
               onPrintInvoice={() =>
                 void printInvoiceAndMark(localInvoiceAttachmentId)
               }
+              onPrintUpd={() => void printUpdAndMark(localUpdAttachmentId)}
               onSaved={(meta) => {
                 if (meta?.kind === "invoice" && meta.id) {
                   setLocalInvoiceAttachmentId(meta.id);
+                }
+                if (meta?.kind === "upd" && meta.id) {
+                  setLocalUpdAttachmentId(meta.id);
                 }
                 router.refresh();
               }}

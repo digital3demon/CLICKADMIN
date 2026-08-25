@@ -110,6 +110,20 @@ const OTHER: Array<QuickOrderTagSuggestion & { _keys: string[] }> = [
     ],
   },
   {
+    id: "upd-printed-true",
+    title: "УПД распечатан",
+    subtitle: "Поставить отметку «УПД распечатан»",
+    patch: { updPrinted: true },
+    _keys: ["упд распечатан", "распечатан упд"],
+  },
+  {
+    id: "upd-printed-false",
+    title: "Снять: УПД распечатан",
+    subtitle: "Убрать отметку «УПД распечатан»",
+    patch: { updPrinted: false },
+    _keys: ["снять упд", "не распечатан упд"],
+  },
+  {
     id: "prosthetics-true",
     title: "Протетика заказана",
     subtitle: "Отметить заказ протетики",

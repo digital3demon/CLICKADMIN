@@ -252,16 +252,21 @@ function DocumentFlowCompositionSpoiler({
         {lines.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">Нет позиций в составе</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-1.5">
             {lines.map((line, idx) => {
               const sumValue = moneyRu(line.amountRub);
+              const chip =
+                "shrink-0 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left text-[11px] leading-snug shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500";
               return (
-                <li key={`${line.title}-${idx}`} className="space-y-1">
+                <li
+                  key={`${line.title}-${idx}`}
+                  className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto"
+                >
                   <button
                     type="button"
                     title="Нажмите — скопировать в буфер обмена"
                     onClick={() => onCopy(line.title)}
-                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left text-xs font-medium leading-snug text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                    className={`${chip} min-w-0 flex-1 truncate font-medium text-[var(--text-strong)]`}
                   >
                     {line.title}
                   </button>
@@ -269,7 +274,7 @@ function DocumentFlowCompositionSpoiler({
                     type="button"
                     title="Нажмите — скопировать в буфер обмена"
                     onClick={() => onCopy(String(line.quantity))}
-                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left text-[11px] leading-snug text-[var(--text-body)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                    className={`${chip} text-[var(--text-body)]`}
                   >
                     кол-во {line.quantity}
                   </button>
@@ -277,7 +282,7 @@ function DocumentFlowCompositionSpoiler({
                     type="button"
                     title="Нажмите — скопировать в буфер обмена"
                     onClick={() => onCopy(sumValue)}
-                    className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-left text-[11px] leading-snug text-[var(--text-body)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500"
+                    className={`${chip} text-[var(--text-body)]`}
                   >
                     сумма {sumValue}
                   </button>
@@ -346,6 +351,7 @@ type InvoiceAttachmentUploadOk = {
   uploadedToKaitenAt: string | null;
   invoiceNumber?: string | null;
   invoiceIssued?: boolean;
+  updNumber?: string | null;
   warning?: string;
 };
 
@@ -356,6 +362,7 @@ function OrderInvoiceFileDrop({
   onFail,
   className,
   disabled = false,
+  asUpd = false,
 }: {
   orderId: string;
   onDone: (result?: InvoiceAttachmentUploadOk) => void | Promise<void>;
@@ -364,6 +371,7 @@ function OrderInvoiceFileDrop({
   className?: string;
   /** Вне `<form>`: не наследует `disabled` от `fieldset`, передавать явно. */
   disabled?: boolean;
+  asUpd?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
@@ -400,7 +408,8 @@ function OrderInvoiceFileDrop({
           }
           setLocalHint("Загрузка и сохранение на сервере…");
           const result = await postOrderAttachmentWithRetries(orderId, file, {
-            asInvoice: true,
+            asInvoice: !asUpd,
+            asUpd,
             signal: ctrl.signal,
           });
           if (!result.ok) {
@@ -440,7 +449,7 @@ function OrderInvoiceFileDrop({
         setBusy(false);
       }
     },
-    [orderId, onDone, onFail, disabled],
+    [orderId, onDone, onFail, disabled, asUpd],
   );
 
   return (
@@ -725,6 +734,9 @@ export type OrderEditInitial = {
   invoiceSentToEdo: boolean;
   invoiceEdoSigned: boolean;
   invoicePrinted: boolean;
+  updNumber: string | null;
+  updPrinted: boolean;
+  updAttachmentId: string | null;
   narjadPrinted: boolean;
   adminShippedOtpr: boolean;
   /** Текст «что отгружено» при отметке отправки */
@@ -1110,6 +1122,11 @@ export function OrderEditForm({
     initial.invoiceEdoSigned,
   );
   const [invoicePrinted, setInvoicePrinted] = useState(initial.invoicePrinted);
+  const [updNumber, setUpdNumber] = useState(() => initial.updNumber ?? "");
+  const [updPrinted, setUpdPrinted] = useState(initial.updPrinted);
+  const [updAttachmentId, setUpdAttachmentId] = useState<string | null>(
+    () => initial.updAttachmentId,
+  );
   /** Локально обновляется после загрузки счёта — нельзя полагаться только на router.refresh() и props. */
   const [invoiceAttachmentId, setInvoiceAttachmentId] = useState<
     string | null
@@ -1123,6 +1140,12 @@ export function OrderEditForm({
   useEffect(() => {
     setInvoicePrinted(initial.invoicePrinted);
   }, [initial.id, initial.invoicePrinted]);
+
+  useEffect(() => {
+    setUpdNumber(initial.updNumber ?? "");
+    setUpdPrinted(initial.updPrinted);
+    setUpdAttachmentId(initial.updAttachmentId);
+  }, [initial.id, initial.updNumber, initial.updPrinted, initial.updAttachmentId]);
 
   useEffect(() => {
     setInvoicePaperDocs(initial.invoicePaperDocs);
@@ -2105,6 +2128,59 @@ export function OrderEditForm({
     [initial.id, router],
   );
 
+  const toggleUpdPrinted = useCallback(
+    async (next: boolean) => {
+      setInvoiceSaving(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/orders/${initial.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ updPrinted: next }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setError(data.error ?? "Не удалось сохранить отметку");
+          return;
+        }
+        setUpdPrinted(next);
+        router.refresh();
+      } catch {
+        setError("Сеть или сервер недоступны");
+      } finally {
+        setInvoiceSaving(false);
+      }
+    },
+    [initial.id, router],
+  );
+
+  const removeUpdAttachment = useCallback(async () => {
+    const attId = updAttachmentId;
+    if (!attId) return;
+    const okConfirm = window.confirm("Удалить файл УПД из наряда?");
+    if (!okConfirm) return;
+    setInvoiceDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/orders/${initial.id}/attachments/${attId}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось удалить файл УПД");
+        return;
+      }
+      setUpdAttachmentId(null);
+      toast.success("Файл УПД удалён");
+      router.refresh();
+    } catch {
+      setError("Сеть или сервер недоступны");
+    } finally {
+      setInvoiceDeleting(false);
+    }
+  }, [initial.id, updAttachmentId, router]);
+
   const toggleInvoiceDocFlag = useCallback(
     async (
       field: "invoicePaperDocs" | "invoiceSentToEdo" | "invoiceEdoSigned",
@@ -2354,6 +2430,8 @@ export function OrderEditForm({
           invoiceSentToEdo,
           invoiceEdoSigned,
           invoicePrinted,
+          updNumber: updNumber.trim() || null,
+          updPrinted,
           narjadPrinted,
           adminShippedOtpr,
           shippedDescription: shippedDescription.trim() || null,
@@ -2443,6 +2521,8 @@ export function OrderEditForm({
     invoiceSentToEdo,
     invoiceEdoSigned,
     invoicePrinted,
+    updNumber,
+    updPrinted,
     narjadPrinted,
     adminShippedOtpr,
     shippedDescription,
@@ -3764,7 +3844,102 @@ export function OrderEditForm({
                 ) : null}
               </div>
             </div>
-            <div className="min-w-0 border-t border-[var(--card-border)] pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+            <div className="min-w-0 space-y-3 border-t border-[var(--card-border)] pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
+                <button
+                  type="button"
+                  disabled={invoiceSaving}
+                  aria-pressed={updPrinted}
+                  onClick={() => void toggleUpdPrinted(!updPrinted)}
+                  className={
+                    updPrinted
+                      ? "rounded-md border border-violet-500 bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50 sm:text-sm"
+                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                  }
+                >
+                  УПД распечатан
+                </button>
+                {updAttachmentId ? (
+                  <a
+                    href={`/api/orders/${initial.id}/attachments/${updAttachmentId}`}
+                    download
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm"
+                  >
+                    Скачать УПД
+                  </a>
+                ) : (
+                  <span
+                    className="cursor-not-allowed rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] opacity-60 sm:text-sm"
+                    title="Сначала загрузите файл УПД"
+                    aria-disabled="true"
+                  >
+                    Скачать УПД
+                  </span>
+                )}
+                <span
+                  className={
+                    updAttachmentId
+                      ? "rounded-md border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white sm:text-sm"
+                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] sm:text-sm"
+                  }
+                >
+                  УПД загружен
+                </span>
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="oe-upd-number">
+                  Номер УПД
+                </label>
+                <input
+                  id="oe-upd-number"
+                  type="text"
+                  aria-label="Номер УПД"
+                  className={inputClass}
+                  value={updNumber}
+                  onChange={(e) => setUpdNumber(e.target.value)}
+                  placeholder="Номер УПД"
+                  maxLength={120}
+                />
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-[var(--text-body)]">
+                  Файл УПД
+                </p>
+                <OrderInvoiceFileDrop
+                  orderId={initial.id}
+                  asUpd
+                  disabled={!canEditOrder}
+                  onDone={async (res) => {
+                    setError(null);
+                    toast.success("УПД загружен");
+                    if (res?.id) setUpdAttachmentId(res.id);
+                    if (res && "updNumber" in res && typeof res.updNumber === "string") {
+                      setUpdNumber(res.updNumber);
+                    }
+                    router.refresh();
+                  }}
+                  onFail={(msg) => {
+                    setError(msg);
+                    toast.error(msg);
+                  }}
+                  className="w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                />
+                {updAttachmentId ? (
+                  <div className="mt-1.5">
+                    <button
+                      type="button"
+                      disabled={invoiceDeleting || invoiceSaving}
+                      onClick={() => void removeUpdAttachment()}
+                      className="text-xs font-medium text-red-600 underline decoration-red-600/40 underline-offset-2 hover:decoration-red-600 disabled:opacity-50"
+                    >
+                      {invoiceDeleting ? "Удаление…" : "Удалить файл УПД"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 min-w-0 border-t border-[var(--card-border)] pt-3">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-5">
                 <div className="flex shrink-0 flex-col gap-2.5 sm:max-w-[15rem] sm:pt-0.5">
                   <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
@@ -3849,7 +4024,6 @@ export function OrderEditForm({
                 </div>
               </div>
             </div>
-          </div>
           <div className="mt-4 grid grid-cols-1 border-t border-[var(--card-border)] pt-4 crm-t2:grid-cols-2 crm-t2:gap-6">
             <div className="min-w-0 space-y-3">
               <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
@@ -4489,6 +4663,9 @@ export function OrderEditForm({
         hasInvoiceAttachment={Boolean(invoiceAttachmentId)}
         invoiceNumber={invoiceNumber}
         invoicePrinted={invoicePrinted}
+        hasUpdAttachment={Boolean(updAttachmentId)}
+        updNumber={updNumber}
+        updPrinted={updPrinted}
         adminShippedOtpr={adminShippedOtpr}
       />
     </div>

@@ -58,6 +58,7 @@ function printPdfBlob(blob: Blob): Promise<boolean> {
 
 export async function printFinanceOfficeSelectedInvoices(
   orderIds: readonly string[],
+  documents: "invoices" | "upd" | "both" = "invoices",
 ): Promise<PrintFinanceOfficeInvoicesResult> {
   const ids = Array.from(new Set(orderIds.map((id) => id.trim()).filter(Boolean)));
   if (ids.length === 0) {
@@ -68,7 +69,7 @@ export async function printFinanceOfficeSelectedInvoices(
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ orderIds: ids }),
+    body: JSON.stringify({ orderIds: ids, documents }),
   });
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -76,7 +77,11 @@ export async function printFinanceOfficeSelectedInvoices(
       printedOrderIds: [],
       skipped: 0,
       truncated: 0,
-      error: j.error || "Не удалось подготовить счета к печати",
+      error:
+        j.error ||
+        (documents === "upd"
+          ? "Не удалось подготовить УПД к печати"
+          : "Не удалось подготовить счета к печати"),
     };
   }
 
@@ -102,7 +107,15 @@ export async function printFinanceOfficeSelectedInvoices(
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderIds: printedOrderIds }),
+      body: JSON.stringify({
+        orderIds: printedOrderIds,
+        mark:
+          documents === "upd"
+            ? "upd"
+            : documents === "both"
+              ? "both"
+              : "invoice",
+      }),
     }).catch(() => {});
   }
 

@@ -7,9 +7,12 @@ import { OrderAttachmentScope } from "@prisma/client";
 export function isOrderWorkAttachment(
   row: { id: string; scope: OrderAttachmentScope },
   invoiceAttachmentId: string | null,
+  updAttachmentId?: string | null,
 ): boolean {
   if (row.scope === OrderAttachmentScope.PAYMENT_SLIP) return false;
+  if (row.scope === OrderAttachmentScope.UPD) return false;
   if (invoiceAttachmentId && row.id === invoiceAttachmentId) return false;
+  if (updAttachmentId && row.id === updAttachmentId) return false;
   return true;
 }
 

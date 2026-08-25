@@ -3,6 +3,7 @@ import {
   buildInvoiceCaptionRuFromDocumentText,
   buildInvoiceCaptionRuFromFileName,
   formatInvoiceListPillLabel,
+  formatUpdListPillLabel,
   normalizeInvoiceNumberFieldRu,
 } from "./format-invoice-number-ru";
 
@@ -94,6 +95,18 @@ describe("formatInvoiceListPillLabel", () => {
   it("импорт банка без знака №", () => {
     expect(formatInvoiceListPillLabel("Счет 777 от 10.02.2026")).toBe(
       "СЧЕТ №777 от 10.02.2026",
+    );
+  });
+});
+
+describe("formatUpdListPillLabel", () => {
+  it("пусто — УПД", () => {
+    expect(formatUpdListPillLabel(null)).toBe("УПД");
+  });
+
+  it("кириллица до и после номера", () => {
+    expect(formatUpdListPillLabel("шапка №1654 от 20 августа 2026 хвост")).toBe(
+      "УПД №1654 от 20.08.2026",
     );
   });
 });

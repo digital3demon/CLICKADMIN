@@ -13,7 +13,7 @@ import {
 
 const UPLOAD_TIMEOUT_MS = 300_000;
 
-export type OrderAccountingDropKind = "invoice" | "payment-slip";
+export type OrderAccountingDropKind = "invoice" | "upd" | "payment-slip";
 
 type Props = {
   orderId: string;
@@ -31,15 +31,15 @@ async function fileMatchesKind(
   file: File,
   kind: OrderAccountingDropKind,
 ): Promise<boolean> {
-  return kind === "invoice"
+  return kind === "invoice" || kind === "upd"
     ? looksLikePdfFileDeep(file)
     : looksLikePaymentSlipFileDeep(file);
 }
 
 function kindMismatchHint(kind: OrderAccountingDropKind): string {
-  return kind === "invoice"
-    ? "Счёт — только PDF."
-    : "Платёжка — изображение или PDF.";
+  if (kind === "invoice") return "Счёт — только PDF.";
+  if (kind === "upd") return "УПД — только PDF.";
+  return "Платёжка — изображение или PDF.";
 }
 
 export function OrderAccountingFileDropZone({
@@ -96,10 +96,15 @@ export function OrderAccountingFileDropZone({
             continue;
           }
           setHint(
-            kind === "invoice" ? "Загрузка счёта…" : "Сохранение платёжки…",
+            kind === "invoice"
+              ? "Загрузка счёта…"
+              : kind === "upd"
+                ? "Загрузка УПД…"
+                : "Сохранение платёжки…",
           );
           const result = await postOrderAttachmentWithRetries(orderId, file, {
             asInvoice: kind === "invoice",
+            asUpd: kind === "upd",
             paymentSlip: kind === "payment-slip",
             signal: ctrl.signal,
           });
