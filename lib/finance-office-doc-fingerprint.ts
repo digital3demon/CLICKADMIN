@@ -1,6 +1,8 @@
 /**
  * Отпечаток счёта/УПД для привязки: ИНН покупателя + дата + сумма + артикулы.
  * Номер УПД с номером счёта не сравниваем.
+ * Дата — из шапки («Счёт на оплату / Счёт-фактура / Документ об отгрузке»),
+ * не из договора и не из «к платежно-расчетному документу».
  */
 
 import {
@@ -65,12 +67,43 @@ export function extractPriceCodesFromDocText(text: string): string[] {
   return out.slice(0, 24);
 }
 
-export function extractDocYmdKey(text: string): string | null {
-  const chunk = String(text || "")
-    .replace(/\u00a0/g, " ")
-    .slice(0, 12000);
-  const ymd = extractYmdAfterOtFromNormalizedText(chunk);
+function ymdKeyFromOtChunk(chunk: string): string | null {
+  const ymd = extractYmdAfterOtFromNormalizedText(
+    String(chunk || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/_/g, " "),
+  );
   return ymd ? ymdKey(ymd) : null;
+}
+
+/**
+ * Дата самого документа, не первое «от» в PDF.
+ * Иначе счёт 1645 берёт «Договор … от 20.08.2024», УПД 1656 — «платёжка № 811 от 11.08.2026».
+ */
+export function extractDocYmdKey(text: string, fileName?: string): string | null {
+  const raw = String(text || "").replace(/\u00a0/g, " ");
+  const anchors: RegExp[] = [
+    /сч[её]т\s+на\s+оплату[\s\S]{0,120}?(?=от\s+\d)/iu,
+    /сч[её]т[-\s]?фактур\w*[\s\S]{0,120}?(?=от\s+\d)/iu,
+    /документ\s+об\s+отгрузке[\s\S]{0,200}?(?=от\s+\d)/iu,
+  ];
+  for (const re of anchors) {
+    re.lastIndex = 0;
+    const m = re.exec(raw);
+    if (!m) continue;
+    const slice = raw.slice(m.index, m.index + m[0].length + 72);
+    const key = ymdKeyFromOtChunk(slice);
+    if (key) return key;
+  }
+  if (fileName) {
+    const fromName = ymdKeyFromOtChunk(fileName);
+    if (fromName) return fromName;
+  }
+  const stripped = raw
+    .replace(/договор[^\n]{0,120}/giu, " ")
+    .replace(/платежно[\s-]*расчетн[^\n]{0,120}/giu, " ")
+    .replace(/постановлени[^\n]{0,220}/giu, " ");
+  return ymdKeyFromOtChunk(stripped.slice(0, 12000));
 }
 
 /**
@@ -89,11 +122,11 @@ export function extractFingerprintTotalRub(text: string): number | null {
   return extractTotalRub(text);
 }
 
-export function buildDocFingerprint(text: string): DocFingerprint {
+export function buildDocFingerprint(text: string, fileName?: string): DocFingerprint {
   const codes = extractPriceCodesFromDocText(text);
   return {
     buyerInn: extractBuyerInn(text),
-    ymd: extractDocYmdKey(text),
+    ymd: extractDocYmdKey(text, fileName),
     totalRub: extractFingerprintTotalRub(text),
     codes,
   };

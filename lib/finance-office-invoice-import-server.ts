@@ -142,7 +142,7 @@ export async function buildFinanceInvoiceImportPreview(
       text,
       kind,
       extractError,
-      fingerprint: buildDocFingerprint(text),
+      fingerprint: buildDocFingerprint(text, pdf.fileName),
     });
   }
 
