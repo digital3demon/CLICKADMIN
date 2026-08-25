@@ -29,14 +29,9 @@ import {
   kaitenListComments,
   kaitenUpdateComment,
 } from "@/lib/kaiten-rest";
-import {
-  createOrderChatCorrectionIfNeeded,
-} from "@/lib/order-chat-correction-db";
-import { createOrderProstheticsRequestIfNeeded } from "@/lib/order-prosthetics-request-db";
-import {
-  formatOrderChatPtMemoMessage,
-  techMemoTextFromPtChatBody,
-} from "@/lib/order-chat-pt-memo";
+import { techMemoTextFromPtChatBody } from "@/lib/order-chat-pt-memo";
+import { canonicalizeKanbanChatTriggerMessage } from "@/lib/kanban/chat-trigger-message";
+import { KANBAN_TRIGGER_COMMENT_DEDUP_MS } from "@/lib/order-chat-request-twin";
 import { applyOrderListTechMemo } from "@/lib/order-list-tech-memo.server";
 import { canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
 import {
@@ -56,7 +51,10 @@ import {
   canAuthorMutateKanbanChatMessage,
   isKanbanChatCommentDeleted,
 } from "@/lib/kanban/chat-message-edit";
-import { applyKanbanChatTriggerSideEffects } from "@/lib/order-chat-trigger-mutate";
+import {
+  applyKanbanChatTriggerSideEffects,
+  persistKanbanButtonTriggers,
+} from "@/lib/order-chat-trigger-mutate";
 import { resolveLinkedOrderKanbanDescription } from "@/lib/kanban/kaiten-linked-order";
 import {
   loadKanbanOrderComments,
@@ -639,14 +637,7 @@ export async function POST(
   if (!retryCommentId && !text) {
     return NextResponse.json({ error: "Пустой текст" }, { status: 400 });
   }
-  const messageText =
-    action === "correction"
-      ? `!!! ${text}`
-      : action === "prosthetics"
-        ? `??? ${text}`
-        : action === "pt"
-          ? formatOrderChatPtMemoMessage(text)
-          : text;
+  const messageText = canonicalizeKanbanChatTriggerMessage(action, text);
 
   const ordersPrisma = await getOrdersPrisma();
   const order = await ordersPrisma.order.findFirst({
@@ -735,7 +726,10 @@ export async function POST(
   const parent = parentId
     ? storedComments.find((c) => String(c.id || "").trim() === parentId)
     : null;
-  const recentMs = 120_000;
+  const recentMs =
+    action === "correction" || action === "prosthetics"
+      ? KANBAN_TRIGGER_COMMENT_DEDUP_MS
+      : 120_000;
   const nowMs = Date.now();
   const dup = textBodyKey
     ? storedComments.find((c) => {
@@ -749,6 +743,34 @@ export async function POST(
       })
     : undefined;
   if (dup) {
+    if (action === "correction" || action === "prosthetics") {
+      try {
+        await persistKanbanButtonTriggers({
+          db: ordersPrisma,
+          tenantId,
+          orderId: order.id,
+          action,
+          messageText,
+          commentId: String(dup.id || "").trim() || draftCommentId,
+          authorLabel,
+          syncState:
+            order.kaitenCardId != null && Number.isFinite(order.kaitenCardId)
+              ? "PENDING_EXTERNAL"
+              : "LOCAL_ONLY",
+        });
+      } catch (e) {
+        console.error("[kanban-chat POST] button trigger persist (dup)", orderId, e);
+        return NextResponse.json(
+          {
+            error:
+              action === "correction"
+                ? "Не удалось записать корректировку"
+                : "Не удалось записать заказ протетики",
+          },
+          { status: 500 },
+        );
+      }
+    }
     return NextResponse.json({ ok: true, comment: dup });
   }
 
@@ -779,22 +801,33 @@ export async function POST(
     );
   }
 
-  if (action === "correction") {
-    await createOrderChatCorrectionIfNeeded(
-      ordersPrisma,
-      order.id,
-      messageText,
-      "DEMO_KANBAN",
-      { authorLabel },
-    );
-  } else if (action === "prosthetics") {
-    await createOrderProstheticsRequestIfNeeded(
-      ordersPrisma,
-      order.id,
-      messageText,
-      "DEMO_KANBAN",
-      { authorLabel },
-    );
+  if (action === "correction" || action === "prosthetics") {
+    try {
+      await persistKanbanButtonTriggers({
+        db: ordersPrisma,
+        tenantId,
+        orderId: order.id,
+        action,
+        messageText,
+        commentId: String(row.id || "").trim() || draftCommentId,
+        authorLabel,
+        syncState:
+          order.kaitenCardId != null && Number.isFinite(order.kaitenCardId)
+            ? "PENDING_EXTERNAL"
+            : "LOCAL_ONLY",
+      });
+    } catch (e) {
+      console.error("[kanban-chat POST] button trigger persist", orderId, e);
+      return NextResponse.json(
+        {
+          error:
+            action === "correction"
+              ? "Не удалось записать корректировку"
+              : "Не удалось записать заказ протетики",
+        },
+        { status: 500 },
+      );
+    }
   } else if (action === "pt") {
     const memoText = techMemoTextFromPtChatBody(messageText);
     if (memoText) {

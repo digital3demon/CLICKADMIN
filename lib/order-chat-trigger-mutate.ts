@@ -30,6 +30,54 @@ export function chatTriggerKindFromText(raw: string): ChatTriggerKind | null {
   return null;
 }
 
+/** Кнопка «!!!» / «???»: legacy-таблица + inbox, без пропуска закрытого близнеца. */
+export async function persistKanbanButtonTriggers(opts: {
+  db: PrismaClient;
+  tenantId: string;
+  orderId: string;
+  action: "correction" | "prosthetics";
+  messageText: string;
+  commentId: string;
+  authorLabel?: string | null;
+  kaitenCommentId?: string | number | null;
+  syncState?: "PENDING_EXTERNAL" | "SYNCED_EXTERNAL" | "LOCAL_ONLY";
+}): Promise<void> {
+  const orderId = opts.orderId.trim();
+  const commentId = opts.commentId.trim();
+  const tenantId = opts.tenantId.trim();
+  if (!orderId || !commentId) return;
+  const kid = kaitenJsonIntId(opts.kaitenCommentId);
+  if (opts.action === "correction") {
+    await createOrderChatCorrectionIfNeeded(
+      opts.db,
+      orderId,
+      opts.messageText,
+      "DEMO_KANBAN",
+      { authorLabel: opts.authorLabel, kaitenCommentId: kid, forceNew: true },
+    );
+  } else {
+    await createOrderProstheticsRequestIfNeeded(
+      opts.db,
+      orderId,
+      opts.messageText,
+      "DEMO_KANBAN",
+      { authorLabel: opts.authorLabel, kaitenCommentId: kid, forceNew: true },
+    );
+  }
+  if (!tenantId) return;
+  await createOrderChatInboxItemsFromCrmComment(opts.db, {
+    tenantId,
+    orderId,
+    text: opts.messageText,
+    authorLabel: opts.authorLabel,
+    crmDraftId: commentId,
+    syncState:
+      opts.syncState ??
+      (kid != null ? "SYNCED_EXTERNAL" : "LOCAL_ONLY"),
+    source: "DEMO_KANBAN",
+  });
+}
+
 function pendingOpen() {
   return { resolvedAt: null, rejectedAt: null };
 }
@@ -193,7 +241,7 @@ export async function applyKanbanChatTriggerSideEffects(opts: {
         orderId,
         opts.newText,
         "DEMO_KANBAN",
-        { authorLabel: opts.authorLabel, kaitenCommentId: kid },
+        { authorLabel: opts.authorLabel, kaitenCommentId: kid, forceNew: true },
       );
     }
     await updatePendingInboxText(
@@ -239,7 +287,7 @@ export async function applyKanbanChatTriggerSideEffects(opts: {
         orderId,
         opts.newText,
         "DEMO_KANBAN",
-        { authorLabel: opts.authorLabel, kaitenCommentId: kid },
+        { authorLabel: opts.authorLabel, kaitenCommentId: kid, forceNew: true },
       );
     }
     await updatePendingInboxText(
@@ -270,7 +318,7 @@ export async function applyKanbanChatTriggerSideEffects(opts: {
       orderId,
       opts.newText,
       "DEMO_KANBAN",
-      { authorLabel: opts.authorLabel, kaitenCommentId: kid },
+      { authorLabel: opts.authorLabel, kaitenCommentId: kid, forceNew: true },
     );
     if (opts.tenantId.trim()) {
       await createOrderChatInboxItemsFromCrmComment(opts.db, {
@@ -290,7 +338,7 @@ export async function applyKanbanChatTriggerSideEffects(opts: {
       orderId,
       opts.newText,
       "DEMO_KANBAN",
-      { authorLabel: opts.authorLabel, kaitenCommentId: kid },
+      { authorLabel: opts.authorLabel, kaitenCommentId: kid, forceNew: true },
     );
     if (opts.tenantId.trim()) {
       await createOrderChatInboxItemsFromCrmComment(opts.db, {

@@ -36,6 +36,30 @@ describe("collapsePendingCorrectionTextTwins", () => {
     expect(rows[0]?.id).toBe("kai");
     expect(rows[0]?.source).toBe("KAITEN");
   });
+
+  it("тот же текст спустя несколько секунд не схлопывает в одну заявку", () => {
+    const rows = collapsePendingCorrectionTextTwins([
+      {
+        id: "first",
+        text: "срок от 10.02.2026",
+        source: "DEMO_KANBAN",
+        authorLabel: "Роман",
+        createdAt: new Date("2026-08-01T16:24:00Z"),
+        resolvedAt: null,
+        rejectedAt: null,
+      },
+      {
+        id: "second",
+        text: "срок от 10.02.2026",
+        source: "DEMO_KANBAN",
+        authorLabel: "Роман",
+        createdAt: new Date("2026-08-01T16:24:08Z"),
+        resolvedAt: null,
+        rejectedAt: null,
+      },
+    ]);
+    expect(rows).toHaveLength(2);
+  });
 });
 
 describe("fetchMergedOrderChatCorrections", () => {
@@ -150,6 +174,43 @@ describe("fetchMergedOrderChatCorrections", () => {
             kaitenCommentId: 42,
             resolvedAt: new Date("2026-07-10T10:00:00Z"),
             rejectedAt: null,
+          },
+        ]),
+      },
+    };
+
+    const pending = await orderIdsWithPendingMergedCorrections(db as never, [
+      "o1",
+    ]);
+    expect(pending.has("o1")).toBe(false);
+  });
+
+  it("pending merge ignores inbox twin when legacy already resolved", async () => {
+    const { orderIdsWithPendingMergedCorrections } = await import(
+      "./order-chat-corrections-read"
+    );
+    const db = {
+      orderChatCorrection: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 42,
+            resolvedAt: new Date("2026-07-10T10:00:00Z"),
+            rejectedAt: null,
+            text: "цвет 14",
+            createdAt: new Date("2026-07-01T10:00:00Z"),
+          },
+        ]),
+      },
+      orderChatInboxItem: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            orderId: "o1",
+            kaitenCommentId: 42,
+            resolvedAt: null,
+            rejectedAt: null,
+            text: "!!! цвет 14",
+            createdAt: new Date("2026-07-01T10:00:00Z"),
           },
         ]),
       },

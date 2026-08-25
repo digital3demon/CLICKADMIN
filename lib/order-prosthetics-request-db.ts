@@ -8,6 +8,7 @@ import {
   type OrderChatTriggerKaitenComment,
   trimOrderChatAuthorLabel,
 } from "@/lib/order-chat-trigger-author";
+import { areChatRequestCreatedTwins } from "@/lib/order-chat-request-twin";
 
 /** В CRM «???» всегда Канбан: Kaiten → зеркало канбана → запись DEMO_KANBAN. */
 const PROSTHETICS_CRM_SOURCE: OrderChatCorrectionSource = "DEMO_KANBAN";
@@ -69,7 +70,12 @@ export async function createOrderProstheticsRequestIfNeeded(
   orderId: string,
   rawMessage: string,
   _source: OrderChatCorrectionSource,
-  opts?: { kaitenCommentId?: number | null; authorLabel?: string | null },
+  opts?: {
+    kaitenCommentId?: number | null;
+    authorLabel?: string | null;
+    /** Кнопка канбана: новая заявка даже если такая же уже закрыта. */
+    forceNew?: boolean;
+  },
 ): Promise<void> {
   if (!isOrderProstheticsRequestTrigger(rawMessage)) return;
   const text = stripOrderProstheticsRequestPrefix(rawMessage);
@@ -197,19 +203,26 @@ export async function createOrderProstheticsRequestIfNeeded(
     },
     orderBy: { createdAt: "asc" },
     take: 60,
-    select: { id: true, text: true },
+    select: { id: true, text: true, createdAt: true },
   });
   const key = normalizeProstheticsTwinKey(text);
-  const already =
-    key &&
-    pendingSame.some((r) => normalizeProstheticsTwinKey(r.text) === key);
-  if (already) return;
+  const already = pendingSame.filter(
+    (r) => key && normalizeProstheticsTwinKey(r.text) === key,
+  );
+  if (already.length) {
+    if (!opts?.forceNew) return;
+    if (already.some((r) => areChatRequestCreatedTwins(r.createdAt, new Date()))) {
+      return;
+    }
+  }
 
-  const closedSame = await findProstheticsTwinIds(db, orderId, text, {
-    requireNullKid: false,
-    closedOnly: true,
-  });
-  if (closedSame.length) return;
+  if (!opts?.forceNew) {
+    const closedSame = await findProstheticsTwinIds(db, orderId, text, {
+      requireNullKid: false,
+      closedOnly: true,
+    });
+    if (closedSame.length) return;
+  }
 
   await db.orderProstheticsRequest.create({
     data: {

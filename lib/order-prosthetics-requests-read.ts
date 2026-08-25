@@ -4,6 +4,8 @@ import {
   stripOrderProstheticsRequestPrefix,
 } from "@/lib/order-prosthetics-request";
 import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
+import { orderIdsPendingAfterTwinMerge } from "@/lib/order-chat-pending-twin-merge";
+import { arePendingChatRequestDisplayTwins } from "@/lib/order-chat-request-twin";
 
 export type OrderProstheticsRequestReadRow = {
   id: string;
@@ -59,14 +61,14 @@ export function preferPendingProstheticsTwin(
 }
 
 /**
- * Схлопывает pending-пары с одинаковым текстом (в т.ч. legacy KAITEN + канбан),
- * когда отличаются только переносы строк.
+ * Схлопывает только близнецов одного сообщения (текст + createdAt ±2 с).
+ * Повтор с тем же текстом спустя несколько секунд — отдельная заявка.
  */
 export function collapsePendingProstheticsTextTwins(
   rows: OrderProstheticsRequestReadRow[],
 ): OrderProstheticsRequestReadRow[] {
   const closed: OrderProstheticsRequestReadRow[] = [];
-  const pendingByText = new Map<string, OrderProstheticsRequestReadRow>();
+  const pending: OrderProstheticsRequestReadRow[] = [];
 
   for (const row of rows) {
     if (!isPendingProsthetics(row)) {
@@ -78,15 +80,25 @@ export function collapsePendingProstheticsTextTwins(
       closed.push(row);
       continue;
     }
-    const prev = pendingByText.get(key);
-    if (!prev) {
-      pendingByText.set(key, row);
+    const twin = pending.find((p) =>
+      arePendingChatRequestDisplayTwins({
+        sameText: normalizeProstheticsTwinKey(displayText(p.text)) === key,
+        createdAtA: p.createdAt,
+        createdAtB: row.createdAt,
+        sourceA: p.source,
+        sourceB: row.source,
+      }),
+    );
+    if (!twin) {
+      pending.push(row);
       continue;
     }
-    pendingByText.set(key, preferPendingProstheticsTwin(prev, row));
+    const keep = preferPendingProstheticsTwin(twin, row);
+    const i = pending.indexOf(twin);
+    if (i >= 0) pending[i] = keep;
   }
 
-  return sortRequests([...closed, ...pendingByText.values()]);
+  return sortRequests([...closed, ...pending]);
 }
 
 /**
@@ -178,6 +190,8 @@ export async function orderIdsWithPendingMergedProsthetics(
         kaitenCommentId: true,
         resolvedAt: true,
         rejectedAt: true,
+        text: true,
+        createdAt: true,
       },
     }),
     (db as any).orderChatInboxItem.findMany({
@@ -187,6 +201,8 @@ export async function orderIdsWithPendingMergedProsthetics(
         kaitenCommentId: true,
         resolvedAt: true,
         rejectedAt: true,
+        text: true,
+        createdAt: true,
       },
     }) as Promise<
       Array<{
@@ -194,44 +210,17 @@ export async function orderIdsWithPendingMergedProsthetics(
         kaitenCommentId: number | null;
         resolvedAt: Date | null;
         rejectedAt: Date | null;
+        text: string;
+        createdAt: Date;
       }>
     >,
   ]);
 
-  type Soft = {
-    kaitenCommentId: number | null;
-    resolvedAt: Date | null;
-    rejectedAt: Date | null;
-  };
-  const byOrder = new Map<string, { inbox: Soft[]; legacy: Soft[] }>();
-  for (const id of ids) byOrder.set(id, { inbox: [], legacy: [] });
-  for (const row of inboxRows) {
-    byOrder.get(row.orderId)?.inbox.push(row);
-  }
-  for (const row of legacyRows) {
-    byOrder.get(row.orderId)?.legacy.push(row);
-  }
-
-  const pending = new Set<string>();
-  for (const [orderId, packs] of byOrder) {
-    const inboxKaitenIds = new Set<number>();
-    let hasPending = false;
-    for (const row of packs.inbox) {
-      if (row.kaitenCommentId != null) inboxKaitenIds.add(row.kaitenCommentId);
-      if (row.resolvedAt == null && row.rejectedAt == null) hasPending = true;
-    }
-    for (const row of packs.legacy) {
-      if (
-        row.kaitenCommentId != null &&
-        inboxKaitenIds.has(row.kaitenCommentId)
-      ) {
-        continue;
-      }
-      if (row.resolvedAt == null && row.rejectedAt == null) hasPending = true;
-    }
-    if (hasPending) pending.add(orderId);
-  }
-  return pending;
+  return orderIdsPendingAfterTwinMerge(inboxRows, legacyRows, (raw) =>
+    normalizeProstheticsTwinKey(
+      stripOrderProstheticsRequestPrefix(raw)?.trim() || raw,
+    ),
+  );
 }
 
 /** @deprecated используйте orderIdsWithPendingMergedProsthetics */

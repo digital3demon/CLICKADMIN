@@ -1,9 +1,14 @@
 import type { PrismaClient } from "@prisma/client";
 import { stripOrderChatCorrectionPrefix } from "@/lib/order-chat-correction";
 import {
+  normalizeProstheticsTwinKey,
+  stripOrderProstheticsRequestPrefix,
+} from "@/lib/order-prosthetics-request";
+import {
   canAdvanceProstheticsProgressStep,
   type ProstheticsProgressStep,
 } from "@/lib/prosthetics-in-transit-step";
+import { areChatRequestCreatedTwins } from "@/lib/order-chat-request-twin";
 
 type CloseAction = "accept" | "reject";
 
@@ -12,7 +17,57 @@ type PairRow = {
   resolvedAt: Date | null;
   rejectedAt: Date | null;
   kaitenCommentId: number | null;
+  text?: string | null;
+  createdAt?: Date | null;
 };
+
+function prostheticsTwinKey(raw: string): string {
+  return normalizeProstheticsTwinKey(
+    stripOrderProstheticsRequestPrefix(raw)?.trim() || raw,
+  );
+}
+
+async function addProstheticsTextTwins(
+  db: PrismaClient,
+  orderId: string,
+  primaryText: string,
+  primaryCreatedAt: Date | null | undefined,
+  inboxIds: Set<string>,
+  legacyIds: Set<string>,
+  extraInbox: Record<string, unknown>,
+  extraLegacy: Record<string, unknown>,
+): Promise<void> {
+  const key = prostheticsTwinKey(primaryText);
+  if (!key || !primaryCreatedAt) return;
+
+  const inboxRows = (await (db as any).orderChatInboxItem.findMany({
+    where: { orderId, type: "PROSTHETICS", ...extraInbox },
+    select: { id: true, text: true, createdAt: true },
+    take: 80,
+  })) as Array<{ id: string; text: string; createdAt: Date }>;
+  for (const row of inboxRows) {
+    if (
+      prostheticsTwinKey(row.text) === key &&
+      areChatRequestCreatedTwins(row.createdAt, primaryCreatedAt)
+    ) {
+      inboxIds.add(row.id);
+    }
+  }
+
+  const legacyRows = await db.orderProstheticsRequest.findMany({
+    where: { orderId, ...extraLegacy },
+    select: { id: true, text: true, createdAt: true },
+    take: 80,
+  });
+  for (const row of legacyRows) {
+    if (
+      prostheticsTwinKey(row.text) === key &&
+      areChatRequestCreatedTwins(row.createdAt, primaryCreatedAt)
+    ) {
+      legacyIds.add(row.id);
+    }
+  }
+}
 
 function closeData(action: CloseAction, userId: string) {
   const now = new Date();
@@ -55,6 +110,7 @@ export async function closeOrderChatCorrectionPair(
     select: {
       id: true,
       text: true,
+      createdAt: true,
       resolvedAt: true,
       rejectedAt: true,
       kaitenCommentId: true,
@@ -66,6 +122,7 @@ export async function closeOrderChatCorrectionPair(
     select: {
       id: true,
       text: true,
+      createdAt: true,
       resolvedAt: true,
       rejectedAt: true,
       kaitenCommentId: true,
@@ -139,9 +196,13 @@ export async function closeOrderChatCorrectionPair(
         resolvedAt: null,
         rejectedAt: null,
       },
-      select: { id: true },
+      select: { id: true, createdAt: true },
     });
-    for (const t of textTwinLegacy) legacyIds.add(t.id);
+    for (const t of textTwinLegacy) {
+      if (areChatRequestCreatedTwins(t.createdAt, primary.createdAt)) {
+        legacyIds.add(t.id);
+      }
+    }
 
     const textTwinInbox = (await (db as any).orderChatInboxItem.findMany({
       where: {
@@ -151,9 +212,13 @@ export async function closeOrderChatCorrectionPair(
         resolvedAt: null,
         rejectedAt: null,
       },
-      select: { id: true },
-    })) as Array<{ id: string }>;
-    for (const t of textTwinInbox) inboxIds.add(t.id);
+      select: { id: true, createdAt: true },
+    })) as Array<{ id: string; createdAt: Date }>;
+    for (const t of textTwinInbox) {
+      if (areChatRequestCreatedTwins(t.createdAt, primary.createdAt)) {
+        inboxIds.add(t.id);
+      }
+    }
   }
 
   for (const id of inboxIds) {
@@ -212,6 +277,8 @@ export async function closeOrderProstheticsRequestPair(
     where: { id: rid, orderId: oid, type: "PROSTHETICS" },
     select: {
       id: true,
+      text: true,
+      createdAt: true,
       resolvedAt: true,
       rejectedAt: true,
       kaitenCommentId: true,
@@ -222,6 +289,8 @@ export async function closeOrderProstheticsRequestPair(
     where: { id: rid, orderId: oid },
     select: {
       id: true,
+      text: true,
+      createdAt: true,
       resolvedAt: true,
       rejectedAt: true,
       kaitenCommentId: true,
@@ -281,6 +350,18 @@ export async function closeOrderProstheticsRequestPair(
     });
     for (const t of twinLegacy) legacyIds.add(t.id);
   }
+
+  const primaryText = String(inboxRow?.text || legacyRow?.text || "").trim();
+  await addProstheticsTextTwins(
+    db,
+    oid,
+    primaryText,
+    inboxRow?.createdAt ?? legacyRow?.createdAt,
+    inboxIds,
+    legacyIds,
+    { resolvedAt: null, rejectedAt: null },
+    { resolvedAt: null, rejectedAt: null },
+  );
 
   for (const id of inboxIds) {
     await (db as any).orderChatInboxItem.update({
@@ -344,6 +425,8 @@ export async function setOrderProstheticsArrivedPair(
     where: { id: rid, orderId: oid, type: "PROSTHETICS" },
     select: {
       id: true,
+      text: true,
+      createdAt: true,
       resolvedAt: true,
       rejectedAt: true,
       orderedAt: true,
@@ -356,6 +439,8 @@ export async function setOrderProstheticsArrivedPair(
     where: { id: rid, orderId: oid },
     select: {
       id: true,
+      text: true,
+      createdAt: true,
       resolvedAt: true,
       rejectedAt: true,
       orderedAt: true,
@@ -431,6 +516,22 @@ export async function setOrderProstheticsArrivedPair(
     for (const t of twinLegacy) legacyIds.add(t.id);
   }
 
+  const arrivedTwinWhere = {
+    resolvedAt: { not: null },
+    rejectedAt: null,
+    ...(arrived ? { arrivedAt: null } : { arrivedAt: { not: null } }),
+  };
+  await addProstheticsTextTwins(
+    db,
+    oid,
+    String(inboxRow?.text || legacyRow?.text || "").trim(),
+    inboxRow?.createdAt ?? legacyRow?.createdAt,
+    inboxIds,
+    legacyIds,
+    arrivedTwinWhere,
+    arrivedTwinWhere,
+  );
+
   for (const id of inboxIds) {
     await (db as any).orderChatInboxItem.update({
       where: { id },
@@ -460,6 +561,8 @@ type ProgressPairRow = PairRow & {
 
 const progressSelect = {
   id: true,
+  text: true,
+  createdAt: true,
   resolvedAt: true,
   rejectedAt: true,
   orderedAt: true,
@@ -586,6 +689,22 @@ export async function advanceOrderProstheticsProgressPair(
     });
     for (const t of twinLegacy) legacyIds.add(t.id);
   }
+
+  const progressTwinWhere = {
+    resolvedAt: { not: null },
+    rejectedAt: null,
+    ...twinFilter,
+  };
+  await addProstheticsTextTwins(
+    db,
+    oid,
+    String(inboxRow?.text || legacyRow?.text || "").trim(),
+    inboxRow?.createdAt ?? legacyRow?.createdAt,
+    inboxIds,
+    legacyIds,
+    progressTwinWhere,
+    progressTwinWhere,
+  );
 
   for (const id of inboxIds) {
     await (db as any).orderChatInboxItem.update({

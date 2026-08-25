@@ -1254,23 +1254,7 @@ export function KanbanCardModal({
     }
 
     if (card.linkedOrderId) {
-      let action: ChatAction = requestedAction;
-      if (action === "comment") {
-        action = isOrderChatCorrectionTrigger(trimmed)
-          ? "correction"
-          : isOrderProstheticsRequestTrigger(trimmed)
-            ? "prosthetics"
-            : "comment";
-      }
-      const bodyText =
-        action === "correction"
-          ? `!!! ${trimmed}`
-          : action === "prosthetics"
-            ? `??? ${trimmed}`
-            : action === "pt"
-              ? formatOrderChatPtMemoMessage(trimmed)
-              : trimmed;
-      return postLinkedOrderChat(action, bodyText);
+      return postLinkedOrderChat(requestedAction, trimmed);
     }
 
     onApply((b) => {

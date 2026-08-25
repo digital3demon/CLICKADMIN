@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyKanbanChatTriggerSideEffects,
   chatTriggerKindFromText,
+  persistKanbanButtonTriggers,
 } from "./order-chat-trigger-mutate";
 
 describe("chatTriggerKindFromText", () => {
@@ -11,6 +12,33 @@ describe("chatTriggerKindFromText", () => {
     );
     expect(chatTriggerKindFromText("??? коронка на 16")).toBe("prosthetics");
     expect(chatTriggerKindFromText("просто комментарий")).toBeNull();
+  });
+});
+
+describe("persistKanbanButtonTriggers", () => {
+  it("кнопка !!! пишет legacy и inbox", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const upsert = vi.fn().mockResolvedValue({});
+    const db = {
+      orderChatCorrection: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create,
+      },
+      orderChatInboxItem: { upsert },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    await persistKanbanButtonTriggers({
+      db: db as never,
+      tenantId: "t1",
+      orderId: "o1",
+      action: "correction",
+      messageText: "!!! срок от 10.02.2026",
+      commentId: "cm-1",
+      authorLabel: "Менеджер",
+      syncState: "LOCAL_ONLY",
+    });
+    expect(create).toHaveBeenCalled();
+    expect(upsert).toHaveBeenCalled();
   });
 });
 

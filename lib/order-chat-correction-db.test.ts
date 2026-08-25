@@ -155,6 +155,78 @@ describe("createOrderChatCorrectionIfNeeded", () => {
     });
   });
 
+  it("кнопка forceNew создаёт новую заявку, если такой же pending старше окна близнеца", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const db = {
+      orderChatCorrection: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "old-pending",
+          createdAt: new Date(Date.now() - 8_000),
+        }),
+        create,
+      },
+    };
+
+    await createOrderChatCorrectionIfNeeded(
+      db as never,
+      "order-1",
+      "!!! цвет с вестибулярной стороны 14",
+      "DEMO_KANBAN",
+      { forceNew: true, authorLabel: "Роман" },
+    );
+
+    expect(create).toHaveBeenCalled();
+  });
+
+  it("кнопка forceNew создаёт новую корректировку после закрытой с тем же текстом", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const db = {
+      orderChatCorrection: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create,
+      },
+    };
+
+    await createOrderChatCorrectionIfNeeded(
+      db as never,
+      "order-1",
+      "!!! цвет с вестибулярной стороны 14",
+      "DEMO_KANBAN",
+      { forceNew: true, authorLabel: "Роман" },
+    );
+
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        orderId: "order-1",
+        source: "DEMO_KANBAN",
+        text: "цвет с вестибулярной стороны 14",
+        kaitenCommentId: null,
+        authorLabel: "Роман",
+      },
+    });
+  });
+
+  it("без forceNew не создаёт CRM-строку, если такая уже закрыта", async () => {
+    const create = vi.fn();
+    const findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "closed-1" });
+    const db = {
+      orderChatCorrection: { findFirst, create },
+    };
+
+    await createOrderChatCorrectionIfNeeded(
+      db as never,
+      "order-1",
+      "!!! цвет с вестибулярной стороны 14",
+      "DEMO_KANBAN",
+      { authorLabel: "Роман" },
+    );
+
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("складывает призрак pending+kid в уже исполненную запись без kid", async () => {
     const update = vi.fn().mockResolvedValue({});
     const del = vi.fn().mockResolvedValue({});

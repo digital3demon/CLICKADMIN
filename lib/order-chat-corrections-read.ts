@@ -1,6 +1,8 @@
 import type { OrderChatCorrectionSource, PrismaClient } from "@prisma/client";
 import { stripOrderChatCorrectionPrefix } from "@/lib/order-chat-correction";
 import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
+import { orderIdsPendingAfterTwinMerge } from "@/lib/order-chat-pending-twin-merge";
+import { arePendingChatRequestDisplayTwins } from "@/lib/order-chat-request-twin";
 
 export type OrderChatCorrectionReadRow = {
   id: string;
@@ -51,14 +53,14 @@ export function preferPendingCorrectionTwin(
 }
 
 /**
- * Схлопывает pending-пары с одинаковым текстом (CRM DEMO_KANBAN + Kaiten twin).
- * Закрытые строки не трогаем.
+ * Схлопывает только близнецов одного сообщения (тот же текст и createdAt ±2 с).
+ * Повтор с тем же текстом спустя несколько секунд — отдельная заявка.
  */
 export function collapsePendingCorrectionTextTwins(
   rows: OrderChatCorrectionReadRow[],
 ): OrderChatCorrectionReadRow[] {
   const closed: OrderChatCorrectionReadRow[] = [];
-  const pendingByText = new Map<string, OrderChatCorrectionReadRow>();
+  const pending: OrderChatCorrectionReadRow[] = [];
 
   for (const row of rows) {
     if (!isPendingCorrection(row)) {
@@ -70,15 +72,25 @@ export function collapsePendingCorrectionTextTwins(
       closed.push(row);
       continue;
     }
-    const prev = pendingByText.get(key);
-    if (!prev) {
-      pendingByText.set(key, row);
+    const twin = pending.find((p) =>
+      arePendingChatRequestDisplayTwins({
+        sameText: displayText(p.text).toLowerCase() === key,
+        createdAtA: p.createdAt,
+        createdAtB: row.createdAt,
+        sourceA: p.source,
+        sourceB: row.source,
+      }),
+    );
+    if (!twin) {
+      pending.push(row);
       continue;
     }
-    pendingByText.set(key, preferPendingCorrectionTwin(prev, row));
+    const keep = preferPendingCorrectionTwin(twin, row);
+    const i = pending.indexOf(twin);
+    if (i >= 0) pending[i] = keep;
   }
 
-  return sortCorrections([...closed, ...pendingByText.values()]);
+  return sortCorrections([...closed, ...pending]);
 }
 
 /**
@@ -167,6 +179,8 @@ export async function orderIdsWithPendingMergedCorrections(
         kaitenCommentId: true,
         resolvedAt: true,
         rejectedAt: true,
+        text: true,
+        createdAt: true,
       },
     }),
     (db as any).orderChatInboxItem.findMany({
@@ -176,6 +190,8 @@ export async function orderIdsWithPendingMergedCorrections(
         kaitenCommentId: true,
         resolvedAt: true,
         rejectedAt: true,
+        text: true,
+        createdAt: true,
       },
     }) as Promise<
       Array<{
@@ -183,44 +199,15 @@ export async function orderIdsWithPendingMergedCorrections(
         kaitenCommentId: number | null;
         resolvedAt: Date | null;
         rejectedAt: Date | null;
+        text: string;
+        createdAt: Date;
       }>
     >,
   ]);
 
-  type Soft = {
-    kaitenCommentId: number | null;
-    resolvedAt: Date | null;
-    rejectedAt: Date | null;
-  };
-  const byOrder = new Map<string, { inbox: Soft[]; legacy: Soft[] }>();
-  for (const id of ids) byOrder.set(id, { inbox: [], legacy: [] });
-  for (const row of inboxRows) {
-    byOrder.get(row.orderId)?.inbox.push(row);
-  }
-  for (const row of legacyRows) {
-    byOrder.get(row.orderId)?.legacy.push(row);
-  }
-
-  const pending = new Set<string>();
-  for (const [orderId, packs] of byOrder) {
-    const inboxKaitenIds = new Set<number>();
-    let hasPending = false;
-    for (const row of packs.inbox) {
-      if (row.kaitenCommentId != null) inboxKaitenIds.add(row.kaitenCommentId);
-      if (row.resolvedAt == null && row.rejectedAt == null) hasPending = true;
-    }
-    for (const row of packs.legacy) {
-      if (
-        row.kaitenCommentId != null &&
-        inboxKaitenIds.has(row.kaitenCommentId)
-      ) {
-        continue;
-      }
-      if (row.resolvedAt == null && row.rejectedAt == null) hasPending = true;
-    }
-    if (hasPending) pending.add(orderId);
-  }
-  return pending;
+  return orderIdsPendingAfterTwinMerge(inboxRows, legacyRows, (raw) =>
+    (stripOrderChatCorrectionPrefix(raw)?.trim() || raw.trim()).toLowerCase(),
+  );
 }
 
 /** @deprecated используйте orderIdsWithPendingMergedCorrections */

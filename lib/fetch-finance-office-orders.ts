@@ -10,7 +10,6 @@ import {
   compareOrdersByEffectiveFinanceRecord,
 } from "@/lib/finance-office-list-filter";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
-import { isOrderChatInboxReadNewEnabledForTenant } from "@/lib/order-chat-inbox-dual-read.server";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import {
   hydrateListPendingChatCorrectionsFromInbox,
@@ -258,7 +257,6 @@ export async function countFinanceOfficeQuickFilterChips(
   // меньше, чем в Заказах: второй наряд уже с галкой «просчитано» / со счётом.
   const scope = financeOfficeChipCountScopeWhere(tenantId, opts);
   const dueWindow = financeOfficeChipDueWindowScopeWhere(tenantId, opts);
-  const useInbox = isOrderChatInboxReadNewEnabledForTenant(tenantId);
   const inbox = (db as {
     orderChatInboxItem: {
       findMany: (args: unknown) => Promise<Array<{ orderId: string }>>;
@@ -285,18 +283,16 @@ export async function countFinanceOfficeQuickFilterChips(
       select: { orderId: true },
       distinct: ["orderId"],
     }),
-    useInbox
-      ? inbox.findMany({
-          where: {
-            type: "CORRECTION",
-            resolvedAt: null,
-            rejectedAt: null,
-            order: dueWindow,
-          },
-          select: { orderId: true },
-          distinct: ["orderId"],
-        })
-      : Promise.resolve([]),
+    inbox.findMany({
+      where: {
+        type: "CORRECTION",
+        resolvedAt: null,
+        rejectedAt: null,
+        order: dueWindow,
+      },
+      select: { orderId: true },
+      distinct: ["orderId"],
+    }),
     db.orderProstheticsRequest.findMany({
       where: {
         resolvedAt: null,
@@ -306,18 +302,16 @@ export async function countFinanceOfficeQuickFilterChips(
       select: { orderId: true },
       distinct: ["orderId"],
     }),
-    useInbox
-      ? inbox.findMany({
-          where: {
-            type: "PROSTHETICS",
-            resolvedAt: null,
-            rejectedAt: null,
-            order: scope,
-          },
-          select: { orderId: true },
-          distinct: ["orderId"],
-        })
-      : Promise.resolve([]),
+    inbox.findMany({
+      where: {
+        type: "PROSTHETICS",
+        resolvedAt: null,
+        rejectedAt: null,
+        order: scope,
+      },
+      select: { orderId: true },
+      distinct: ["orderId"],
+    }),
     db.order.count({
       where: { AND: [dueWindow, { financeCalculated: false }] },
     }),

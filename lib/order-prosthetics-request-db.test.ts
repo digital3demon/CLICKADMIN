@@ -171,6 +171,67 @@ describe("createOrderProstheticsRequestIfNeeded", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("кнопка forceNew создаёт новую заявку при том же тексте спустя несколько секунд", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "k1",
+        text: "коронка на 16",
+        createdAt: new Date(Date.now() - 8_000),
+      },
+    ]);
+
+    const db = {
+      orderProstheticsRequest: {
+        findMany,
+        create,
+      },
+    };
+
+    await createOrderProstheticsRequestIfNeeded(
+      db as never,
+      "order-1",
+      "??? коронка на 16",
+      "DEMO_KANBAN",
+      { forceNew: true, authorLabel: "Роман" },
+    );
+
+    expect(create).toHaveBeenCalled();
+  });
+
+  it("кнопка forceNew создаёт заявку после закрытой с тем же текстом", async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "done-1", text: "коронка на 16" }]);
+
+    const db = {
+      orderProstheticsRequest: {
+        findMany,
+        create,
+      },
+    };
+
+    await createOrderProstheticsRequestIfNeeded(
+      db as never,
+      "order-1",
+      "??? коронка на 16",
+      "DEMO_KANBAN",
+      { forceNew: true, authorLabel: "Роман" },
+    );
+
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        orderId: "order-1",
+        source: "DEMO_KANBAN",
+        text: "коронка на 16",
+        kaitenCommentId: null,
+        authorLabel: "Роман",
+      },
+    });
+  });
+
   it("не поднимает исполненную заявку как новую при повторном синке Kaiten", async () => {
     const update = vi.fn().mockResolvedValue({});
     const create = vi.fn();

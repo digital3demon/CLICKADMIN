@@ -11,6 +11,7 @@ import {
   type OrderChatTriggerKaitenComment,
   trimOrderChatAuthorLabel,
 } from "@/lib/order-chat-trigger-author";
+import { areChatRequestCreatedTwins } from "@/lib/order-chat-request-twin";
 
 /** id комментария из ответа Kaiten REST (POST/GET). */
 export function kaitenApiCommentNumericId(
@@ -60,7 +61,12 @@ export async function createOrderChatCorrectionIfNeeded(
   orderId: string,
   rawMessage: string,
   source: OrderChatCorrectionSource,
-  opts?: { kaitenCommentId?: number | null; authorLabel?: string | null },
+  opts?: {
+    kaitenCommentId?: number | null;
+    authorLabel?: string | null;
+    /** Кнопка канбана: новая заявка даже если такая же уже закрыта. */
+    forceNew?: boolean;
+  },
 ): Promise<void> {
   if (!isOrderChatCorrectionTrigger(rawMessage)) return;
   const text = stripOrderChatCorrectionPrefix(rawMessage);
@@ -162,8 +168,25 @@ export async function createOrderChatCorrectionIfNeeded(
     return;
   }
 
-  const closedSame = await findClosedCorrectionTextTwin(db, orderId, text);
-  if (closedSame) return;
+  const pendingSame = await db.orderChatCorrection.findFirst({
+    where: {
+      orderId,
+      text: { in: orderChatCorrectionTwinTexts(text) },
+      resolvedAt: null,
+      rejectedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, createdAt: true },
+  });
+  if (pendingSame) {
+    if (!opts?.forceNew) return;
+    if (areChatRequestCreatedTwins(pendingSame.createdAt, new Date())) return;
+  }
+
+  if (!opts?.forceNew) {
+    const closedSame = await findClosedCorrectionTextTwin(db, orderId, text);
+    if (closedSame) return;
+  }
 
   await db.orderChatCorrection.create({
     data: {
