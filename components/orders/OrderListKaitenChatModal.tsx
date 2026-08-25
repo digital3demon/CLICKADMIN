@@ -5,9 +5,11 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ClipboardEvent,
 } from "react";
+import { pickChatReplyToId } from "@/lib/order-chat-correction-clarify";
 import { useRouter } from "next/navigation";
 import type { KaitenTrackLane, UserRole } from "@prisma/client";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
@@ -181,6 +183,9 @@ export function OrderListKaitenChatModal({
   doctorName,
   open,
   onClose,
+  initialReplyToId = null,
+  initialReplyText = null,
+  onPosted,
 }: {
   orderId: string;
   orderNumber: string;
@@ -188,6 +193,10 @@ export function OrderListKaitenChatModal({
   doctorName?: string | null;
   open: boolean;
   onClose: () => void;
+  /** Ответ на заявку корректировки (id комментария или kaitenCommentId). */
+  initialReplyToId?: string | number | null;
+  initialReplyText?: string | null;
+  onPosted?: () => void;
 }) {
   const router = useRouter();
   const { user } = useSessionUser();
@@ -214,6 +223,7 @@ export function OrderListKaitenChatModal({
   const [commentCaretPos, setCommentCaretPos] = useState(0);
   const commentTextareaRef = useAutosizeTextarea(newText, { maxHeight: 240 });
   const adminMentionTag = useKanbanAdminMentionTag();
+  const replySeededRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -363,6 +373,40 @@ export function OrderListKaitenChatModal({
     void load();
   }, [open, load]);
 
+  useEffect(() => {
+    if (!open) {
+      replySeededRef.current = false;
+      setReplyToId(null);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || replySeededRef.current || !snap) return;
+    const hint = initialReplyToId != null ? String(initialReplyToId).trim() : "";
+    if (!hint && !initialReplyText?.trim()) return;
+    const kaitenHint = Number(hint);
+    const resolved = pickChatReplyToId(
+      Number.isFinite(kaitenHint) && kaitenHint > 0 ? kaitenHint : null,
+      snap.comments.map((c) => ({
+        id: String(c.id),
+        externalCommentId:
+          c.id != null && Number.isFinite(Number(c.id))
+            ? String(c.id)
+            : null,
+        text: c.text,
+      })),
+      initialReplyText ?? "",
+    );
+    const fallback =
+      resolved ??
+      (hint
+        ? snap.comments.find((c) => String(c.id) === hint)?.id ?? hint
+        : null);
+    if (fallback == null || fallback === "") return;
+    setReplyToId(fallback);
+    replySeededRef.current = true;
+  }, [open, snap, initialReplyToId, initialReplyText]);
+
   const [hasOpened, setHasOpened] = useState(false);
 
   useEffect(() => {
@@ -456,6 +500,7 @@ export function OrderListKaitenChatModal({
             return;
           }
           await load();
+          onPosted?.();
           return;
         }
         setPostError(data.error ?? "Не отправлено");
@@ -468,6 +513,7 @@ export function OrderListKaitenChatModal({
           prev ? { ...prev, comments: [...prev.comments, row] } : prev,
         );
       }
+      onPosted?.();
     } catch {
       setPostError("Сеть недоступна");
       setNewText(t);
@@ -1039,7 +1085,9 @@ export function OrderListKaitenChatModal({
         <div className="shrink-0 border-t border-[var(--card-border)] px-3 py-3 sm:px-4">
           {replyToId != null ? (
             <p className="mb-2 text-xs text-[var(--text-muted)]">
-              Ответ на #{replyToId}.{" "}
+              {initialReplyText?.trim()
+                ? "Ответ на заявку корректировки. "
+                : `Ответ на #${replyToId}. `}
               <button
                 type="button"
                 className="font-medium text-[var(--sidebar-blue)] hover:underline"

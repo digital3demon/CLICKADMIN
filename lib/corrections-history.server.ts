@@ -3,6 +3,12 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import type { CorrectionHistoryRow } from "@/lib/corrections-history";
+import {
+  clarifyHasUnreadReply,
+  pickChatReplyToId,
+} from "@/lib/order-chat-correction-clarify";
+import { syncClarifyRepliesForOrder } from "@/lib/order-chat-correction-clarify.server";
+import { loadKanbanOrderComments } from "@/lib/kanban/kanban-order-comments-store";
 import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
 
 const TAKE_DEFAULT = 150;
@@ -38,6 +44,10 @@ const correctionSelectPending = {
   createdAt: true,
   resolvedAt: true,
   rejectedAt: true,
+  kaitenCommentId: true,
+  clarifyAskedAt: true,
+  clarifyReplyAt: true,
+  clarifyReplyAckAt: true,
   order: {
     select: {
       id: true,
@@ -52,6 +62,11 @@ function mapCorrectionPending(
   r: Prisma.OrderChatCorrectionGetPayload<{
     select: typeof correctionSelectPending;
   }>,
+  extras?: {
+    chatReplyToId?: string | null;
+    clarifyAsked?: boolean;
+    clarifyHasUnreadReply?: boolean;
+  },
 ): CorrectionHistoryRow {
   return {
     id: r.id,
@@ -66,6 +81,17 @@ function mapCorrectionPending(
     resolvedByName: null,
     rejectedByName: null,
     arrivedByName: null,
+    kaitenCommentId: r.kaitenCommentId,
+    chatReplyToId:
+      extras?.chatReplyToId ??
+      (r.kaitenCommentId != null ? String(r.kaitenCommentId) : null),
+    clarifyAsked: extras?.clarifyAsked ?? r.clarifyAskedAt != null,
+    clarifyHasUnreadReply:
+      extras?.clarifyHasUnreadReply ??
+      clarifyHasUnreadReply({
+        clarifyReplyAt: r.clarifyReplyAt,
+        clarifyReplyAckAt: r.clarifyReplyAckAt,
+      }),
     order: {
       id: r.order.id,
       orderNumber: r.order.orderNumber,
@@ -214,7 +240,51 @@ export async function loadCorrectionsHistoryOnly(opts?: {
       take,
       select: correctionSelectPending,
     });
-    return rows.map(mapCorrectionPending);
+    const tenantId = opts?.tenantId?.trim() || "";
+    const orderIds = [...new Set(rows.map((r) => r.order.id))];
+    if (tenantId) {
+      await Promise.all(
+        orderIds.map((orderId) =>
+          syncClarifyRepliesForOrder({ db: prisma, tenantId, orderId }).catch(
+            () => undefined,
+          ),
+        ),
+      );
+    }
+    const refreshed =
+      tenantId && orderIds.length > 0
+        ? await prisma.orderChatCorrection.findMany({
+            where: { id: { in: rows.map((r) => r.id) } },
+            select: correctionSelectPending,
+          })
+        : rows;
+    const byId = new Map(refreshed.map((r) => [r.id, r]));
+    const commentsByOrder = new Map<
+      string,
+      Awaited<ReturnType<typeof loadKanbanOrderComments>>
+    >();
+    if (tenantId) {
+      await Promise.all(
+        orderIds.map(async (orderId) => {
+          commentsByOrder.set(
+            orderId,
+            await loadKanbanOrderComments(tenantId, orderId),
+          );
+        }),
+      );
+    }
+    return rows.map((raw) => {
+      const r = byId.get(raw.id) ?? raw;
+      const comments = commentsByOrder.get(r.order.id) ?? [];
+      return mapCorrectionPending(r, {
+        chatReplyToId: pickChatReplyToId(r.kaitenCommentId, comments, r.text),
+        clarifyAsked: r.clarifyAskedAt != null,
+        clarifyHasUnreadReply: clarifyHasUnreadReply({
+          clarifyReplyAt: r.clarifyReplyAt,
+          clarifyReplyAckAt: r.clarifyReplyAckAt,
+        }),
+      });
+    });
   }
   const rows = await prisma.orderChatCorrection.findMany({
     where,

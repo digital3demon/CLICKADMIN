@@ -1641,6 +1641,15 @@ model OrderChatCorrection {
   rejectedAt       DateTime?
   rejectedByUserId String?
   rejectedBy       User?                     @relation("OrderChatCorrectionRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+  /// «Уточнить»: когда отправили ответ в чат по заявке
+  clarifyAskedAt       DateTime?
+  clarifyAskedByUserId String?
+  /// id комментария CRM (наш вопрос)
+  clarifyCommentId     String?
+  /// Когда в треде появился ответ другой стороны
+  clarifyReplyAt       DateTime?
+  /// Когда открыли чат после ответа (мигание снимается)
+  clarifyReplyAckAt    DateTime?
 
   @@unique([orderId, kaitenCommentId])
   @@index([orderId, resolvedAt])
@@ -1801,6 +1810,11 @@ model OrderChatInboxItem {
   completedByUserId String?
   /// Для USER_MENTION — кому адресовано упоминание
   targetUserId     String?
+  clarifyAskedAt       DateTime?
+  clarifyAskedByUserId String?
+  clarifyCommentId     String?
+  clarifyReplyAt       DateTime?
+  clarifyReplyAckAt    DateTime?
 
   @@unique([orderId, type, kaitenCommentId])
   @@unique([orderId, type, crmDraftId])

@@ -13,6 +13,7 @@ import { ensureClinicSourceDoctorColumn } from "@/lib/ensure-clinic-source-docto
 import { ensureClinicUsesPaperDocsColumn } from "@/lib/ensure-clinic-uses-paper-docs-column";
 import { ensureOrderAttachmentDiskRelPathColumn } from "@/lib/ensure-order-attachment-disk-column";
 import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
+import { ensureCorrectionClarifyColumns } from "@/lib/ensure-correction-clarify-columns";
 import { ensureSqlitePragmas } from "@/lib/ensure-sqlite-pragmas";
 import { getDemoPrisma } from "@/lib/prisma-demo";
 import { getDemoDatabaseUrl } from "@/lib/prisma-demo";
@@ -35,6 +36,7 @@ async function prepareClient(
     await ensureClinicUsesPaperDocsColumn(client);
     await ensureOrderAttachmentDiskRelPathColumn(client);
     await ensureFinanceOfficeDebtColumns(client);
+    await ensureCorrectionClarifyColumns(client);
   }
   return client;
 }

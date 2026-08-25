@@ -253,19 +253,20 @@ function FinanceOfficeTableColGroup() {
   return (
     <colgroup>
       <col className="w-[7.5rem]" />
-      <col className="w-10" />
-      <col />
-      <col />
-      <col />
-      <col />
-      <col className="w-[8%]" />
-      <col />
-      <col />
-      <col className="hidden shell-desktop:table-column" />
-      <col className="hidden shell-desktop:table-column" />
-      <col className="w-[5%]" />
-      <col />
-      <col className="w-[5rem] shell-desktop:hidden" />
+      <col className="w-9" />
+      <col className="w-[5.5rem]" />
+      <col className="w-[11%]" />
+      <col className="w-[7.25rem]" />
+      <col className="w-[6.25rem]" />
+      <col className="w-[6.5rem]" />
+      <col className="w-[4.5rem]" />
+      <col className="w-[4.5rem]" />
+      <col className="hidden w-[8.5rem] shell-desktop:table-column" />
+      <col className="hidden w-[4rem] shell-desktop:table-column" />
+      <col className="w-[4.25rem]" />
+      {/* Было ~1/9 leftover (~8%); +60% → ~13% таблицы. */}
+      <col className="w-[13%]" />
+      <col className="w-[4.5rem] shell-desktop:hidden" />
     </colgroup>
   );
 }
@@ -301,7 +302,7 @@ function FinanceOfficeTableHeaderRow({
 }) {
   return (
     <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-      <th className="w-[7.5rem] px-2 py-1.5 text-center normal-case">
+      <th className="w-[7.5rem] px-1 py-1.5 text-center normal-case">
         {interactive ? (
           <button
             type="button"
@@ -314,11 +315,11 @@ function FinanceOfficeTableHeaderRow({
           "Выбор"
         )}
       </th>
-      <th className="w-10 px-2 py-2 text-center normal-case">Чат</th>
-      <th className="px-2 py-2 text-center">№ наряда</th>
-      <th className="min-w-0 px-2 py-2 text-center">Клиника</th>
-      <th className="min-w-0 px-2 py-2 text-center">Врач</th>
-      <th className="min-w-0 px-2 py-2 text-center">Пациент</th>
+      <th className="w-9 px-1 py-2 text-center normal-case">Чат</th>
+      <th className="w-[5.5rem] px-1 py-2 text-center">№ наряда</th>
+      <th className="min-w-0 w-[11%] px-1 py-2 text-center">Клиника</th>
+      <th className="min-w-0 w-[7.25rem] px-1 py-2 text-center">Врач</th>
+      <th className="min-w-0 w-[6.25rem] px-1 py-2 text-center">Пациент</th>
       {interactive ? (
         <FinanceOfficeDateFilterHeaders
           appliedFrom={periodFrom}
@@ -332,24 +333,24 @@ function FinanceOfficeTableHeaderRow({
         />
       ) : (
         <>
-          <th className="min-w-0 px-2 py-2 text-center normal-case">
+          <th className="min-w-0 w-[6.5rem] px-1 py-2 text-center normal-case">
             Счёт выставлен
           </th>
-          <th className="min-w-0 px-2 py-2 text-center normal-case">Лаб срок</th>
-          <th className="min-w-0 px-2 py-2 text-center normal-case">Запись</th>
+          <th className="min-w-0 w-[4.5rem] px-1 py-2 text-center normal-case">Лаб срок</th>
+          <th className="min-w-0 w-[4.5rem] px-1 py-2 text-center normal-case">Запись</th>
         </>
       )}
-      <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">
+      <th className="hidden min-w-0 w-[8.5rem] px-1 py-2 text-center normal-case shell-desktop:table-cell">
         Реквизиты
       </th>
-      <th className="hidden min-w-0 px-2 py-2 text-center normal-case shell-desktop:table-cell">
+      <th className="hidden min-w-0 w-[4rem] px-1 py-2 text-center normal-case shell-desktop:table-cell">
         Наше юрлицо
       </th>
-      <th className="min-w-0 w-[5%] px-2 py-2 text-center normal-case">
+      <th className="min-w-0 w-[4.25rem] px-1 py-2 text-center normal-case">
         Отправка
       </th>
-      <th className="min-w-0 px-2 py-2 text-center normal-case">Отметки</th>
-      <th className="w-[5rem] px-2 py-2 text-center normal-case shell-desktop:hidden">
+      <th className="min-w-0 w-[13%] px-1 py-2 text-center normal-case">Отметки</th>
+      <th className="w-[4.5rem] px-1 py-2 text-center normal-case shell-desktop:hidden">
         Ещё
       </th>
     </tr>

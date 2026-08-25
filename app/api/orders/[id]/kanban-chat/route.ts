@@ -78,6 +78,10 @@ import {
 import { isCardFileImage } from "@/lib/kanban/card-files";
 import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
 import { isKanbanChatLocalOnlyRequest } from "@/lib/kanban/kanban-chat-local-query";
+import {
+  markClarifyAskedIfParentIsPendingCorrection,
+  persistClarifyRepliesFromComments,
+} from "@/lib/order-chat-correction-clarify.server";
 
 const KANBAN_STATE_KEY = "kanbanAppStateV3";
 
@@ -783,6 +787,18 @@ export async function POST(
         );
       }
     }
+    try {
+      await markClarifyAskedIfParentIsPendingCorrection({
+        db: ordersPrisma,
+        orderId: order.id,
+        parentCommentId: parentId,
+        parentExternalId: parent?.externalCommentId ?? null,
+        newCommentId: String(dup.id || "").trim() || draftCommentId,
+        userId: session.sub,
+      });
+    } catch (e) {
+      console.error("[kanban-chat POST] clarify mark (dup)", orderId, e);
+    }
     return NextResponse.json({ ok: true, comment: dup });
   }
 
@@ -811,6 +827,23 @@ export async function POST(
       { error: "Не удалось сохранить комментарий" },
       { status: 500 },
     );
+  }
+  try {
+    await markClarifyAskedIfParentIsPendingCorrection({
+      db: ordersPrisma,
+      orderId: order.id,
+      parentCommentId: parentId,
+      parentExternalId: parent?.externalCommentId ?? null,
+      newCommentId: String(row.id || "").trim() || draftCommentId,
+      userId: session.sub,
+    });
+    await persistClarifyRepliesFromComments({
+      db: ordersPrisma,
+      orderId: order.id,
+      comments: [...storedComments, row],
+    });
+  } catch (e) {
+    console.error("[kanban-chat POST] clarify", orderId, e);
   }
 
   if (action === "correction" || action === "prosthetics") {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildInvoiceCaptionRuFromDocumentText,
   buildInvoiceCaptionRuFromFileName,
+  formatDebtDocumentOpenLabel,
   formatInvoiceListPillLabel,
   formatUpdListPillLabel,
   normalizeInvoiceNumberFieldRu,
@@ -108,5 +109,33 @@ describe("formatUpdListPillLabel", () => {
     expect(formatUpdListPillLabel("шапка №1654 от 20 августа 2026 хвост")).toBe(
       "УПД №1654 от 20.08.2026",
     );
+  });
+});
+
+describe("formatDebtDocumentOpenLabel", () => {
+  it("счёт: номер из поля, дата из ISO если в поле нет «от»", () => {
+    expect(
+      formatDebtDocumentOpenLabel(
+        "invoice",
+        "183",
+        "2026-05-08T10:00:00.000Z",
+      ),
+    ).toBe("СЧЕТ №183 от 8.05.2026");
+  });
+
+  it("кириллица вокруг «от» в номере — дату из поля не дублируем", () => {
+    expect(
+      formatDebtDocumentOpenLabel(
+        "invoice",
+        "шапка №183 от 8 мая 2026 хвост",
+        "2026-12-01T10:00:00.000Z",
+      ),
+    ).toBe("СЧЕТ №183 от 8.05.2026");
+  });
+
+  it("УПД: номер + дата файла", () => {
+    expect(
+      formatDebtDocumentOpenLabel("upd", "1654", "2026-08-25T12:00:00.000Z"),
+    ).toBe("УПД №1654 от 25.08.2026");
   });
 });

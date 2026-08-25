@@ -16,6 +16,7 @@ import {
   paymentValueToHarmonyTone,
   resolveListPillClass,
 } from "@/lib/harmony-list-pill";
+import { formatDebtDocumentOpenLabel } from "@/lib/format-invoice-number-ru";
 
 type DebtRow = {
   orderId: string;
@@ -31,6 +32,12 @@ type DebtRow = {
   paymentPartialRub: number | null;
   hasInvoice: boolean;
   hasUpd: boolean;
+  invoiceNumber?: string | null;
+  updNumber?: string | null;
+  invoiceAttachmentId?: string | null;
+  updAttachmentId?: string | null;
+  issuedAtIso?: string | null;
+  updAtIso?: string | null;
 };
 
 function debtPaymentClassicClass(payment: string): string {
@@ -343,10 +350,42 @@ export function FinanceOfficeDebtsCard({
                             }
                           />
                         </td>
-                        <td className="px-2 py-1.5 text-[var(--text-muted)]">
-                          {[r.hasInvoice ? "счёт" : null, r.hasUpd ? "УПД" : null]
-                            .filter(Boolean)
-                            .join(", ") || "—"}
+                        <td className="min-w-[10rem] px-2 py-1.5">
+                          <div className="flex flex-col items-start gap-1">
+                            {r.hasInvoice && r.invoiceAttachmentId ? (
+                              <a
+                                href={`/api/orders/${r.orderId}/attachments/${r.invoiceAttachmentId}?inline=1`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Открыть счёт"
+                                className="rounded-md border border-sky-400/70 bg-sky-50 px-1.5 py-0.5 text-left text-[11px] font-semibold leading-snug text-sky-950 hover:bg-sky-100 dark:border-sky-800/70 dark:bg-sky-950/40 dark:text-sky-100 dark:hover:bg-sky-950/60"
+                              >
+                                {formatDebtDocumentOpenLabel(
+                                  "invoice",
+                                  r.invoiceNumber,
+                                  r.issuedAtIso,
+                                )}
+                              </a>
+                            ) : null}
+                            {r.hasUpd && r.updAttachmentId ? (
+                              <a
+                                href={`/api/orders/${r.orderId}/attachments/${r.updAttachmentId}?inline=1`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Открыть УПД"
+                                className="rounded-md border border-violet-400/70 bg-violet-50 px-1.5 py-0.5 text-left text-[11px] font-semibold leading-snug text-violet-950 hover:bg-violet-100 dark:border-violet-800/70 dark:bg-violet-950/40 dark:text-violet-100 dark:hover:bg-violet-950/60"
+                              >
+                                {formatDebtDocumentOpenLabel(
+                                  "upd",
+                                  r.updNumber,
+                                  r.updAtIso ?? r.issuedAtIso,
+                                )}
+                              </a>
+                            ) : null}
+                            {!r.hasInvoice && !r.hasUpd ? (
+                              <span className="text-[var(--text-muted)]">—</span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-2 py-1.5">
                           <button

@@ -3732,8 +3732,101 @@ export function OrderEditForm({
             disabled={!canEditOrder}
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
+          <div className="mt-3 min-w-0">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-5">
+                <div className="flex shrink-0 flex-col gap-2.5 sm:max-w-[15rem] sm:pt-0.5">
+                  <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                    ЭДО и бумаги
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={invoiceSaving || !canEditOrder}
+                      aria-pressed={invoicePaperDocs}
+                      title="Бумажные документы распечатаны"
+                      onClick={() =>
+                        void toggleInvoiceDocFlag(
+                          "invoicePaperDocs",
+                          !invoicePaperDocs,
+                        )
+                      }
+                      className={
+                        invoicePaperDocs
+                          ? "rounded-md border border-stone-500 bg-stone-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-stone-800 disabled:opacity-50 sm:text-sm"
+                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                      }
+                    >
+                      бум доки
+                    </button>
+                    <button
+                      type="button"
+                      disabled={invoiceSaving || !canEditOrder}
+                      aria-pressed={invoiceSentToEdo}
+                      title="Отправлен в ЭДО"
+                      onClick={() =>
+                        void toggleInvoiceDocFlag(
+                          "invoiceSentToEdo",
+                          !invoiceSentToEdo,
+                        )
+                      }
+                      className={
+                        invoiceSentToEdo
+                          ? "rounded-md border border-cyan-500 bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-cyan-700 disabled:opacity-50 sm:text-sm"
+                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                      }
+                    >
+                      отпр эдо
+                    </button>
+                    <button
+                      type="button"
+                      disabled={invoiceSaving || !canEditOrder}
+                      aria-pressed={invoiceEdoSigned}
+                      title="Подпись в ЭДО"
+                      onClick={() =>
+                        void toggleInvoiceDocFlag(
+                          "invoiceEdoSigned",
+                          !invoiceEdoSigned,
+                        )
+                      }
+                      className={
+                        invoiceEdoSigned
+                          ? "rounded-md border border-indigo-500 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 sm:text-sm"
+                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                      }
+                    >
+                      пдпс эдо
+                    </button>
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 border-t border-[var(--card-border)] pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                  <label
+                    className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
+                    htmlFor="oe-invoice-payment-notes"
+                  >
+                    Комментарии к счёту и оплатам
+                  </label>
+                  <textarea
+                    id="oe-invoice-payment-notes"
+                    className={`${inputClass} min-h-[2.5rem] w-full max-w-md resize-y`}
+                    rows={2}
+                    maxLength={8000}
+                    value={invoicePaymentNotes}
+                    onChange={(e) => setInvoicePaymentNotes(e.target.value)}
+                    placeholder="Условия оплаты, напоминания, переписка с бухгалтерией…"
+                  />
+                  <div className="mt-2 border-t border-[var(--card-border)] pt-2">
+                    <OrderDocumentMailPanel
+                      orderId={initial.id}
+                      hasInvoice={Boolean(invoiceAttachmentId)}
+                      mode="thread"
+                      compact
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           <div
-            className="mt-2 grid grid-cols-1 items-start justify-items-start gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
+            className="mt-3 grid grid-cols-1 items-start justify-items-start gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
           >
             <div className="w-fit max-w-full space-y-3">
               <DocumentFlowCompositionSpoiler
@@ -3937,99 +4030,6 @@ export function OrderEditForm({
               </div>
             </div>
           </div>
-          <div className="mt-4 min-w-0 border-t border-[var(--card-border)] pt-3">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-5">
-                <div className="flex shrink-0 flex-col gap-2.5 sm:max-w-[15rem] sm:pt-0.5">
-                  <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                    ЭДО и бумаги
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={invoiceSaving || !canEditOrder}
-                      aria-pressed={invoicePaperDocs}
-                      title="Бумажные документы распечатаны"
-                      onClick={() =>
-                        void toggleInvoiceDocFlag(
-                          "invoicePaperDocs",
-                          !invoicePaperDocs,
-                        )
-                      }
-                      className={
-                        invoicePaperDocs
-                          ? "rounded-md border border-stone-500 bg-stone-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-stone-800 disabled:opacity-50 sm:text-sm"
-                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                      }
-                    >
-                      бум доки
-                    </button>
-                    <button
-                      type="button"
-                      disabled={invoiceSaving || !canEditOrder}
-                      aria-pressed={invoiceSentToEdo}
-                      title="Отправлен в ЭДО"
-                      onClick={() =>
-                        void toggleInvoiceDocFlag(
-                          "invoiceSentToEdo",
-                          !invoiceSentToEdo,
-                        )
-                      }
-                      className={
-                        invoiceSentToEdo
-                          ? "rounded-md border border-cyan-500 bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-cyan-700 disabled:opacity-50 sm:text-sm"
-                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                      }
-                    >
-                      отпр эдо
-                    </button>
-                    <button
-                      type="button"
-                      disabled={invoiceSaving || !canEditOrder}
-                      aria-pressed={invoiceEdoSigned}
-                      title="Подпись в ЭДО"
-                      onClick={() =>
-                        void toggleInvoiceDocFlag(
-                          "invoiceEdoSigned",
-                          !invoiceEdoSigned,
-                        )
-                      }
-                      className={
-                        invoiceEdoSigned
-                          ? "rounded-md border border-indigo-500 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 sm:text-sm"
-                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                      }
-                    >
-                      пдпс эдо
-                    </button>
-                  </div>
-                </div>
-                <div className="min-w-0 flex-1 border-t border-[var(--card-border)] pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-                  <label
-                    className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
-                    htmlFor="oe-invoice-payment-notes"
-                  >
-                    Комментарии к счёту и оплатам
-                  </label>
-                  <textarea
-                    id="oe-invoice-payment-notes"
-                    className={`${inputClass} min-h-[2.5rem] w-full max-w-md resize-y`}
-                    rows={2}
-                    maxLength={8000}
-                    value={invoicePaymentNotes}
-                    onChange={(e) => setInvoicePaymentNotes(e.target.value)}
-                    placeholder="Условия оплаты, напоминания, переписка с бухгалтерией…"
-                  />
-                  <div className="mt-2 border-t border-[var(--card-border)] pt-2">
-                    <OrderDocumentMailPanel
-                      orderId={initial.id}
-                      hasInvoice={Boolean(invoiceAttachmentId)}
-                      mode="thread"
-                      compact
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
           <div className="mt-4 grid grid-cols-1 border-t border-[var(--card-border)] pt-4 crm-t2:grid-cols-2 crm-t2:gap-6">
             <div className="min-w-0 space-y-3">
               <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">

@@ -378,6 +378,11 @@ body {
   border-spacing: 0;
 }
 
+/* Немного свободного места между столбцами → шире «Отметки». */
+.finance-office-orders-table :is(th, td) {
+  padding-inline: 0.25rem;
+}
+
 .finance-office-row-tint-calc {
   background-color: var(--fo-tint-calc);
 }
@@ -390,6 +395,22 @@ body {
 }
 .finance-office-row-tint-inv > td {
   background-color: var(--fo-tint-inv);
+}
+
+@keyframes correction-clarify-blink {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sidebar-blue) 50%, transparent);
+  }
+  50% {
+    opacity: 0.42;
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+.correction-clarify-blink {
+  animation: correction-clarify-blink 2.6s ease-in-out infinite;
 }
 
 /* Погода СПб у иконки день/ночь в сайдбаре */

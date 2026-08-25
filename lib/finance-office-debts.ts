@@ -45,7 +45,12 @@ export type FinanceOfficeDebtRow = {
   paymentPartialRub: number | null;
   hasInvoice: boolean;
   hasUpd: boolean;
+  invoiceNumber: string | null;
+  updNumber: string | null;
+  invoiceAttachmentId: string | null;
+  updAttachmentId: string | null;
   issuedAtIso: string | null;
+  updAtIso: string | null;
 };
 
 export function financeOfficeDebtPaymentLabel(
@@ -106,9 +111,12 @@ export async function listFinanceOfficeDebts(
       paymentPartialRub: true,
       legalEntity: true,
       invoiceIssuedAt: true,
+      invoiceNumber: true,
+      updNumber: true,
       invoiceAttachmentId: true,
       updAttachmentId: true,
       invoiceAttachment: { select: { createdAt: true } },
+      updAttachment: { select: { createdAt: true } },
       doctor: { select: { fullName: true } },
       clinic: {
         select: {
@@ -139,7 +147,12 @@ export async function listFinanceOfficeDebts(
       paymentPartialRub: o.paymentPartialRub,
       hasInvoice: Boolean(o.invoiceAttachmentId),
       hasUpd: Boolean(o.updAttachmentId),
+      invoiceNumber: o.invoiceNumber?.trim() || null,
+      updNumber: o.updNumber?.trim() || null,
+      invoiceAttachmentId: o.invoiceAttachmentId,
+      updAttachmentId: o.updAttachmentId,
       issuedAtIso: issued?.toISOString() ?? null,
+      updAtIso: o.updAttachment?.createdAt?.toISOString() ?? null,
     };
   });
 }

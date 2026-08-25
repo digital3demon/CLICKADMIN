@@ -210,7 +210,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
         }
       />
       <td
-        className="whitespace-nowrap px-2 py-2 text-center font-mono font-semibold"
+        className="w-[5.5rem] whitespace-nowrap px-1 py-2 text-center font-mono font-semibold"
       >
         <div className="flex items-center justify-center">
           <Link
@@ -222,7 +222,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           </Link>
         </div>
       </td>
-      <td className="min-w-0 px-2 py-2 text-center align-middle">
+      <td className="min-w-0 w-[11%] px-1 py-2 text-center align-middle">
         {o.clinic ? (
           <Link
             href={`/clients/${o.clinic.id}`}
@@ -236,7 +236,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           </span>
         )}
       </td>
-      <td className="min-w-0 px-2 py-2 text-center align-middle">
+      <td className="min-w-0 w-[7.25rem] px-1 py-2 text-center align-middle">
         <Link
           href={`/clients/doctors/${o.doctor.id}`}
           className="block break-words text-center text-[var(--sidebar-blue)] hover:underline"
@@ -244,32 +244,32 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
           {personNameSurnameInitials(o.doctor.fullName)}
         </Link>
       </td>
-      <td className="min-w-0 px-2 py-2 text-center align-middle">
+      <td className="min-w-0 w-[6.25rem] px-1 py-2 text-center align-middle">
         <span className="block hyphens-auto break-words text-center">
           {o.patientName ? personNameSurnameInitials(o.patientName) : "—"}
         </span>
       </td>
-      <td className="min-w-0 w-[8%] px-2 py-2 text-center align-middle">
+      <td className="min-w-0 w-[6.5rem] px-1 py-2 text-center align-middle">
         <FinanceOfficeInvoiceIssuedCell
           orderId={o.id}
           issuedAtIso={o.invoiceIssuedAt}
         />
       </td>
-      <td className="min-w-0 break-words px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
+      <td className="min-w-0 w-[4.5rem] break-words px-1 py-2 text-center align-middle text-[var(--text-secondary)]">
         {formatFinanceCardDate(o.dueDate) ?? "—"}
       </td>
-      <td className="min-w-0 break-words px-2 py-2 text-center align-middle text-[var(--text-secondary)]">
+      <td className="min-w-0 w-[4.5rem] break-words px-1 py-2 text-center align-middle text-[var(--text-secondary)]">
         {formatFinanceCardDate(o.appointmentDate ?? o.dueToAdminsAt) ?? "—"}
       </td>
-      <td className="hidden min-w-0 whitespace-pre-line break-words px-2 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
+      <td className="hidden min-w-0 w-[8.5rem] whitespace-pre-line break-words px-1 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
         {o.counterpartyRequisitesText || "—"}
       </td>
-      <td className="hidden min-w-0 break-words px-2 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
+      <td className="hidden min-w-0 w-[4rem] break-words px-1 py-2 text-center text-[11px] leading-snug text-[var(--text-secondary)] shell-desktop:table-cell">
         {o.legalEntity || "—"}
       </td>
       <td
         data-shipped-cell
-        className="min-w-0 w-[5%] px-2 py-2 text-center align-middle"
+        className="min-w-0 w-[4.25rem] px-1 py-2 text-center align-middle"
       >
         <OrderShippedToggle
           orderId={o.id}
@@ -348,7 +348,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
     <Fragment>
       <tr className={`hidden shell-laptop:table-row ${d.rowClass}`}>
         <td
-          className="w-[7.5rem] px-2 py-2 text-center"
+          className="w-[7.5rem] px-1 py-2 text-center"
         >
           <input
             type="checkbox"

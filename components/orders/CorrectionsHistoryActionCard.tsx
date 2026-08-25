@@ -14,6 +14,7 @@ import {
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { CorrectionOrderCompositionPanel } from "@/components/orders/CorrectionOrderCompositionPanel";
+import { OrderListKaitenChatModal } from "@/components/orders/OrderListKaitenChatModal";
 
 function correctionStatusClass(
   status: "pending" | "accepted" | "rejected" | "arrived",
@@ -61,6 +62,14 @@ export function CorrectionsHistoryActionCard({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const saveCompositionRef = useRef<(() => Promise<boolean>) | null>(null);
+  const [chatTarget, setChatTarget] = useState<{
+    orderId: string;
+    orderNumber: string;
+    patientName: string | null;
+    doctorName: string | null;
+    replyToId: string | null;
+    replyText: string;
+  } | null>(null);
 
   useEffect(() => {
     setPendingCount(initialPendingCount);
@@ -123,6 +132,41 @@ export function CorrectionsHistoryActionCard({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const tick = window.setInterval(() => {
+      void loadHistory({ background: true });
+    }, 10_000);
+    return () => window.clearInterval(tick);
+  }, [open, loadHistory]);
+
+  const openClarifyChat = useCallback(
+    (row: CorrectionHistoryJsonRow) => {
+      const unread = row.clarifyHasUnreadReply === true;
+      if (unread) {
+        void fetch(
+          `/api/orders/${row.orderId}/chat-corrections/${row.id}/clarify-ack`,
+          { method: "POST", credentials: "include" },
+        ).then(() => {
+          setItems((prev) =>
+            prev.map((x) =>
+              x.id === row.id ? { ...x, clarifyHasUnreadReply: false } : x,
+            ),
+          );
+        });
+      }
+      setChatTarget({
+        orderId: row.orderId,
+        orderNumber: row.orderNumber,
+        patientName: row.patientName,
+        doctorName: row.doctorName,
+        replyToId: row.chatReplyToId ?? (row.kaitenCommentId != null ? String(row.kaitenCommentId) : null),
+        replyText: row.text,
+      });
+    },
+    [],
+  );
 
   const removeRow = useCallback(
     (id: string) => {
@@ -361,8 +405,28 @@ export function CorrectionsHistoryActionCard({
                             >
                               {decision.label}
                             </span>
+                            <div className="flex flex-wrap justify-end gap-1">
+                              <button
+                                type="button"
+                                className={`rounded-md border border-sky-400/80 bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-950 hover:bg-sky-200 dark:border-sky-700/80 dark:bg-sky-950/50 dark:text-sky-100 ${
+                                  row.clarifyHasUnreadReply
+                                    ? "correction-clarify-blink"
+                                    : ""
+                                }`}
+                                title={
+                                  row.clarifyHasUnreadReply
+                                    ? "Пришёл ответ на уточнение — открыть чат"
+                                    : "Открыть чат с ответом на заявку"
+                                }
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openClarifyChat(row);
+                                }}
+                              >
+                                Уточнить
+                              </button>
                             {canAcceptCorrections ? (
-                              <div className="flex flex-wrap justify-end gap-1">
+                              <>
                                 <button
                                   type="button"
                                   className="rounded-md border border-emerald-400/90 bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-950 hover:bg-emerald-200 disabled:opacity-50 dark:border-emerald-700/80 dark:bg-emerald-950/50 dark:text-emerald-100"
@@ -387,8 +451,9 @@ export function CorrectionsHistoryActionCard({
                                 >
                                   {busyId === row.id ? "…" : "Отклонить"}
                                 </button>
-                              </div>
+                              </>
                             ) : null}
+                            </div>
                           </div>
                         </div>
 
@@ -418,6 +483,25 @@ export function CorrectionsHistoryActionCard({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {chatTarget ? (
+        <OrderListKaitenChatModal
+          orderId={chatTarget.orderId}
+          orderNumber={chatTarget.orderNumber}
+          patientName={chatTarget.patientName}
+          doctorName={chatTarget.doctorName}
+          open
+          initialReplyToId={chatTarget.replyToId}
+          initialReplyText={chatTarget.replyText}
+          onPosted={() => {
+            void loadHistory({ background: true });
+          }}
+          onClose={() => {
+            setChatTarget(null);
+            void loadHistory({ background: true });
+          }}
+        />
       ) : null}
     </>
   );

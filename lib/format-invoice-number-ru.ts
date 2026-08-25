@@ -136,6 +136,50 @@ export function formatUpdListPillLabel(
   return asInvoice.replace(/^СЧЕТ/u, "УПД");
 }
 
+/** Дата документа по календарю Europe/Moscow из ISO/Date. */
+export function invoiceYmdFromInstant(
+  value: string | Date | null | undefined,
+): InvoiceYmd | null {
+  if (value == null || value === "") return null;
+  const dt = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(dt);
+  const y = Number(parts.find((p) => p.type === "year")?.value);
+  const m1 = Number(parts.find((p) => p.type === "month")?.value);
+  const d = Number(parts.find((p) => p.type === "day")?.value);
+  if (!Number.isFinite(y) || !Number.isFinite(m1) || !Number.isFinite(d)) {
+    return null;
+  }
+  const m0 = m1 - 1;
+  if (!isValidCalendarDate(y, m0, d)) return null;
+  return { y, m0, d };
+}
+
+/**
+ * Кнопка «открыть счёт/УПД» в долгах: номер + дата.
+ * Если в поле номера нет «от …», берём дату выставления / файла (МСК).
+ */
+export function formatDebtDocumentOpenLabel(
+  kind: "invoice" | "upd",
+  storedNumber: string | null | undefined,
+  fallbackAt: string | Date | null | undefined,
+): string {
+  const base =
+    kind === "upd"
+      ? formatUpdListPillLabel(storedNumber)
+      : formatInvoiceListPillLabel(storedNumber);
+  // «от» после цифр/кириллицы — не JS `\b`.
+  if (/(?:^|[\s№])от\s+\d/u.test(base)) return base;
+  const ymd = invoiceYmdFromInstant(fallbackAt);
+  if (!ymd) return base;
+  return `${base} от ${formatInvoiceNumericDateRu(ymd)}`;
+}
+
 /**
  * Ищет в тексте фрагмент «от 10.02.2026» или «от 10 февраля 2026» (первое совпадение).
  */

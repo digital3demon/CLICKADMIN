@@ -25,6 +25,10 @@ export type CorrectionHistoryRow = {
   resolvedByName: string | null;
   rejectedByName: string | null;
   arrivedByName: string | null;
+  kaitenCommentId?: number | null;
+  chatReplyToId?: string | null;
+  clarifyAsked?: boolean;
+  clarifyHasUnreadReply?: boolean;
   order: {
     id: string;
     orderNumber: string;
@@ -193,6 +197,10 @@ export type CorrectionHistoryJsonRow = {
   orderNumber: string;
   patientName: string | null;
   doctorName: string | null;
+  kaitenCommentId?: number | null;
+  chatReplyToId?: string | null;
+  clarifyAsked?: boolean;
+  clarifyHasUnreadReply?: boolean;
 };
 
 export function correctionHistoryRowToJson(
@@ -212,6 +220,10 @@ export function correctionHistoryRowToJson(
     orderNumber: row.order.orderNumber,
     patientName: row.order.patientName ?? null,
     doctorName: row.order.doctorName ?? null,
+    kaitenCommentId: row.kaitenCommentId ?? null,
+    chatReplyToId: row.chatReplyToId ?? null,
+    clarifyAsked: row.clarifyAsked === true,
+    clarifyHasUnreadReply: row.clarifyHasUnreadReply === true,
   };
 }
 

@@ -128,7 +128,7 @@ function FilterTh({
   }, [open]);
 
   return (
-    <th className="min-w-0 px-2 py-2 text-center normal-case" title={title}>
+    <th className="min-w-0 px-1 py-2 text-center normal-case" title={title}>
       <button
         ref={buttonRef}
         type="button"

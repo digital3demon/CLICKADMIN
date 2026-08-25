@@ -22,6 +22,8 @@ import {
   syncOrderChatInboxFromKaitenComments,
 } from "@/lib/order-chat-inbox-db";
 import { mapParsedKaitenCommentsForTriggerSync } from "@/lib/order-chat-trigger-author";
+import { persistClarifyRepliesFromComments } from "@/lib/order-chat-correction-clarify.server";
+import { loadKanbanOrderComments } from "@/lib/kanban/kanban-order-comments-store";
 
 /** Не слать TG по историческому бэкофиллу: только комментарии младше этого окна. */
 const KAITEN_MENTION_TG_FRESH_MS = 45 * 60 * 1000;
@@ -185,6 +187,17 @@ export async function ingestKaitenCommentsForOrder(
       comments: kaitenParsedCommentsToKanbanSyncRows(input.parsed),
     });
     kanbanMirrorChanged = mirror.changed;
+  }
+
+  try {
+    const comments = await loadKanbanOrderComments(tenantId, orderId);
+    await persistClarifyRepliesFromComments({
+      db: input.prisma,
+      orderId,
+      comments,
+    });
+  } catch (e) {
+    console.error("[kaiten-comments-ingest] clarify replies", orderId, e);
   }
 
   return { labMentionDbChanged, kanbanMirrorChanged };
