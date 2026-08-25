@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MobileAwareDialog } from "@/components/ui/MobileAwareDialog";
 import { Spinner } from "@/components/ui/Spinner";
+import { FinanceOfficeOrderPickSearch } from "@/components/finance-office/FinanceOfficeOrderPickSearch";
 import {
+  bindFinanceInvoiceRowToOrder,
   classifyFinanceOfficeDropFiles,
   filterInvoiceRowsForRetry,
+  financeInvoiceRowCanApply,
   financeInvoiceRowIsRecognized,
   findUpdDtosByNumber,
   invoiceImportSourceFileNames,
@@ -390,6 +393,18 @@ export function FinanceOfficeBankImportPanel({
         }
         return row;
       }),
+    );
+    setInvoiceResults([]);
+  };
+
+  const bindInvoiceRowOrder = (
+    idx: number,
+    hit: Parameters<typeof bindFinanceInvoiceRowToOrder>[1],
+  ) => {
+    setInvoiceRows((prev) =>
+      prev.map((row, i) =>
+        i === idx ? bindFinanceInvoiceRowToOrder(row, hit) : row,
+      ),
     );
     setInvoiceResults([]);
   };
@@ -933,8 +948,8 @@ export function FinanceOfficeBankImportPanel({
             </thead>
             <tbody className="divide-y divide-[var(--card-border)]">
               {invoiceRows.map((row, idx) => (
+                <Fragment key={row.key}>
                 <tr
-                  key={row.key}
                   className={
                     row.errors.length || row.updMatch === "many"
                       ? "bg-amber-500/10"
@@ -1039,18 +1054,9 @@ export function FinanceOfficeBankImportPanel({
                     )}
                   </td>
                   <td className="px-2 py-2 align-top">
-                    <input
-                      value={row.orderNumber}
-                      disabled={busy}
-                      onChange={(e) =>
-                        patchInvoiceRow(idx, {
-                          orderNumber: e.target.value,
-                          errors: [],
-                          apply: true,
-                        })
-                      }
-                      className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 font-mono disabled:opacity-60"
-                    />
+                    <div className="font-mono text-[11px] font-semibold text-[var(--text-strong)]">
+                      {row.orderNumber || "—"}
+                    </div>
                   </td>
                   <td className="px-2 py-2 align-top text-[10px] leading-snug text-[var(--text-body)]">
                     {row.basisSnippet || "—"}
@@ -1094,17 +1100,44 @@ export function FinanceOfficeBankImportPanel({
                       <span className="font-medium text-amber-700 dark:text-amber-300">
                         Несколько УПД
                       </span>
-                    ) : !financeInvoiceRowIsRecognized(row) ? (
-                      <span className="font-medium text-red-700 dark:text-red-300">
-                        Нет УПД
-                      </span>
-                    ) : (
+                    ) : financeInvoiceRowIsRecognized(row) ? (
                       <span className="font-medium text-emerald-700 dark:text-emerald-300">
                         Распознано
+                      </span>
+                    ) : financeInvoiceRowCanApply(row) ? (
+                      <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                        К прикреплению
+                      </span>
+                    ) : !row.orderId ? (
+                      <span className="font-medium text-red-700 dark:text-red-300">
+                        Выберите наряд
+                      </span>
+                    ) : (
+                      <span className="font-medium text-red-700 dark:text-red-300">
+                        Нет УПД
                       </span>
                     )}
                   </td>
                 </tr>
+                <tr
+                  className={
+                    row.errors.length || row.updMatch === "many"
+                      ? "bg-amber-500/10"
+                      : ""
+                  }
+                >
+                  <td colSpan={8} className="px-2 pb-2.5 pt-0">
+                    <FinanceOfficeOrderPickSearch
+                      disabled={busy}
+                      selectedId={row.orderId}
+                      selectedNumber={row.orderNumber}
+                      selectedLabel={row.orderLabel}
+                      onPick={(hit) => bindInvoiceRowOrder(idx, hit)}
+                      onClear={() => bindInvoiceRowOrder(idx, null)}
+                    />
+                  </td>
+                </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
