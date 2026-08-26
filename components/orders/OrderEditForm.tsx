@@ -212,7 +212,7 @@ function formatDocumentFlowCompositionAllText(
   return lines.map(formatDocumentFlowCompositionLineText).join("\n");
 }
 
-/** Состав наряда на вкладке «Документооборот»: на десктопе на ширину 2–3 колонок, строки переносятся. */
+/** Состав наряда на вкладке «Документооборот»: полная ширина, по макету открыт. */
 function DocumentFlowCompositionSpoiler({
   lines,
   onCopy,
@@ -222,7 +222,10 @@ function DocumentFlowCompositionSpoiler({
 }) {
   const allText = formatDocumentFlowCompositionAllText(lines);
   return (
-    <details className="group w-full min-w-0 max-w-none rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]">
+    <details
+      open
+      className="group w-full min-w-0 max-w-none rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]"
+    >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
         <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Состав заказа
@@ -3831,34 +3834,359 @@ export function OrderEditForm({
             disabled={!canEditOrder}
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
-          <div className="mt-3 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)_minmax(0,1fr)] crm-t3:gap-5">
-            <div className="flex min-w-0 w-full max-w-md flex-col gap-1.5 crm-t3:max-w-none [&_button]:w-full">
+          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
+              title="Нажмите — скопировать в буфер обмена"
+              className="max-w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+            >
+              {invoiceCopyClipboardText}
+            </button>
+            <InvoiceCopyChip
+              label="Клиника"
+              value={clientLegalNameForCopy}
+              onCopy={(t) => void copyInvoiceBlockText(t)}
+            />
+            <InvoiceCopyChip
+              label="ИНН"
+              value={clientInnForCopy}
+              onCopy={(t) => void copyInvoiceBlockText(t)}
+            />
+          </div>
+          <div className="mt-3 min-w-0 w-full">
+            <DocumentFlowCompositionSpoiler
+              lines={documentFlowCompositionRows}
+              onCopy={(t) => void copyInvoiceBlockText(t)}
+            />
+          </div>
+          <div className="mt-4 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(12rem,16rem)] crm-t3:gap-5">
+            <div className="w-full min-w-0 max-w-full space-y-3">
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
                   type="button"
-                  onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
-                  title="Нажмите — скопировать в буфер обмена"
-                  className="w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                  disabled={invoiceSaving}
+                  aria-pressed={invoicePrinted}
+                  onClick={() => void toggleInvoicePrinted(!invoicePrinted)}
+                  className={
+                    invoicePrinted
+                      ? "rounded-md border border-violet-500 bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50 sm:text-sm"
+                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                  }
                 >
-                  {invoiceCopyClipboardText}
+                  Счёт распечатан
                 </button>
-                <InvoiceCopyChip
-                  label="Клиника"
-                  value={clientLegalNameForCopy}
-                  onCopy={(t) => void copyInvoiceBlockText(t)}
+                {invoiceAttachmentId ? (
+                  <a
+                    href={`/api/orders/${initial.id}/attachments/${invoiceAttachmentId}`}
+                    download
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm"
+                  >
+                    Скачать счёт
+                  </a>
+                ) : (
+                  <span
+                    className="cursor-not-allowed rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] opacity-60 sm:text-sm"
+                    title="Сначала загрузите файл счёта"
+                    aria-disabled="true"
+                  >
+                    Скачать счёт
+                  </span>
+                )}
+                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs text-[var(--text-strong)] sm:text-sm">
+                  <input
+                    type="checkbox"
+                    checked={invoiceIssued}
+                    disabled={invoiceSaving}
+                    onChange={(e) => void toggleInvoiceIssued(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
+                  />
+                  <span>Счёт выставлен</span>
+                </label>
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="oe-invoice-number">
+                  Номер счёта
+                </label>
+                <input
+                  id="oe-invoice-number"
+                  type="text"
+                  aria-label="Номер счёта"
+                  className={`${inputClass} w-full`}
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="Номер счёта"
+                  maxLength={120}
                 />
-                <InvoiceCopyChip
-                  label="ИНН"
-                  value={clientInnForCopy}
-                  onCopy={(t) => void copyInvoiceBlockText(t)}
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-[var(--text-body)]">
+                  Файл счёта
+                </p>
+                <OrderInvoiceFileDrop
+                  orderId={initial.id}
+                  disabled={!canEditOrder}
+                  onDone={async (res) => {
+                    setError(null);
+                    toast.success("Счёт загружен");
+                    if (res?.id) setInvoiceAttachmentId(res.id);
+                    if (res?.invoiceIssued !== undefined) {
+                      setInvoiceIssued(Boolean(res.invoiceIssued));
+                    }
+                    if (res && "invoiceNumber" in res) {
+                      setInvoiceNumber(res.invoiceNumber ?? "");
+                    }
+                    router.refresh();
+                    await runParseInvoice();
+                  }}
+                  onFail={(msg) => {
+                    setError(msg);
+                    toast.error(msg);
+                  }}
+                  className="w-full max-w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
                 />
+                {invoiceAttachmentId ? (
+                  <div className="mt-1.5">
+                    <button
+                      type="button"
+                      disabled={invoiceDeleting || invoiceSaving}
+                      onClick={() => void removeInvoiceAttachment()}
+                      className="text-xs font-medium text-red-600 underline decoration-red-600/40 underline-offset-2 hover:decoration-red-600 disabled:opacity-50"
+                    >
+                      {invoiceDeleting ? "Удаление…" : "Удалить файл счёта"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="border-t border-[var(--card-border)] pt-2">
+                <OrderDocumentMailPanel
+                  orderId={initial.id}
+                  hasInvoice={Boolean(invoiceAttachmentId)}
+                  mode="thread"
+                  compact
+                />
+              </div>
             </div>
-            <div className="min-w-0 w-full crm-t2:col-span-1 crm-t3:col-span-2">
-              <DocumentFlowCompositionSpoiler
-                lines={documentFlowCompositionRows}
-                onCopy={(t) => void copyInvoiceBlockText(t)}
+            <div className="w-full min-w-0 max-w-full space-y-3 border-t border-[var(--card-border)] pt-3 crm-t2:border-t-0 crm-t2:pt-0">
+              <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
+                <button
+                  type="button"
+                  disabled={invoiceSaving}
+                  aria-pressed={updPrinted}
+                  onClick={() => void toggleUpdPrinted(!updPrinted)}
+                  className={
+                    updPrinted
+                      ? "rounded-md border border-violet-500 bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50 sm:text-sm"
+                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                  }
+                >
+                  УПД распечатан
+                </button>
+                {updAttachmentId ? (
+                  <a
+                    href={`/api/orders/${initial.id}/attachments/${updAttachmentId}`}
+                    download
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm"
+                  >
+                    Скачать УПД
+                  </a>
+                ) : (
+                  <span
+                    className="cursor-not-allowed rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] opacity-60 sm:text-sm"
+                    title="Сначала загрузите файл УПД"
+                    aria-disabled="true"
+                  >
+                    Скачать УПД
+                  </span>
+                )}
+                <span
+                  className={
+                    updAttachmentId
+                      ? "rounded-md border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white sm:text-sm"
+                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] sm:text-sm"
+                  }
+                >
+                  УПД загружен
+                </span>
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="oe-upd-number">
+                  Номер УПД
+                </label>
+                <input
+                  id="oe-upd-number"
+                  type="text"
+                  aria-label="Номер УПД"
+                  className={`${inputClass} w-full`}
+                  value={updNumber}
+                  onChange={(e) => setUpdNumber(e.target.value)}
+                  placeholder="Номер УПД"
+                  maxLength={120}
+                />
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-[var(--text-body)]">
+                  Файл УПД
+                </p>
+                <OrderInvoiceFileDrop
+                  orderId={initial.id}
+                  asUpd
+                  disabled={!canEditOrder}
+                  onDone={async (res) => {
+                    setError(null);
+                    toast.success("УПД загружен");
+                    if (res?.id) setUpdAttachmentId(res.id);
+                    if (res && "updNumber" in res && typeof res.updNumber === "string") {
+                      setUpdNumber(res.updNumber);
+                    }
+                    router.refresh();
+                  }}
+                  onFail={(msg) => {
+                    setError(msg);
+                    toast.error(msg);
+                  }}
+                  className="w-full max-w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                />
+                {updAttachmentId ? (
+                  <div className="mt-1.5">
+                    <button
+                      type="button"
+                      disabled={invoiceDeleting || invoiceSaving}
+                      onClick={() => void removeUpdAttachment()}
+                      className="text-xs font-medium text-red-600 underline decoration-red-600/40 underline-offset-2 hover:decoration-red-600 disabled:opacity-50"
+                    >
+                      {invoiceDeleting ? "Удаление…" : "Удалить файл УПД"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="min-w-0 crm-t2:col-span-2 crm-t3:col-span-1">
+              <OrderDocumentMailPanel
+                orderId={initial.id}
+                hasInvoice={Boolean(invoiceAttachmentId)}
+                mode="actions"
+                actionsStretch
               />
             </div>
-            <div className="flex min-w-0 w-full max-w-md flex-col gap-3 crm-t3:max-w-none">
+          </div>
+          <div className="mt-4 grid grid-cols-1 items-start gap-4 border-t border-[var(--card-border)] pt-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(0,1.35fr)_minmax(12rem,16rem)_minmax(0,1fr)] crm-t3:gap-5">
+            <div className="min-w-0 space-y-3">
+              <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                Выставлено по счёту
+              </h3>
+              {invoiceCompositionMismatch ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-400/80 bg-amber-500/10 px-3 py-2">
+                  <p className="text-sm font-medium text-amber-950 dark:text-amber-100">
+                    Состав работы не сходится со счётом
+                  </p>
+                  <button
+                    type="button"
+                    disabled={!canEditOrder || previewMode || mismatchAckBusy}
+                    onClick={() => setMismatchConfirmOpen(true)}
+                    className="rounded-md border border-amber-500/80 bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-950 shadow-sm hover:bg-amber-200 disabled:opacity-50 dark:border-amber-400/60 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-900/60"
+                  >
+                    Подтвердить расхождение
+                  </button>
+                </div>
+              ) : null}
+              <div className="min-w-0">
+                <label
+                  className={labelClass}
+                  htmlFor="oe-invoice-parsed-summary"
+                >
+                  ВЫСТАВЛЕНО (можно править вручную)
+                </label>
+                <textarea
+                  id="oe-invoice-parsed-summary"
+                  className={`${inputClass} mt-1 min-h-[5rem] w-full resize-y font-mono text-xs`}
+                  rows={5}
+                  maxLength={16000}
+                  value={
+                    invoiceParsedSummaryText ||
+                    (parsedLinesForDisplay && parsedLinesForDisplay.length > 0
+                      ? formatInvoiceParsedLinesAsText(parsedLinesForDisplay)
+                      : "")
+                  }
+                  onChange={(e) => setInvoiceParsedSummaryText(e.target.value)}
+                  onBlur={() => {
+                    void flushInvoiceParsedToServer();
+                  }}
+                  placeholder="Строки из счёта или своя сводка"
+                />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!invoiceAttachmentId || invoiceParseBusy}
+                    onClick={() => void runParseInvoice()}
+                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+                  >
+                    {invoiceParseBusy ? "Разбор…" : "Разобрать PDF счёта"}
+                  </button>
+                  {!invoiceAttachmentId ? (
+                    <span className="text-xs text-[var(--text-muted)]">
+                      Сначала загрузите файл счёта слева.
+                    </span>
+                  ) : null}
+                </div>
+                {invoiceParseHint ? (
+                  <p className="mt-2 text-xs text-[var(--text-body)]">
+                    {invoiceParseHint}
+                  </p>
+                ) : null}
+                {parsedLinesForDisplay && parsedLinesForDisplay.length > 0 ? (
+                  <ul className="mt-2 max-h-40 list-inside list-disc overflow-y-auto rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--text-strong)]">
+                    {parsedLinesForDisplay.map((l, i) => (
+                      <li key={`${l.name}-${i}`}>
+                        {l.code ? `${l.code} · ` : ""}
+                        {l.name}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+            <div className="min-w-0 space-y-3">
+              <OrderPaymentSlipsBlock orderId={initial.id} />
+              <div className="min-w-0">
+                <p className={labelClass}>Сумма по счёту</p>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={`${inputClass} mt-1 w-full`}
+                  value={invoiceParsedTotalRubText}
+                  onChange={(e) => setInvoiceParsedTotalRubText(e.target.value)}
+                  onBlur={() => {
+                    const raw = invoiceParsedTotalRubText;
+                    const p = parseInvoiceTotalRubRuInput(raw);
+                    let nextText = raw;
+                    if (raw.trim() === "") {
+                      nextText = "";
+                    } else if (p != null) {
+                      nextText = formatInvoiceTotalRubRuDisplay(p);
+                    }
+                    setInvoiceParsedTotalRubText(nextText);
+                    invoiceParsedLiveRef.current = {
+                      ...invoiceParsedLiveRef.current,
+                      totalText: nextText,
+                    };
+                    void flushInvoiceParsedToServer();
+                  }}
+                  placeholder=""
+                  aria-describedby="oe-invoice-total-rub-hint"
+                />
+                <p
+                  id="oe-invoice-total-rub-hint"
+                  className="mt-1 text-[0.65rem] leading-snug text-[var(--text-muted)]"
+                >
+                  Целые рубли; после сохранения отобразятся с пробелами (например{" "}
+                  <span className="font-mono">22 500 ₽</span>).
+                </p>
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-col gap-3">
               <div className="flex flex-col gap-2">
                 <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                   ЭДО и бумаги
@@ -3941,331 +4269,6 @@ export function OrderEditForm({
                 />
               </div>
             </div>
-            <div className="w-full min-w-0 max-w-full space-y-3">
-              <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
-                <button
-                  type="button"
-                  disabled={invoiceSaving}
-                  aria-pressed={invoicePrinted}
-                  onClick={() => void toggleInvoicePrinted(!invoicePrinted)}
-                  className={
-                    invoicePrinted
-                      ? "rounded-md border border-violet-500 bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50 sm:text-sm"
-                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                  }
-                >
-                  Счёт распечатан
-                </button>
-                {invoiceAttachmentId ? (
-                  <a
-                    href={`/api/orders/${initial.id}/attachments/${invoiceAttachmentId}`}
-                    download
-                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm"
-                  >
-                    Скачать счёт
-                  </a>
-                ) : (
-                  <span
-                    className="cursor-not-allowed rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] opacity-60 sm:text-sm"
-                    title="Сначала загрузите файл счёта"
-                    aria-disabled="true"
-                  >
-                    Скачать счёт
-                  </span>
-                )}
-                <OrderDocumentMailPanel
-                  orderId={initial.id}
-                  hasInvoice={Boolean(invoiceAttachmentId)}
-                  mode="actions"
-                />
-                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs text-[var(--text-strong)] sm:text-sm">
-                  <input
-                    type="checkbox"
-                    checked={invoiceIssued}
-                    disabled={invoiceSaving}
-                    onChange={(e) => void toggleInvoiceIssued(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
-                  />
-                  <span>Счёт выставлен</span>
-                </label>
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="oe-invoice-number">
-                  Номер счёта
-                </label>
-                <input
-                  id="oe-invoice-number"
-                  type="text"
-                  aria-label="Номер счёта"
-                  className={`${inputClass} max-w-[20rem]`}
-                  value={invoiceNumber}
-                  onChange={(e) => setInvoiceNumber(e.target.value)}
-                  placeholder="Номер счёта"
-                  maxLength={120}
-                />
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-[var(--text-body)]">
-                  Файл счёта
-                </p>
-                <OrderInvoiceFileDrop
-                  orderId={initial.id}
-                  disabled={!canEditOrder}
-                  onDone={async (res) => {
-                    setError(null);
-                    toast.success("Счёт загружен");
-                    if (res?.id) setInvoiceAttachmentId(res.id);
-                    if (res?.invoiceIssued !== undefined) {
-                      setInvoiceIssued(Boolean(res.invoiceIssued));
-                    }
-                    if (res && "invoiceNumber" in res) {
-                      setInvoiceNumber(res.invoiceNumber ?? "");
-                    }
-                    router.refresh();
-                    await runParseInvoice();
-                  }}
-                  onFail={(msg) => {
-                    setError(msg);
-                    toast.error(msg);
-                  }}
-                  className="w-[16rem] max-w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
-                />
-                {invoiceAttachmentId ? (
-                  <div className="mt-1.5">
-                    <button
-                      type="button"
-                      disabled={invoiceDeleting || invoiceSaving}
-                      onClick={() => void removeInvoiceAttachment()}
-                      className="text-xs font-medium text-red-600 underline decoration-red-600/40 underline-offset-2 hover:decoration-red-600 disabled:opacity-50"
-                    >
-                      {invoiceDeleting ? "Удаление…" : "Удалить файл счёта"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <div className="border-t border-[var(--card-border)] pt-2">
-                <OrderDocumentMailPanel
-                  orderId={initial.id}
-                  hasInvoice={Boolean(invoiceAttachmentId)}
-                  mode="thread"
-                  compact
-                />
-              </div>
-            </div>
-            <div className="w-full min-w-0 max-w-full space-y-3 border-t border-[var(--card-border)] pt-3 crm-t2:border-t-0 crm-t2:pt-0">
-              <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
-                <button
-                  type="button"
-                  disabled={invoiceSaving}
-                  aria-pressed={updPrinted}
-                  onClick={() => void toggleUpdPrinted(!updPrinted)}
-                  className={
-                    updPrinted
-                      ? "rounded-md border border-violet-500 bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50 sm:text-sm"
-                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                  }
-                >
-                  УПД распечатан
-                </button>
-                {updAttachmentId ? (
-                  <a
-                    href={`/api/orders/${initial.id}/attachments/${updAttachmentId}`}
-                    download
-                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:text-sm"
-                  >
-                    Скачать УПД
-                  </a>
-                ) : (
-                  <span
-                    className="cursor-not-allowed rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] opacity-60 sm:text-sm"
-                    title="Сначала загрузите файл УПД"
-                    aria-disabled="true"
-                  >
-                    Скачать УПД
-                  </span>
-                )}
-                <span
-                  className={
-                    updAttachmentId
-                      ? "rounded-md border border-emerald-500 bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white sm:text-sm"
-                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] sm:text-sm"
-                  }
-                >
-                  УПД загружен
-                </span>
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="oe-upd-number">
-                  Номер УПД
-                </label>
-                <input
-                  id="oe-upd-number"
-                  type="text"
-                  aria-label="Номер УПД"
-                  className={`${inputClass} max-w-[20rem]`}
-                  value={updNumber}
-                  onChange={(e) => setUpdNumber(e.target.value)}
-                  placeholder="Номер УПД"
-                  maxLength={120}
-                />
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-[var(--text-body)]">
-                  Файл УПД
-                </p>
-                <OrderInvoiceFileDrop
-                  orderId={initial.id}
-                  asUpd
-                  disabled={!canEditOrder}
-                  onDone={async (res) => {
-                    setError(null);
-                    toast.success("УПД загружен");
-                    if (res?.id) setUpdAttachmentId(res.id);
-                    if (res && "updNumber" in res && typeof res.updNumber === "string") {
-                      setUpdNumber(res.updNumber);
-                    }
-                    router.refresh();
-                  }}
-                  onFail={(msg) => {
-                    setError(msg);
-                    toast.error(msg);
-                  }}
-                  className="w-[16rem] max-w-full cursor-pointer rounded-md border border-dashed border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-center text-xs font-medium leading-snug text-[var(--text-secondary)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:text-[var(--text-strong)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
-                />
-                {updAttachmentId ? (
-                  <div className="mt-1.5">
-                    <button
-                      type="button"
-                      disabled={invoiceDeleting || invoiceSaving}
-                      onClick={() => void removeUpdAttachment()}
-                      className="text-xs font-medium text-red-600 underline decoration-red-600/40 underline-offset-2 hover:decoration-red-600 disabled:opacity-50"
-                    >
-                      {invoiceDeleting ? "Удаление…" : "Удалить файл УПД"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-1 border-t border-[var(--card-border)] pt-4 crm-t2:grid-cols-2 crm-t2:gap-6">
-            <div className="min-w-0 space-y-3">
-              <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                Выставлено по счёту
-              </h3>
-              {invoiceCompositionMismatch ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-400/80 bg-amber-500/10 px-3 py-2">
-                  <p className="text-sm font-medium text-amber-950 dark:text-amber-100">
-                    Состав работы не сходится со счётом
-                  </p>
-                  <button
-                    type="button"
-                    disabled={!canEditOrder || previewMode || mismatchAckBusy}
-                    onClick={() => setMismatchConfirmOpen(true)}
-                    className="rounded-md border border-amber-500/80 bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-950 shadow-sm hover:bg-amber-200 disabled:opacity-50 dark:border-amber-400/60 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-900/60"
-                  >
-                    Подтвердить расхождение
-                  </button>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-1 gap-4 crm-t3:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,11rem)] crm-t3:items-start crm-t3:gap-5">
-                <div className="min-w-0">
-                  <label
-                    className={labelClass}
-                    htmlFor="oe-invoice-parsed-summary"
-                  >
-                    ВЫСТАВЛЕНО (можно править вручную)
-                  </label>
-                  <textarea
-                    id="oe-invoice-parsed-summary"
-                    className={`${inputClass} mt-1 min-h-[5rem] w-full resize-y font-mono text-xs`}
-                    rows={5}
-                    maxLength={16000}
-                    value={
-                      invoiceParsedSummaryText ||
-                      (parsedLinesForDisplay && parsedLinesForDisplay.length > 0
-                        ? formatInvoiceParsedLinesAsText(parsedLinesForDisplay)
-                        : "")
-                    }
-                    onChange={(e) => setInvoiceParsedSummaryText(e.target.value)}
-                    onBlur={() => {
-                      void flushInvoiceParsedToServer();
-                    }}
-                    placeholder="Строки из счёта или своя сводка"
-                  />
-                </div>
-                <div className="min-w-0 lg:max-w-none">
-                  <OrderPaymentSlipsBlock orderId={initial.id} />
-                </div>
-                <div className="min-w-0 lg:max-w-[12rem]">
-                  <p className={labelClass}>Сумма по счёту</p>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    className={`${inputClass} mt-1 w-full`}
-                    value={invoiceParsedTotalRubText}
-                    onChange={(e) => setInvoiceParsedTotalRubText(e.target.value)}
-                    onBlur={() => {
-                      const raw = invoiceParsedTotalRubText;
-                      const p = parseInvoiceTotalRubRuInput(raw);
-                      let nextText = raw;
-                      if (raw.trim() === "") {
-                        nextText = "";
-                      } else if (p != null) {
-                        nextText = formatInvoiceTotalRubRuDisplay(p);
-                      }
-                      setInvoiceParsedTotalRubText(nextText);
-                      invoiceParsedLiveRef.current = {
-                        ...invoiceParsedLiveRef.current,
-                        totalText: nextText,
-                      };
-                      void flushInvoiceParsedToServer();
-                    }}
-                    placeholder=""
-                    aria-describedby="oe-invoice-total-rub-hint"
-                  />
-                  <p
-                    id="oe-invoice-total-rub-hint"
-                    className="mt-1 text-[0.65rem] leading-snug text-[var(--text-muted)]"
-                  >
-                    Целые рубли; после сохранения отобразятся с пробелами (например{" "}
-                    <span className="font-mono">22 500 ₽</span>).
-                  </p>
-                </div>
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={!invoiceAttachmentId || invoiceParseBusy}
-                    onClick={() => void runParseInvoice()}
-                    className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
-                  >
-                    {invoiceParseBusy ? "Разбор…" : "Разобрать PDF счёта"}
-                  </button>
-                  {!invoiceAttachmentId ? (
-                    <span className="text-xs text-[var(--text-muted)]">
-                      Сначала загрузите файл счёта слева.
-                    </span>
-                  ) : null}
-                </div>
-                {invoiceParseHint ? (
-                  <p className="mt-2 text-xs text-[var(--text-body)]">
-                    {invoiceParseHint}
-                  </p>
-                ) : null}
-                {parsedLinesForDisplay && parsedLinesForDisplay.length > 0 ? (
-                  <ul className="mt-2 max-h-40 list-inside list-disc overflow-y-auto rounded-md border border-[var(--card-border)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--text-strong)]">
-                    {parsedLinesForDisplay.map((l, i) => (
-                      <li key={`${l.name}-${i}`}>
-                        {l.code ? `${l.code} · ` : ""}
-                        {l.name}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
-            <div className="hidden min-w-0 lg:block" aria-hidden />
           </div>
           </fieldset>
         </div>

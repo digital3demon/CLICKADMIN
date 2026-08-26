@@ -9,11 +9,14 @@ export function OrderDocumentMailPanel({
   hasInvoice,
   compact = false,
   mode = "full",
+  actionsStretch = false,
 }: {
   orderId: string;
   hasInvoice: boolean;
   compact?: boolean;
   mode?: "full" | "actions" | "thread";
+  /** Кнопка «Отправить документы» на всю колонку (макет документооборота). */
+  actionsStretch?: boolean;
 }) {
   const [emails, setEmails] = useState<OrderSourceEmailRow[]>([]);
   const [loading, setLoading] = useState(mode !== "actions");
@@ -130,7 +133,11 @@ export function OrderDocumentMailPanel({
                 ? "Отправить счёт и УПД на почту для счетов"
                 : "Сначала загрузите файл счёта"
             }
-            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+            className={
+              actionsStretch
+                ? "w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+                : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm"
+            }
             onClick={() => void sendDocs()}
           >
             Отправить документы
