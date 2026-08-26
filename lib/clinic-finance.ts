@@ -32,6 +32,8 @@ export type ReconciliationRow = {
   orderCreatedAt: Date;
   /** Дата записи пациента (appointmentDate ?? dueToAdminsAt). */
   appointmentAt: Date | null;
+  /** Лабораторный срок наряда (Order.dueDate). */
+  labDueAt: Date | null;
   workReceivedAt: Date | null;
   approvedAt: Date | null;
   sentAt: Date | null;
@@ -498,6 +500,7 @@ export async function fetchReconciliationRows(
           createdAt: true,
           workReceivedAt: true,
           appointmentDate: true,
+          dueDate: true,
           dueToAdminsAt: true,
           patientName: true,
           labWorkStatus: true,
@@ -569,6 +572,7 @@ export async function fetchReconciliationRows(
         appointmentDate: l.order.appointmentDate,
         dueToAdminsAt: l.order.dueToAdminsAt,
       }),
+      labDueAt: l.order.dueDate,
       workReceivedAt: l.order.workReceivedAt,
       approvedAt: timeline?.approvedAt ?? null,
       sentAt: timeline?.sentAt ?? null,

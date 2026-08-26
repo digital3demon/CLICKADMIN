@@ -62,6 +62,7 @@ type PeriodLineRow = {
   patientName: string | null;
   orderCreatedAt: string;
   appointmentAt: string | null;
+  labDueAt: string | null;
   workReceivedAt: string | null;
   approvedAt: string | null;
   sentAt: string | null;
@@ -667,7 +668,7 @@ export function FinancePanel({
             </p>
           ) : (
             <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--card-border)]">
-              <table className="w-full min-w-[1340px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1460px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
                     <th className="px-3 py-2">
@@ -698,6 +699,7 @@ export function FinancePanel({
                     <th className="px-3 py-2">Доктор</th>
                     <th className="px-3 py-2">Пациент</th>
                     <th className="px-3 py-2">Дата записи</th>
+                    <th className="px-3 py-2">Лаб срок</th>
                     <th className="px-3 py-2">Согласовано</th>
                     <th className="px-3 py-2">Отправка</th>
                     <th className="px-3 py-2">Позиция</th>
@@ -778,6 +780,9 @@ export function FinancePanel({
                               row.workReceivedAt ??
                               row.orderCreatedAt,
                           )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
+                          {formatDateOnlyRu(row.labDueAt)}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
                           {formatDateOnlyRu(row.approvedAt)}
