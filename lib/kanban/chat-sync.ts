@@ -1,4 +1,4 @@
-import type { CardComment, KanbanAppState } from "@/lib/kanban/types";
+import type { CardComment, KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
 export const KANBAN_CHAT_STATE_KEY = "kanbanAppStateV3";
 
@@ -92,6 +92,84 @@ export function findCardByLinkedOrderId(
     }
   }
   return null;
+}
+
+/** Цель обновления с Kaiten: id на клиенте часто не совпадает со снимком tenant. */
+export type KanbanKaitenRefreshLookup = {
+  cardId: string;
+  linkedOrderId?: string | null;
+  kaitenCardId?: number | null;
+};
+
+export type KanbanKaitenRefreshCardHit = {
+  card: KanbanCard;
+  colLoc: CardLocation | null;
+};
+
+function positiveKaitenId(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+function cardMatchesKaitenRefreshLookup(
+  card: import("./types").KanbanCard,
+  target: KanbanKaitenRefreshLookup,
+): boolean {
+  const wantId = String(target.cardId || "").trim();
+  const haveId = String(card.id || "").trim();
+  if (wantId && haveId && wantId === haveId) return true;
+  const wantOrder = String(target.linkedOrderId || "").trim();
+  const haveOrder = String(card.linkedOrderId || "").trim();
+  if (wantOrder && haveOrder && wantOrder === haveOrder) return true;
+  const wantKaiten = positiveKaitenId(target.kaitenCardId);
+  const haveKaiten = positiveKaitenId(card.kaitenCardId);
+  if (wantKaiten != null && haveKaiten != null && wantKaiten === haveKaiten) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Карточки колонок и СТОП (не архив) под цель refresh.
+ * Сначала по cardId, иначе по linkedOrderId / kaitenCardId — иначе «нет на доске».
+ */
+export function findKanbanCardsForKaitenRefresh(
+  state: KanbanAppState,
+  target: KanbanKaitenRefreshLookup,
+): KanbanKaitenRefreshCardHit[] {
+  const wantId = String(target.cardId || "").trim();
+  const wantOrder = String(target.linkedOrderId || "").trim();
+  const wantKaiten = positiveKaitenId(target.kaitenCardId);
+  if (!wantId && !wantOrder && wantKaiten == null) return [];
+
+  const hits: KanbanKaitenRefreshCardHit[] = [];
+  const seen = new Set<string>();
+  const push = (card: KanbanCard, colLoc: CardLocation | null) => {
+    if (!cardMatchesKaitenRefreshLookup(card, target)) return;
+    const key = String(card.id || "").trim() || `idx-${hits.length}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    hits.push({ card, colLoc });
+  };
+
+  for (let bi = 0; bi < state.boards.length; bi += 1) {
+    const board = state.boards[bi]!;
+    for (let ci = 0; ci < board.columns.length; ci += 1) {
+      const col = board.columns[ci]!;
+      for (let i = 0; i < col.cards.length; i += 1) {
+        push(col.cards[i]!, {
+          boardIndex: bi,
+          columnIndex: ci,
+          cardIndex: i,
+        });
+      }
+    }
+    for (const row of board.stoppedCards ?? []) {
+      if (row?.card) push(row.card, null);
+    }
+  }
+  return hits;
 }
 
 function createdIso(value: string | undefined): string {

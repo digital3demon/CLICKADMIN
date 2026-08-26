@@ -2826,6 +2826,20 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   appState,
                   board.id,
                 )}
+                onBeforeRefresh={async () => {
+                  if (isDemo) return;
+                  const cur = appStateRef.current;
+                  if (!cur) return;
+                  if (kanbanStateSaveTimerRef.current) {
+                    clearTimeout(kanbanStateSaveTimerRef.current);
+                    kanbanStateSaveTimerRef.current = null;
+                  }
+                  await writeClientState(
+                    "tenant",
+                    "kanbanAppStateV3",
+                    kanbanStateForPersistence(cur, false),
+                  );
+                }}
                 onRunningChange={(running) => {
                   kanbanPersistPausedRef.current = running;
                   if (running && kanbanStateSaveTimerRef.current) {

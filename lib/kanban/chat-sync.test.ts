@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   compactCardComments,
+  findKanbanCardsForKaitenRefresh,
   mergeKaitenSnapshotIntoCardComments,
   upsertKaitenCommentsToCard,
 } from "./chat-sync";
-import type { CardComment } from "./types";
+import type { CardComment, KanbanAppState, KanbanCard } from "./types";
 
 describe("kanban chat sync", () => {
   it("CRM readback с DRAFT не добавляет второе сообщение в канбан", () => {
@@ -338,5 +339,104 @@ describe("kanban chat sync", () => {
     const merged = mergeKaitenSnapshotIntoCardComments(existing, snapshot);
     expect(merged.length).toBe(1);
     expect(merged[0]?.id).toBe("cm-local");
+  });
+});
+
+describe("findKanbanCardsForKaitenRefresh", () => {
+  it("находит карточку по linkedOrderId, если cardId клиента другой (кириллица рядом)", () => {
+    const state = {
+      activeBoardId: "ortho",
+      boards: [
+        {
+          id: "ortho",
+          title: "Ортопедия",
+          columns: [
+            {
+              id: "c",
+              cards: [
+                {
+                  id: "kc-68058214",
+                  title: "2608-12 Крупышева Е.Ю.",
+                  linkedOrderId: "ord-а",
+                  kaitenCardId: 68058214,
+                } as KanbanCard,
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const hits = findKanbanCardsForKaitenRefresh(state, {
+      cardId: "order-ord-а",
+      linkedOrderId: "ord-а",
+      kaitenCardId: 68058214,
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.card.id).toBe("kc-68058214");
+    expect(hits[0]?.colLoc).toEqual({
+      boardIndex: 0,
+      columnIndex: 0,
+      cardIndex: 0,
+    });
+  });
+
+  it("находит СТОП по kaitenCardId без совпадения cardId", () => {
+    const state = {
+      activeBoardId: "ortho",
+      boards: [
+        {
+          id: "ortho",
+          title: "Ортопедия",
+          columns: [{ id: "c", cards: [] }],
+          stoppedCards: [
+            {
+              card: {
+                id: "stop-local",
+                title: "СТОП наряд",
+                linkedOrderId: "ord-s",
+                kaitenCardId: 99,
+              } as KanbanCard,
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const hits = findKanbanCardsForKaitenRefresh(state, {
+      cardId: "чужой-id",
+      linkedOrderId: null,
+      kaitenCardId: 99,
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.card.id).toBe("stop-local");
+    expect(hits[0]?.colLoc).toBeNull();
+  });
+
+  it("не берёт архив", () => {
+    const state = {
+      activeBoardId: "ortho",
+      boards: [
+        {
+          id: "ortho",
+          title: "Ортопедия",
+          columns: [{ id: "c", cards: [] }],
+          archivedCards: [
+            {
+              card: {
+                id: "arch",
+                linkedOrderId: "ord-arch",
+                kaitenCardId: 8,
+              } as KanbanCard,
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    expect(
+      findKanbanCardsForKaitenRefresh(state, {
+        cardId: "нет",
+        linkedOrderId: "ord-arch",
+        kaitenCardId: 8,
+      }),
+    ).toEqual([]);
   });
 });

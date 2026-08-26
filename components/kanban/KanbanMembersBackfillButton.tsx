@@ -23,6 +23,8 @@ type KanbanMembersBackfillButtonProps = {
   refreshTargets?: KanbanKaitenRefreshTarget[];
   /** Сколько карточек на доске, если targets ещё не передали. */
   linkedOrderCount?: number;
+  /** Сначала записать живой снимок в tenant — иначе сервер не найдёт cardId. */
+  onBeforeRefresh?: () => void | Promise<void>;
   onRunningChange?: (running: boolean) => void;
   onComplete: () => void | Promise<void>;
   showToast: (msg: string, err?: boolean) => void;
@@ -115,6 +117,11 @@ export function KanbanMembersBackfillButton({
   const runBackfill = useCallback(async () => {
     if (running || disabled) return;
     abortRef.current = false;
+    try {
+      await onBeforeRefresh?.();
+    } catch {
+      /* снимок мог не записаться — сервер всё равно ищет по наряду / Kaiten id */
+    }
     onRunningChange?.(true);
     setRunning(true);
     setDone(0);
@@ -188,6 +195,7 @@ export function KanbanMembersBackfillButton({
     formatProgressLine,
     linkedOrderCount,
     refreshTargets,
+    onBeforeRefresh,
     onComplete,
     onRunningChange,
     running,

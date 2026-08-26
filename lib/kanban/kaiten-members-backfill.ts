@@ -14,11 +14,10 @@ import {
   type KanbanKaitenRefreshTarget,
 } from "@/lib/kanban/kanban-linked-order-ids";
 import {
-  findCardLocationByCardId,
+  findKanbanCardsForKaitenRefresh,
   KANBAN_CHAT_STATE_KEY,
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
-import type { KanbanCard } from "@/lib/kanban/types";
 import {
   kaitenGetCard,
   kaitenListBoardColumns,
@@ -211,6 +210,7 @@ export async function runKanbanMembersBackfillBatch(
   const directory = await loadKaitenUsersDirectory(db, tenantId, auth);
   const burst = { burst: true as const };
   const pendingLaneByOrderId = new Map<string, KaitenTrackLane>();
+  const appliedKaitenIds = new Set<number>();
 
   for (const target of work) {
     lastOrderId = target.cardId;
@@ -224,25 +224,12 @@ export async function runKanbanMembersBackfillBatch(
           ? order.kaitenCardId
           : null;
 
-    const colLoc = findCardLocationByCardId(state, target.cardId);
-    let card: KanbanCard | null = null;
-    if (colLoc) {
-      card =
-        state.boards[colLoc.boardIndex]!.columns[colLoc.columnIndex]!.cards[
-          colLoc.cardIndex
-        ] ?? null;
-    } else {
-      for (const board of state.boards) {
-        const stopped = (board.stoppedCards ?? []).find(
-          (row) => String(row.card?.id || "").trim() === target.cardId,
-        );
-        if (stopped?.card) {
-          card = stopped.card;
-          break;
-        }
-      }
-    }
-    if (!card) {
+    const hits = findKanbanCardsForKaitenRefresh(state, {
+      cardId: target.cardId,
+      linkedOrderId: target.linkedOrderId,
+      kaitenCardId: kaitenId,
+    });
+    if (hits.length === 0) {
       noCard += 1;
       skipped += 1;
       processed += 1;
@@ -253,6 +240,12 @@ export async function runKanbanMembersBackfillBatch(
       processed += 1;
       continue;
     }
+    if (appliedKaitenIds.has(kaitenId)) {
+      skipped += 1;
+      processed += 1;
+      continue;
+    }
+    appliedKaitenIds.add(kaitenId);
 
     let head = await kaitenGetCard(auth, kaitenId, burst);
     let rateRetries = 0;
@@ -313,16 +306,31 @@ export async function runKanbanMembersBackfillBatch(
     if (mapped.unmappedLabels.length > 0) {
       unmapped += 1;
     }
-    const membersChanged = applyInboundMembersToKanbanCard(card, {
-      assignees: mapped.assignees,
-      participants: mapped.participants,
-      fingerprint,
-      unmappedLabels: mapped.unmappedLabels,
-      forceApply: true,
-    });
-    const headChanged = head.card
-      ? applyKaitenHeadFieldsToKanbanCard(card, head.card)
-      : false;
+    let membersChanged = false;
+    let headChanged = false;
+    for (const hit of hits) {
+      const card = hit.card;
+      if (card.kaitenCardId == null) {
+        card.kaitenCardId = kaitenId;
+      }
+      if (
+        applyInboundMembersToKanbanCard(card, {
+          assignees: mapped.assignees,
+          participants: mapped.participants,
+          fingerprint,
+          unmappedLabels: mapped.unmappedLabels,
+          forceApply: true,
+        })
+      ) {
+        membersChanged = true;
+      }
+      if (
+        head.card &&
+        applyKaitenHeadFieldsToKanbanCard(card, head.card)
+      ) {
+        headChanged = true;
+      }
+    }
 
     let positionChanged = false;
     if (head.card) {
@@ -363,15 +371,16 @@ export async function runKanbanMembersBackfillBatch(
                   order?.kaitenTrackLane,
                 )
               : null;
-          if (colLoc) {
+          const colHit = hits.find((h) => h.colLoc);
+          if (colHit) {
             positionChanged = applyKaitenPositionToKanbanState(
               state,
-              target.linkedOrderId ?? "",
+              String(colHit.card.linkedOrderId || target.linkedOrderId || ""),
               {
                 columnTitle,
                 sortOrder,
                 trackLane: inboundLane,
-                cardId: target.cardId,
+                cardId: colHit.card.id,
               },
             );
           }
