@@ -30,6 +30,7 @@ type OrderLiteForComposition = {
   urgentCoefficient?: number | null;
   compositionDiscountPercent?: number;
   financeCalculated?: boolean;
+  constructionsFingerprint?: string;
   constructions?: Parameters<typeof constructionsToDraft>[0];
 };
 
@@ -56,6 +57,9 @@ export function CorrectionOrderCompositionPanel({
   const [draftLines, setDraftLines] = useState<DraftConstructionLine[]>([]);
   const [compositionDiscountPercent, setCompositionDiscountPercent] =
     useState(0);
+  const [loadedDiscountPercent, setLoadedDiscountPercent] = useState(0);
+  const [compositionDirty, setCompositionDirty] = useState(false);
+  const [constructionsIfMatch, setConstructionsIfMatch] = useState("");
   const [financeCalculated, setFinanceCalculated] = useState(false);
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(null);
@@ -79,10 +83,17 @@ export function CorrectionOrderCompositionPanel({
         if (cancelled) return;
         setClinicId(data.clinicId ?? null);
         setDoctorId(data.doctorId ?? null);
-        setCompositionDiscountPercent(
+        const disc =
           typeof data.compositionDiscountPercent === "number"
             ? data.compositionDiscountPercent
-            : 0,
+            : 0;
+        setCompositionDiscountPercent(disc);
+        setLoadedDiscountPercent(disc);
+        setCompositionDirty(false);
+        setConstructionsIfMatch(
+          typeof data.constructionsFingerprint === "string"
+            ? data.constructionsFingerprint
+            : "",
         );
         setFinanceCalculated(data.financeCalculated === true);
         setDraftLines(
@@ -146,29 +157,47 @@ export function CorrectionOrderCompositionPanel({
   }, [draftLines, compositionDiscountPercent, urgentPriceMult]);
 
   const saveComposition = useCallback(async (): Promise<boolean> => {
-    const constructions = draftToConstructionPayload(draftLines);
+    const discountChanged = compositionDiscountPercent !== loadedDiscountPercent;
+    if (!compositionDirty && !discountChanged) {
+      return true;
+    }
+    const body: Record<string, unknown> = {
+      compositionDiscountPercent,
+    };
+    if (compositionDirty) {
+      if (!constructionsIfMatch) {
+        onError("Обновите страницу и снова откройте корректировку");
+        return false;
+      }
+      body.constructions = draftToConstructionPayload(draftLines);
+      body.constructionsIfMatch = constructionsIfMatch;
+    }
     const patchRes = await fetch(`/api/orders/${orderId}`, {
       method: "PATCH",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        constructions,
-        compositionDiscountPercent,
-        financeCalculated,
-      }),
+      body: JSON.stringify(body),
     });
     const patchJ = (await patchRes.json().catch(() => ({}))) as {
       error?: string;
+      constructionsFingerprint?: string;
     };
     if (!patchRes.ok) {
       onError(patchJ.error ?? "Не удалось сохранить состав");
       return false;
     }
+    if (typeof patchJ.constructionsFingerprint === "string") {
+      setConstructionsIfMatch(patchJ.constructionsFingerprint);
+    }
+    setLoadedDiscountPercent(compositionDiscountPercent);
+    setCompositionDirty(false);
     return true;
   }, [
+    compositionDirty,
     compositionDiscountPercent,
+    constructionsIfMatch,
     draftLines,
-    financeCalculated,
+    loadedDiscountPercent,
     onError,
     orderId,
   ]);
@@ -274,7 +303,14 @@ export function CorrectionOrderCompositionPanel({
       >
         <OrderConstructionsEditor
           value={draftLines}
-          onChange={canEdit && !busy ? setDraftLines : () => {}}
+          onChange={
+            canEdit && !busy
+              ? (next) => {
+                  setCompositionDirty(true);
+                  setDraftLines(next);
+                }
+              : () => {}
+          }
           clinicId={clinicId}
           doctorId={doctorId}
         />

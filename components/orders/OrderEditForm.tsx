@@ -212,7 +212,7 @@ function formatDocumentFlowCompositionAllText(
   return lines.map(formatDocumentFlowCompositionLineText).join("\n");
 }
 
-/** Состав наряда на вкладке «Документооборот»: свёрнут; длинный список скроллится в своей колонке. */
+/** Состав наряда на вкладке «Документооборот»: на десктопе на ширину 2–3 колонок, строки переносятся. */
 function DocumentFlowCompositionSpoiler({
   lines,
   onCopy,
@@ -222,7 +222,7 @@ function DocumentFlowCompositionSpoiler({
 }) {
   const allText = formatDocumentFlowCompositionAllText(lines);
   return (
-    <details className="group w-fit max-w-full rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]">
+    <details className="group w-full min-w-0 max-w-none rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
         <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Состав заказа
@@ -250,7 +250,7 @@ function DocumentFlowCompositionSpoiler({
           </span>
         </span>
       </summary>
-      <div className="max-h-40 overflow-y-auto border-t border-[var(--card-border)] px-2.5 py-2">
+      <div className="max-h-56 overflow-y-auto border-t border-[var(--card-border)] px-2.5 py-2">
         {lines.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">Нет позиций в составе</p>
         ) : (
@@ -260,13 +260,13 @@ function DocumentFlowCompositionSpoiler({
               return (
                 <li
                   key={`${line.title}-${idx}`}
-                  className="flex w-fit max-w-full flex-nowrap items-center gap-2 overflow-x-auto"
+                  className="flex w-full min-w-0 flex-wrap items-center gap-2"
                 >
                   <button
                     type="button"
                     title="Нажмите — скопировать в буфер обмена"
                     onClick={() => onCopy(line.title)}
-                    className="w-fit max-w-[18rem] shrink-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:max-w-[22rem] sm:text-sm"
+                    className="min-w-0 max-w-full break-words rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
                   >
                     {line.title}
                   </button>
@@ -766,6 +766,8 @@ export type OrderEditInitial = {
   hasMri: boolean;
   hasPhoto: boolean;
   additionalSourceNotes: string | null;
+  /** SHA-256 состава на момент загрузки — защита от устаревшего PATCH. */
+  constructionsFingerprint: string;
   constructions: Array<{
     category: string;
     constructionTypeId: string | null;
@@ -1329,6 +1331,72 @@ export function OrderEditForm({
 
   const [draftLines, setDraftLines] = useState<DraftConstructionLine[]>(() =>
     constructionsToDraft(initial.constructions),
+  );
+  const constructionsIfMatchRef = useRef(initial.constructionsFingerprint);
+  const constructionsPersistChainRef = useRef(Promise.resolve());
+  const draftLinesRef = useRef(draftLines);
+  draftLinesRef.current = draftLines;
+  const [constructionsSaving, setConstructionsSaving] = useState(false);
+
+  useEffect(() => {
+    constructionsIfMatchRef.current = initial.constructionsFingerprint;
+    setDraftLines(constructionsToDraft(initial.constructions));
+  }, [initial.id]);
+
+  const persistConstructionsNow = useCallback(
+    async (lines: DraftConstructionLine[]): Promise<boolean> => {
+      if (!canEditOrder || previewMode) return false;
+      if (initial.id.startsWith("virtual-ai-")) return false;
+      const constructions = draftToConstructionPayload(lines);
+      const res = await fetch(`/api/orders/${initial.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          constructions,
+          constructionsIfMatch: constructionsIfMatchRef.current,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        constructionsFingerprint?: string;
+      };
+      if (!res.ok) {
+        const msg =
+          data.error ?? "Не удалось сохранить состав (удаление плитки)";
+        setError(msg);
+        toast.error(msg);
+        return false;
+      }
+      if (typeof data.constructionsFingerprint === "string") {
+        constructionsIfMatchRef.current = data.constructionsFingerprint;
+      }
+      return true;
+    },
+    [canEditOrder, initial.id, previewMode],
+  );
+
+  const onDraftLinesChange = useCallback(
+    (next: DraftConstructionLine[]) => {
+      const prev = draftLinesRef.current;
+      setDraftLines(next);
+      if (next.length >= prev.length || !canEditOrder || previewMode) return;
+      constructionsPersistChainRef.current =
+        constructionsPersistChainRef.current
+          .then(async () => {
+            setConstructionsSaving(true);
+            const ok = await persistConstructionsNow(next);
+            if (!ok) setDraftLines(prev);
+          })
+          .catch(() => {
+            setDraftLines(prev);
+            toast.error("Не удалось сохранить удаление плитки");
+          })
+          .finally(() => {
+            setConstructionsSaving(false);
+          });
+    },
+    [canEditOrder, persistConstructionsNow, previewMode],
   );
   const [labDueAutoByPrice, setLabDueAutoByPrice] = useState(
     () => !Boolean(initial.dueDate),
@@ -2458,6 +2526,7 @@ export function OrderEditForm({
           hasPhoto,
           additionalSourceNotes: additionalSourceNotes.trim() || null,
           constructions,
+          constructionsIfMatch: constructionsIfMatchRef.current,
           compositionDiscountPercent,
           financeCalculated,
           prosthetics,
@@ -2469,12 +2538,16 @@ export function OrderEditForm({
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         kaitenTitleSyncError?: string | null;
+        constructionsFingerprint?: string;
       };
       if (!res.ok) {
         const msg = data.error ?? "Не удалось сохранить";
         setError(msg);
         toast.error(msg);
         return;
+      }
+      if (typeof data.constructionsFingerprint === "string") {
+        constructionsIfMatchRef.current = data.constructionsFingerprint;
       }
       if (data.kaitenTitleSyncError) {
         toast.warning("Наряд сохранён", {
@@ -3507,6 +3580,11 @@ export function OrderEditForm({
       <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
         <h2 className="text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
           Состав заказа
+          {constructionsSaving ? (
+            <span className="ml-2 font-normal normal-case tracking-normal text-[var(--text-muted)]">
+              сохраняю…
+            </span>
+          ) : null}
         </h2>
         <div className="flex min-w-0 flex-wrap items-baseline justify-end gap-x-3 gap-y-1">
           <label className="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)] sm:text-xs">
@@ -3593,7 +3671,7 @@ export function OrderEditForm({
           ) : null}
           <OrderConstructionsEditor
             value={draftLines}
-            onChange={setDraftLines}
+            onChange={onDraftLinesChange}
             clinicId={clinicId || null}
             doctorId={doctorId || null}
           />
@@ -3753,9 +3831,8 @@ export function OrderEditForm({
             disabled={!canEditOrder}
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
-          <div className="mt-3 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(15rem,17.5rem)_minmax(0,1fr)_minmax(0,1fr)] crm-t3:gap-5">
-            <div className="flex min-w-0 w-full max-w-md flex-col gap-3 crm-t3:max-w-none">
-              <div className="flex w-full flex-col gap-1.5 [&_button]:w-full">
+          <div className="mt-3 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)_minmax(0,1fr)] crm-t3:gap-5">
+            <div className="flex min-w-0 w-full max-w-md flex-col gap-1.5 crm-t3:max-w-none [&_button]:w-full">
                 <button
                   type="button"
                   onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
@@ -3774,13 +3851,14 @@ export function OrderEditForm({
                   value={clientInnForCopy}
                   onCopy={(t) => void copyInvoiceBlockText(t)}
                 />
-              </div>
-              <div className="w-full min-w-0 [&_details]:w-full [&_details]:max-w-none">
-                <DocumentFlowCompositionSpoiler
-                  lines={documentFlowCompositionRows}
-                  onCopy={(t) => void copyInvoiceBlockText(t)}
-                />
-              </div>
+            </div>
+            <div className="min-w-0 w-full crm-t2:col-span-1 crm-t3:col-span-2">
+              <DocumentFlowCompositionSpoiler
+                lines={documentFlowCompositionRows}
+                onCopy={(t) => void copyInvoiceBlockText(t)}
+              />
+            </div>
+            <div className="flex min-w-0 w-full max-w-md flex-col gap-3 crm-t3:max-w-none">
               <div className="flex flex-col gap-2">
                 <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                   ЭДО и бумаги

@@ -22,6 +22,7 @@ import {
 import { ensureDoctorClinicLink } from "@/lib/ensure-doctor-clinic-link";
 import { ensureDoctorClinicLinkAfterOrderSave } from "@/lib/ensure-doctor-clinic-link-from-order";
 import { buildConstructionCreatesFromInput } from "@/lib/order-construction-input";
+import { orderConstructionsFingerprint } from "@/lib/order-constructions-fingerprint";
 import { applyOrderListAdminMemo } from "@/lib/order-list-admin-memo.server";
 import { isLabWorkStatus, LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
 import { parseUrgentSelection } from "@/lib/order-urgency";
@@ -203,6 +204,8 @@ type PatchBody = {
   courierPickupId?: string | null;
   courierDeliveryId?: string | null;
   constructions?: unknown;
+  /** Отпечаток состава на момент загрузки; обязателен вместе с constructions. */
+  constructionsIfMatch?: string;
   prosthetics?: unknown;
   /** Только демо-сессия: внутренний канбан */
   demoKanbanColumn?: string | null;
@@ -255,6 +258,16 @@ type HydrateConstructionLine = {
   constructionTypeId: string | null;
   materialId: string | null;
   priceListItemId: string | null;
+  category?: string;
+  shade?: string | null;
+  quantity?: number;
+  unitPrice?: number | null;
+  lineDiscountPercent?: number | null;
+  teethFdi?: unknown;
+  bridgeFromFdi?: string | null;
+  bridgeToFdi?: string | null;
+  arch?: string | null;
+  sortOrder?: number;
 };
 
 type OrderForHydration = {
@@ -342,6 +355,7 @@ async function hydrateOrderResponse<T extends OrderForHydration>(
   const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
   return {
     ...order,
+    constructionsFingerprint: orderConstructionsFingerprint(order.constructions),
     doctor: doctor ?? { id: order.doctorId, fullName: "—" },
     clinic: clinic,
     courier: courier,
@@ -1102,6 +1116,36 @@ export async function PATCH(
 
   let constructionsUpdate: Prisma.OrderUpdateInput["constructions"] | undefined;
   if (body.constructions !== undefined) {
+    const ifMatch =
+      typeof body.constructionsIfMatch === "string"
+        ? body.constructionsIfMatch.trim()
+        : "";
+    if (!ifMatch) {
+      return NextResponse.json(
+        {
+          error:
+            "Состав нельзя сохранить без версии. Обновите страницу и повторите.",
+          code: "CONSTRUCTIONS_IF_MATCH_REQUIRED",
+        },
+        { status: 400 },
+      );
+    }
+    const currentLines = await ordersPrisma.orderConstruction.findMany({
+      where: { orderId },
+      orderBy: { sortOrder: "asc" },
+    });
+    const currentFp = orderConstructionsFingerprint(currentLines);
+    if (currentFp !== ifMatch) {
+      return NextResponse.json(
+        {
+          error:
+            "Состав уже изменили в другой вкладке или окне. Обновите страницу, иначе старые плитки снова появятся.",
+          code: "CONSTRUCTIONS_STALE",
+          constructionsFingerprint: currentFp,
+        },
+        { status: 409 },
+      );
+    }
     const built = await buildConstructionCreatesFromInput(
       pricingPrisma,
       body.constructions,

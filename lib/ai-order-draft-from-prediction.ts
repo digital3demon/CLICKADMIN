@@ -5,6 +5,7 @@ import { ORDER_PAYMENT_NOT_PAID } from "@/lib/order-clinic-client-fields";
 import { LAB_WORK_STATUS_DEFAULT } from "@/lib/lab-work-status";
 import { URGENT_NO_COEF, URGENT_UNSET } from "@/lib/order-urgency";
 import { emptyProsthetics } from "@/lib/order-prosthetics";
+import { orderConstructionsFingerprint } from "@/lib/order-constructions-fingerprint";
 import { compositionLinesToOrderConstructions } from "@/lib/llm/resolve-ai-composition-lines";
 import { fetchOrderSourceEmails } from "@/lib/mail/order-source-emails";
 import { resolveClientIdsFromOrderSourceEmail } from "@/lib/client-order-source-emails";
@@ -141,6 +142,7 @@ export function buildVirtualOrderEditInitialFromPrediction(
     hasMri: prediction.hasMri === true,
     hasPhoto: prediction.hasPhoto === true,
     additionalSourceNotes: null,
+    constructionsFingerprint: orderConstructionsFingerprint(constructions),
     constructions,
     compositionDiscountPercent: 0,
     depositAppliedRub: null,

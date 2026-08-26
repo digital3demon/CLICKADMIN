@@ -19,6 +19,7 @@ import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 import { fetchMergedOrderChatCorrections } from "@/lib/order-chat-corrections-read";
 import { depositPartyForOrder } from "@/lib/deposit-ledger";
+import { orderConstructionsFingerprint } from "@/lib/order-constructions-fingerprint";
 import { fetchMergedOrderProstheticsRequests } from "@/lib/order-prosthetics-requests-read";
 
 export type FetchOrderEditInitialResult = {
@@ -255,6 +256,7 @@ export async function fetchOrderEditInitial(
         ? (doctor?.depositBalanceRub ?? 0)
         : (clinic?.depositBalanceRub ?? 0),
     financeCalculated: order.financeCalculated === true,
+    constructionsFingerprint: orderConstructionsFingerprint(order.constructions),
     constructions: order.constructions.map((c) => ({
       category: c.category,
       constructionTypeId: c.constructionTypeId,
