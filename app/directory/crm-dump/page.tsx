@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
+import { CrmBackupClient } from "@/components/directory/CrmBackupClient";
 import { CrmDumpClient } from "@/components/directory/CrmDumpClient";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 
@@ -14,11 +15,14 @@ export default async function DirectoryCrmDumpPage() {
 
   return (
     <ModuleFrame
-      title="Дамп CRM"
-      description="Выгрузка среза данных за месяц — сразу скачивание zip. В хранилище не пишется; для демо-сайта обезличивается отдельно."
+      title="Бекап и восстановление CRM"
+      description="Полный бекап всей CRM (база и файлы) в хранилище — каждый день в 00:00 МСК перезаписывает предыдущий. Срез за месяц — отдельно, только скачивание."
       descriptionClassName="max-w-3xl"
     >
-      <CrmDumpClient />
+      <div className="space-y-8">
+        <CrmBackupClient />
+        <CrmDumpClient />
+      </div>
     </ModuleFrame>
   );
 }

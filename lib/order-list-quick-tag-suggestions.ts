@@ -218,7 +218,7 @@ export function filterQuickOrderTagSuggestions(
   ) {
     out.push({
       id: "wait-payment-tag",
-      title: "ждем оплату",
+      title: "ЖДЕМ ОПЛАТУ",
       subtitle: "Отметка + до 20 символов, по желанию блокировка карточки",
       waitPaymentFlow: true,
     });

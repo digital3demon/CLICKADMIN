@@ -273,6 +273,17 @@ export async function middleware(req: NextRequest) {
     ) {
       return securityHeaders(NextResponse.next());
     }
+    const crmBackupSecret = process.env.INTERNAL_CRM_BACKUP_SECRET?.trim();
+    const crmBackupHeader = req.headers
+      .get("x-internal-crm-backup-secret")
+      ?.trim();
+    if (
+      pathname === "/api/cron/crm-backup" &&
+      crmBackupSecret &&
+      crmBackupHeader === crmBackupSecret
+    ) {
+      return securityHeaders(NextResponse.next());
+    }
     const out = NextResponse.json({ error: "Forbidden" }, { status: 403 });
     return securityHeaders(out);
   }
@@ -653,7 +664,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/directory/logs") ||
     pathname.startsWith("/api/directory/logs") ||
     pathname.startsWith("/directory/crm-dump") ||
-    pathname.startsWith("/api/directory/crm-dump")
+    pathname.startsWith("/api/directory/crm-dump") ||
+    pathname.startsWith("/api/directory/crm-backup")
   ) {
     if (actualRole !== "OWNER") {
       if (pathname.startsWith("/api/")) {

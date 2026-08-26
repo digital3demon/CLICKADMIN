@@ -65,6 +65,23 @@ describe("mergeInboundKaitenMirrorFieldsFromStored", () => {
     expect(incoming.boards[0]!.columns[0]!.cards[0]!.assignees).toEqual(["local"]);
   });
 
+  it("не затирает локальных людей пустым cron", () => {
+    const incoming = stateWithCard({
+      linkedOrderId: "ord1",
+      assignees: ["local"],
+      kaitenMembersFingerprint: "1:2",
+    });
+    const stored = stateWithCard({
+      linkedOrderId: "ord1",
+      assignees: [],
+      participants: [],
+      kaitenMembersFingerprint: "empty",
+      updatedAt: "2026-08-21T12:00:00.000Z",
+    });
+    expect(mergeInboundKaitenMirrorFieldsFromStored(incoming, stored)).toBe(false);
+    expect(incoming.boards[0]!.columns[0]!.cards[0]!.assignees).toEqual(["local"]);
+  });
+
   it("берёт более свежий срок этапа со stored", () => {
     const incoming = stateWithCard({
       linkedOrderId: "ord1",
@@ -78,5 +95,20 @@ describe("mergeInboundKaitenMirrorFieldsFromStored", () => {
     });
     expect(mergeInboundKaitenMirrorFieldsFromStored(incoming, stored)).toBe(true);
     expect(incoming.boards[0]!.columns[0]!.cards[0]!.stageDueDate).toBe("2026-08-20");
+  });
+
+  it("не снимает локальный срок пустым более свежим stored", () => {
+    const incoming = stateWithCard({
+      linkedOrderId: "ord1",
+      stageDueDate: "2026-08-01",
+      updatedAt: "2026-08-01T10:00:00.000Z",
+    });
+    const stored = stateWithCard({
+      linkedOrderId: "ord1",
+      stageDueDate: "",
+      updatedAt: "2026-08-21T12:00:00.000Z",
+    });
+    mergeInboundKaitenMirrorFieldsFromStored(incoming, stored);
+    expect(incoming.boards[0]!.columns[0]!.cards[0]!.stageDueDate).toBe("2026-08-01");
   });
 });

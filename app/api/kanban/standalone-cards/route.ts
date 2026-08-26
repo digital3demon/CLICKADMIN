@@ -109,21 +109,30 @@ export async function PUT(req: Request) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.kanbanStandaloneCard.deleteMany({ where: { tenantId } });
-      if (normalized.length === 0) return;
       const now = new Date();
-      await tx.kanbanStandaloneCard.createMany({
-        data: normalized.map((r) => ({
-          id: r.id,
-          tenantId,
-          boardId: r.boardId,
-          columnId: r.columnId,
-          sortIndex: r.sortIndex,
-          payload: r.payload as object,
-          updatedAt: now,
-          updatedByUserId: uid,
-        })),
-      });
+      for (const r of normalized) {
+        await tx.kanbanStandaloneCard.upsert({
+          where: { id: r.id },
+          create: {
+            id: r.id,
+            tenantId,
+            boardId: r.boardId,
+            columnId: r.columnId,
+            sortIndex: r.sortIndex,
+            payload: r.payload as object,
+            updatedAt: now,
+            updatedByUserId: uid,
+          },
+          update: {
+            boardId: r.boardId,
+            columnId: r.columnId,
+            sortIndex: r.sortIndex,
+            payload: r.payload as object,
+            updatedAt: now,
+            updatedByUserId: uid,
+          },
+        });
+      }
     });
   } catch (e) {
     console.error("[kanban/standalone-cards PUT]", e);

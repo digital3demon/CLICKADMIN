@@ -22,7 +22,6 @@ const ACTION_TYPES: { id: KanbanAutomationAction["type"]; label: string }[] = [
   { id: "move_to_column", label: "Перенести в колонку" },
   { id: "add_assignee", label: "Добавить ответственного" },
   { id: "set_due_in_days", label: "Срок через N дней" },
-  { id: "clear_due", label: "Сбросить срок" },
   { id: "add_comment", label: "Комментарий в чат" },
   { id: "set_card_type", label: "Установить тип карточки" },
   { id: "block", label: "Заблокировать (причина)" },
@@ -71,7 +70,6 @@ function KanbanActionEditor({
                 userId: pickerUsers[0]?.id ?? "",
               });
             else if (t === "set_due_in_days") onChange({ type: "set_due_in_days", days: 7 });
-            else if (t === "clear_due") onChange({ type: "clear_due" });
             else if (t === "add_comment") onChange({ type: "add_comment", text: "" });
             else if (t === "set_card_type") onChange({ type: "set_card_type", cardTypeId: types[0]?.id ?? "" });
             else if (t === "block") onChange({ type: "block", reason: "" });

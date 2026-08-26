@@ -4,6 +4,7 @@ import type { UserRole } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
+import { ChatMentionSuggestList } from "@/components/chat/ChatMentionSuggestList";
 import { isKanbanAdminGroupRole } from "@/lib/kanban-admin-mention";
 import type { KaitenTrackLane } from "@prisma/client";
 import { kaitenBlockStateFromCard } from "@/lib/kaiten-card-block";
@@ -765,7 +766,7 @@ export function OrderKaitenTab({
     const base = q
       ? mentionOptions.filter((x) => x.searchText.includes(q))
       : mentionOptions;
-    return base.slice(0, 8);
+    return base;
   }, [mentionDraft, mentionOptions]);
   const applyMention = useCallback(
     (option: MentionOption) => {
@@ -1718,30 +1719,12 @@ export function OrderKaitenTab({
         ) : null}
 
         <div className="relative mt-2">
-          {mentionFiltered.length > 0 ? (
-            <div className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-10 max-h-56 overflow-y-auto rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] p-1 shadow-xl">
-              {mentionFiltered.map((option, idx) => (
-                <button
-                  key={`${option.id}-${option.insertText}`}
-                  type="button"
-                  className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.78rem] ${
-                    idx === mentionIndex
-                      ? "bg-[var(--surface-subtle)] text-[var(--sidebar-blue)]"
-                      : "text-[var(--app-text)] hover:bg-[var(--surface-subtle)]"
-                  }`}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    applyMention(option);
-                  }}
-                >
-                  <span className="truncate">{option.label}</span>
-                  <span className="ml-3 shrink-0 text-[0.72rem] text-[var(--text-muted)]">
-                    {option.insertText}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <ChatMentionSuggestList
+            items={mentionFiltered}
+            activeIndex={mentionIndex}
+            onPick={applyMention}
+            tone="crm"
+          />
           <textarea
             ref={commentTextareaRef}
             className="min-h-[88px] w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"

@@ -31,19 +31,20 @@ export function resolveFinanceOfficeRowTintKind(opts: {
   return null;
 }
 
-const IDLE = "border-b border-[var(--card-border)]";
+const ROW_RULE =
+  "border-b-2 border-[var(--card-border)] [&>td]:border-b-2 [&>td]:border-[var(--card-border)]";
 
 /** Фон строки: сплошной цвет пилюли, без градиента (скролл списка). */
 export function financeOfficeRowTintClass(
   kind: FinanceOfficeRowTintKind,
 ): string {
   if (kind === "calculated") {
-    return "finance-office-row-tint-calc border-b border-[var(--card-border)]";
+    return `finance-office-row-tint-calc ${ROW_RULE}`;
   }
   if (kind === "invoiced") {
-    return "finance-office-row-tint-inv border-b border-[var(--card-border)]";
+    return `finance-office-row-tint-inv ${ROW_RULE}`;
   }
-  return `${IDLE} transition-colors hover:bg-[var(--table-row-hover)]`;
+  return `${ROW_RULE} transition-colors hover:bg-[var(--table-row-hover)]`;
 }
 
 export function financeOfficeMobileCardTintClass(

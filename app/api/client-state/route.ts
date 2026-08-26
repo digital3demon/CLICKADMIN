@@ -25,6 +25,14 @@ function parseKey(raw: unknown): string | null {
   return v;
 }
 
+function isProtectedTenantKanbanStateKey(key: string): boolean {
+  return (
+    key === KANBAN_CHAT_STATE_KEY ||
+    key === "kanbanAppStateV3Demo" ||
+    key.startsWith("kanbanCommentsV1:")
+  );
+}
+
 export async function GET(req: Request) {
   const session = await getSessionFromCookies();
   if (!session?.sub) {
@@ -122,6 +130,12 @@ export async function PUT(req: Request) {
     const prisma = await getPrisma();
     const persist = async () => {
       if (body.value === null) {
+        if (scope === "tenant" && isProtectedTenantKanbanStateKey(key)) {
+          return NextResponse.json(
+            { error: "Нельзя удалить состояние канбана" },
+            { status: 400 },
+          );
+        }
         if (scope === "user") {
           await prisma.userClientState.deleteMany({
             where: { userId: session.sub, key },

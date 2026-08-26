@@ -107,7 +107,11 @@ export function KanbanMembersBackfillButton({
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "batch", afterOrderId }),
+          body: JSON.stringify({
+          action: "batch",
+          afterOrderId,
+          limit: 24,
+        }),
         });
         const batch = (await batchRes.json()) as BackfillBatchResponse;
         if (!batchRes.ok) {
@@ -189,7 +193,7 @@ export function KanbanMembersBackfillButton({
 
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   const tip =
-    "Обновить с Kaiten: колонку и порядок, сроки этапа, срочность, участников/ответственных (наряды CRM не меняет)";
+    "Обновить с Kaiten карточки на доске: колонку, сроки, срочность, участников (наряды CRM не меняет)";
 
   return (
     <div className="contents">

@@ -67,6 +67,7 @@ import {
   isKanbanAdminGroupRole,
 } from "@/lib/kanban-admin-mention";
 import { useKanbanAdminMentionTag } from "@/components/kanban/use-kanban-admin-mention-tag";
+import { ChatMentionSuggestList } from "@/components/chat/ChatMentionSuggestList";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
@@ -798,10 +799,15 @@ export function KanbanCardModal({
         onApply((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
-          fc.card.assignees = [...head.assignees];
-          fc.card.participants = [...head.participants];
+          if (head.assignees.length > 0 || head.participants.length > 0) {
+            fc.card.assignees = [...head.assignees];
+            fc.card.participants = [...head.participants];
+          }
           fc.card.urgent = head.urgent;
-          if (!shouldSkipInboundKanbanStageDue(linkedOrderId, head.stageDue)) {
+          if (
+            head.stageDue &&
+            !shouldSkipInboundKanbanStageDue(linkedOrderId, head.stageDue)
+          ) {
             setKanbanStageDue(fc.card, head.stageDue);
           }
         });
@@ -3418,7 +3424,7 @@ function ChatPanel({
     const base = q
       ? mentionOptions.filter((x) => x.searchText.includes(q))
       : mentionOptions;
-    return base.slice(0, 8);
+    return base;
   }, [mentionDraft, mentionOptions]);
 
   const flushFiles = (list: FileList | File[]) => {
@@ -3734,30 +3740,13 @@ function ChatPanel({
             </button>
           </div>
         ) : null}
-        {mentionFiltered.length > 0 ? (
-          <div className="absolute bottom-[calc(100%+4px)] left-2 right-2 z-20 max-h-56 overflow-y-auto rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-1 shadow-xl">
-            {mentionFiltered.map((opt, idx) => (
-              <button
-                key={`${opt.id}-${opt.insertText}`}
-                type="button"
-                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.78rem] ${
-                  idx === mentionIndex
-                    ? "bg-[var(--kaiten-modal-control)] text-[var(--kaiten-accent)]"
-                    : "text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-control)]"
-                }`}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  applyMention(opt);
-                }}
-              >
-                <span className="truncate">{opt.label}</span>
-                <span className="ml-3 shrink-0 text-[0.72rem] text-[var(--kaiten-modal-muted)]">
-                  {opt.insertText}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <ChatMentionSuggestList
+          items={mentionFiltered}
+          activeIndex={mentionIndex}
+          onPick={applyMention}
+          tone="kanban"
+          className="left-2 right-2"
+        />
         <textarea
           ref={inputRef}
           rows={1}

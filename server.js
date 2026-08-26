@@ -21,6 +21,11 @@ if (!process.env.INTERNAL_KAITEN_CHAT_SYNC_SECRET) {
   process.env.INTERNAL_KAITEN_CHAT_SYNC_SECRET = crypto.randomBytes(32).toString("hex");
 }
 
+if (!process.env.INTERNAL_CRM_BACKUP_SECRET) {
+  process.env.INTERNAL_CRM_BACKUP_SECRET = crypto.randomBytes(32).toString("hex");
+}
+global.__crmDailyBackupStarted = true;
+
 function pruneOldCrmLogFiles() {
   if (
     (process.env.LOG_FILE_ENABLED ?? "true").trim().toLowerCase() === "false" ||
@@ -160,7 +165,73 @@ function startKaitenChatBackgroundSync() {
   setInterval(run, intervalMs);
 }
 
+function msUntilNextMskMidnight() {
+  const now = Date.now();
+  const ymd = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(now));
+  const todayStart = Date.parse(`${ymd}T00:00:00+03:00`);
+  if (Number.isFinite(todayStart) && now < todayStart) {
+    return Math.max(1000, todayStart - now);
+  }
+  const parts = ymd.split("-").map((x) => Number(x));
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  const next = new Date(Date.UTC(y, m - 1, d));
+  next.setUTCDate(next.getUTCDate() + 1);
+  const ny = next.getUTCFullYear();
+  const nm = String(next.getUTCMonth() + 1).padStart(2, "0");
+  const nd = String(next.getUTCDate()).padStart(2, "0");
+  const nextStart = Date.parse(`${ny}-${nm}-${nd}T00:00:00+03:00`);
+  return Math.max(1000, (Number.isFinite(nextStart) ? nextStart : now + 60_000) - now);
+}
+
+function startCrmDailyBackup() {
+  const off = String(process.env.CRM_BACKUP_DISABLE || "")
+    .trim()
+    .toLowerCase();
+  if (off === "1" || off === "true" || off === "yes") {
+    return;
+  }
+  const port = process.env.PORT || "3000";
+  const url = `http://127.0.0.1:${port}/api/cron/crm-backup`;
+  const run = () => {
+    fetch(url, {
+      headers: {
+        "x-internal-crm-backup-secret": process.env.INTERNAL_CRM_BACKUP_SECRET,
+      },
+      signal: AbortSignal.timeout(10 * 60 * 1000),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error(
+            `[cron] crm-backup failed: ${res.status} ${res.statusText}`,
+            await res.text().catch(() => ""),
+          );
+        } else {
+          console.log("[cron] crm-backup ok", await res.text().catch(() => ""));
+        }
+      })
+      .catch((err) => {
+        console.error("[cron] crm-backup network error:", err?.message);
+      })
+      .finally(() => {
+        setTimeout(run, msUntilNextMskMidnight());
+      });
+  };
+  const wait = msUntilNextMskMidnight();
+  console.log(
+    `[cron] crm-backup scheduled in ${Math.round(wait / 1000)}s (00:00 Europe/Moscow)`,
+  );
+  setTimeout(run, wait);
+}
+
 startMailBackgroundSync();
 startKaitenChatBackgroundSync();
+startCrmDailyBackup();
 
 require("./.next/standalone/server.js");

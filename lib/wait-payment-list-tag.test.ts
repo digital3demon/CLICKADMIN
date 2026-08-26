@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  WAIT_PAYMENT_LINKED_BLOCK_SENTINEL,
+  WAIT_PAYMENT_PILL_LABEL,
   WAIT_PAYMENT_TAG_BASE,
   buildWaitPaymentListTagLabel,
+  formatWaitPaymentPillLabel,
+  isWaitPaymentLinkedBlockSentinel,
   isWaitPaymentListTagLabel,
   sanitizeWaitPaymentNote,
   waitPaymentNoteFromLabel,
@@ -30,5 +34,21 @@ describe("wait-payment list tag", () => {
 
   it("выкидывает двоеточие и лишние символы из хвоста", () => {
     expect(sanitizeWaitPaymentNote("ждём: 50%!!!")).toBe("ждём 50");
+  });
+
+  it("служебный тег блока не считается пилюлей", () => {
+    expect(isWaitPaymentLinkedBlockSentinel(WAIT_PAYMENT_LINKED_BLOCK_SENTINEL)).toBe(
+      true,
+    );
+    expect(isWaitPaymentListTagLabel(WAIT_PAYMENT_LINKED_BLOCK_SENTINEL)).toBe(
+      false,
+    );
+  });
+
+  it("пилюля капсом, хвост после базы", () => {
+    expect(formatWaitPaymentPillLabel("ждем оплату")).toBe(WAIT_PAYMENT_PILL_LABEL);
+    expect(formatWaitPaymentPillLabel("ждем оплату тест")).toBe(
+      `${WAIT_PAYMENT_PILL_LABEL} тест`,
+    );
   });
 });

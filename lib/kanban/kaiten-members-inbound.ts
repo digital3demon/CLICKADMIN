@@ -16,6 +16,7 @@ import {
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
 import type { KanbanCard } from "@/lib/kanban/types";
+import { shouldKeepLocalKanbanMembers } from "@/lib/kanban/preserve-kanban-card-head";
 import {
   kaitenListCardMembers,
   KAITEN_MEMBER_TYPE_RESPONSIBLE,
@@ -152,6 +153,14 @@ function applyMembersToCard(
     arraysEqual(prevAssign, input.assignees) &&
     arraysEqual(prevPart, input.participants) &&
     card.kaitenMembersFingerprint === input.fingerprint
+  ) {
+    return false;
+  }
+  if (
+    shouldKeepLocalKanbanMembers(card, {
+      assignees: input.assignees,
+      participants: input.participants,
+    })
   ) {
     return false;
   }

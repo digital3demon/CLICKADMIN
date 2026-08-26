@@ -62,21 +62,16 @@ export const KANBAN_LEGACY_STAGE_DUE_CLEAR_VERSION = "20260707-v4" as const;
 export const KANBAN_CLEAR_ALL_STAGE_DUE_MARKER_KEY =
   "kanban-clear-all-stage-due-20260707-v4" as const;
 
-/** Полный сброс этапных сроков во всём kanbanAppStateV3. */
+/** Массовый сброс сроков отключён — не меняет карточки. */
 export function clearAllKanbanStageDueDatesInKanbanState(
   state: KanbanAppState,
 ): { state: KanbanAppState; clearedCount: number } {
-  const next = structuredClone(state);
-  let clearedCount = 0;
-  forEachKanbanCardInState(next, (card) => {
-    if (clearKanbanStageDue(card)) clearedCount += 1;
-  });
-  return { state: next, clearedCount };
+  return { state, clearedCount: 0 };
 }
 
 /**
- * Одноразово очищает legacy этапные сроки в JSON канбана (при загрузке CRM).
- * Order / Kaiten / заголовки карточек не затрагиваются.
+ * Больше не чистит сроки: только ставит маркер, чтобы старый wipe не повторился.
+ * Скрипт массовой очистки сроков отключён.
  */
 export function applyKanbanLegacyStageDueClearMigration(
   state: KanbanAppState,
@@ -84,7 +79,7 @@ export function applyKanbanLegacyStageDueClearMigration(
   if (state.legacyStageDueClearVersion === KANBAN_LEGACY_STAGE_DUE_CLEAR_VERSION) {
     return { state, changed: false, clearedCount: 0 };
   }
-  const { state: cleared, clearedCount } = clearAllKanbanStageDueDatesInKanbanState(state);
-  cleared.legacyStageDueClearVersion = KANBAN_LEGACY_STAGE_DUE_CLEAR_VERSION;
-  return { state: cleared, changed: true, clearedCount };
+  const next = structuredClone(state);
+  next.legacyStageDueClearVersion = KANBAN_LEGACY_STAGE_DUE_CLEAR_VERSION;
+  return { state: next, changed: true, clearedCount: 0 };
 }

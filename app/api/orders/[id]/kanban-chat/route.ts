@@ -52,7 +52,10 @@ import {
   canAuthorMutateKanbanChatMessage,
   isKanbanChatCommentDeleted,
 } from "@/lib/kanban/chat-message-edit";
-import { annotateKanbanCommentsRequestClosed } from "@/lib/kanban/chat-message-request-closed";
+import {
+  annotateKanbanCommentsRequestClosed,
+  kanbanChatRequestKindFromText,
+} from "@/lib/kanban/chat-message-request-closed";
 import {
   isStoredKanbanChatCommentRequestClosed,
   loadKanbanChatRequestClosedRows,
@@ -422,12 +425,17 @@ export async function GET(
    */
   const localOnly = isKanbanChatLocalOnlyRequest(new URL(req.url));
   const t0 = Date.now();
-  const [{ orderHeader, workImages: bundleImages }, storedComments, requestClosedRows] =
+  const [{ orderHeader, workImages: bundleImages }, storedComments] =
     await Promise.all([
       loadOrderChatBundle(orderId, tenantId),
       loadKanbanOrderComments(tenantId, orderId),
-      loadKanbanChatRequestClosedRows(orderId),
     ]);
+  const needClosedFlags = storedComments.some(
+    (c) => kanbanChatRequestKindFromText(c.text) != null,
+  );
+  const requestClosedRows = needClosedFlags
+    ? await loadKanbanChatRequestClosedRows(orderId)
+    : [];
   let workImages = bundleImages;
   const commentsForApi = (list: CardComment[]) =>
     annotateKanbanCommentsRequestClosed(

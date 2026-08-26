@@ -10,6 +10,11 @@ import {
   isValidCustomListTagLabel,
   listTagCustomLabel,
 } from "@/lib/order-list-tag-filter";
+import {
+  WAIT_PAYMENT_LINKED_BLOCK_SENTINEL,
+  isWaitPaymentListTagLabel,
+  waitPaymentLabelOrClauses,
+} from "@/lib/wait-payment-list-tag";
 
 function isPrismaUniqueError(e: unknown): boolean {
   return (
@@ -120,6 +125,18 @@ export async function POST(
         id.trim(),
         blockReasonRaw,
       );
+      if (kaitenBlock.kind === "done" && isWaitPaymentListTagLabel(label)) {
+        await prisma.orderCustomTag
+          .create({
+            data: {
+              orderId: id.trim(),
+              label: WAIT_PAYMENT_LINKED_BLOCK_SENTINEL,
+            },
+          })
+          .catch((e) => {
+            if (!isPrismaUniqueError(e)) throw e;
+          });
+      }
       return NextResponse.json({
         tag: row,
         filterKey: listTagCustomLabel(label),
@@ -153,8 +170,11 @@ export async function DELETE(
   }
 
   const url = new URL(req.url);
+  const family = url.searchParams.get("family")?.trim() ?? "";
   const label = url.searchParams.get("label")?.trim() ?? "";
-  if (!isValidCustomListTagLabel(label)) {
+  const removeWaitPaymentFamily =
+    family === "wait-payment" || isWaitPaymentListTagLabel(label);
+  if (!removeWaitPaymentFamily && !isValidCustomListTagLabel(label)) {
     return NextResponse.json({ error: "Некорректная метка тега" }, { status: 400 });
   }
 
@@ -172,6 +192,34 @@ export async function DELETE(
     if (!order) {
       return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
     }
+
+    if (removeWaitPaymentFamily) {
+      const linked = await prisma.orderCustomTag.findFirst({
+        where: {
+          orderId: order.id,
+          label: WAIT_PAYMENT_LINKED_BLOCK_SENTINEL,
+        },
+        select: { id: true },
+      });
+      const del = await prisma.orderCustomTag.deleteMany({
+        where: {
+          orderId: order.id,
+          OR: [
+            ...waitPaymentLabelOrClauses(),
+            { label: WAIT_PAYMENT_LINKED_BLOCK_SENTINEL },
+          ],
+        },
+      });
+      if (del.count === 0) {
+        return NextResponse.json({ error: "Тег не найден" }, { status: 404 });
+      }
+      /* Снимаем блок только если ставили его вместе с отметкой (служебный тег). */
+      const kaitenUnblock = linked
+        ? await applyKaitenUnblockForOrderIfBlocked(order.id)
+        : null;
+      return NextResponse.json({ ok: true, kaitenUnblock });
+    }
+
     const res = await prisma.orderCustomTag.deleteMany({
       where: { orderId: order.id, label: label.trim() },
     });

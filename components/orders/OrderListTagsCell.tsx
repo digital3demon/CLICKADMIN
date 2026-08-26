@@ -34,6 +34,7 @@ import {
   LIST_TAG_PAYMENT_RECON_PAID,
   LIST_TAG_PROSTHETICS,
   LIST_TAG_URGENT_NO_COEF,
+  LIST_TAG_WAIT_PAYMENT,
   listTagCustomLabel,
   listTagKaitenColumnTitle,
   listTagKaitenTrackLaneOrNull,
@@ -83,8 +84,10 @@ import {
 import { printOrderAttachmentPdf } from "@/lib/print-order-attachment-pdf";
 import {
   WAIT_PAYMENT_NOTE_MAX,
-  WAIT_PAYMENT_TAG_BASE,
+  WAIT_PAYMENT_PILL_LABEL,
   buildWaitPaymentListTagLabel,
+  formatWaitPaymentPillLabel,
+  isWaitPaymentLinkedBlockSentinel,
   isWaitPaymentListTagLabel,
 } from "@/lib/wait-payment-list-tag";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
@@ -317,6 +320,12 @@ type MissingTagAction =
       title: string;
       subtitle?: string;
       kind: "waitPaymentFlow";
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "removeWaitPayment";
     };
 
 function buildTagRows(
@@ -705,6 +714,39 @@ export function OrderListTagsCell({
     waitPaymentNote,
   ]);
 
+  const removeWaitPaymentMark = useCallback(async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const u = new URLSearchParams();
+      u.set("family", "wait-payment");
+      const res = await fetch(
+        `/api/orders/${orderId}/list-tags?${u.toString()}`,
+        { method: "DELETE" },
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        kaitenUnblock?: KaitenUnblockFromListTagResult;
+      };
+      if (!res.ok) {
+        setErr(data.error ?? "Не удалось снять отметку");
+        return;
+      }
+      const ku = data.kaitenUnblock;
+      if (ku?.kind === "error") {
+        setErr(`Отметка снята, но блок не снят: ${ku.message}`);
+        router.refresh();
+        return;
+      }
+      closeAdd();
+      router.refresh();
+    } catch {
+      setErr("Сеть или сервер недоступны");
+    } finally {
+      setBusy(false);
+    }
+  }, [closeAdd, orderId, router]);
+
   const applyQuickPatch = useCallback(
     async (
       patch: Record<string, unknown>,
@@ -864,10 +906,17 @@ export function OrderListTagsCell({
       });
     }
 
-    if (!customTags.some((t) => isWaitPaymentListTagLabel(t.label))) {
+    if (customTags.some((t) => isWaitPaymentListTagLabel(t.label))) {
+      actions.push({
+        id: "wait-payment-remove",
+        title: `Снять: ${WAIT_PAYMENT_PILL_LABEL}`,
+        subtitle: "Убрать отметку; блок карточки снимется, если ставили вместе",
+        kind: "removeWaitPayment",
+      });
+    } else {
       actions.push({
         id: "wait-payment",
-        title: WAIT_PAYMENT_TAG_BASE,
+        title: WAIT_PAYMENT_PILL_LABEL,
         subtitle: "До 20 символов и выбор: блокировать карточку или нет",
         kind: "waitPaymentFlow",
       });
@@ -1094,6 +1143,10 @@ export function OrderListTagsCell({
         openWaitPayment();
         return;
       }
+      if (action.kind === "removeWaitPayment") {
+        void removeWaitPaymentMark();
+        return;
+      }
       setNewLabel(QUICK_TAG_KAITEN_BLOCK_LABEL);
       setBlockReasonDraft("");
       setErr(null);
@@ -1104,6 +1157,7 @@ export function OrderListTagsCell({
       clinicId,
       openWaitPayment,
       paymentPartialRub,
+      removeWaitPaymentMark,
       submitAdd,
     ],
   );
@@ -1162,6 +1216,31 @@ export function OrderListTagsCell({
     const paymentStatusPillClass = isHarmony
       ? `${listPill("", paymentHarmonyTone)} min-w-0 max-w-full shrink truncate ${padTable}`
       : `min-w-0 max-w-full shrink truncate rounded-full border font-semibold shadow-sm ${paymentPillToneClass} ${padTable}`;
+
+    for (const t of customTags.filter((row) =>
+      isWaitPaymentListTagLabel(row.label),
+    )) {
+      const pill = formatWaitPaymentPillLabel(t.label);
+      const ctSlot = customTagSlot(pill);
+      items.push({
+        key: `wp-${t.id}`,
+        slot: ctSlot,
+        node: (
+          <Link
+            prefetch={false}
+            href={href(LIST_TAG_WAIT_PAYMENT)}
+            title="Показать наряды с отметкой «ЖДЕМ ОПЛАТУ»"
+            className={`min-w-0 border border-violet-200 bg-violet-50 font-semibold tracking-wide text-violet-950 shadow-sm outline-none focus-visible:outline-none dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-100 ${padTable} ${
+              ctSlot === "huge"
+                ? "w-full max-w-full whitespace-pre-wrap break-words rounded-xl px-2 py-1 text-left leading-snug"
+                : "max-w-full shrink truncate rounded-full"
+            }`}
+          >
+            {pill}
+          </Link>
+        ),
+      });
+    }
 
     if (kaitenBlocked) {
       const blockedSlot = kaitenBlockedTagSlot(kaitenBlockReason);
@@ -1457,7 +1536,11 @@ export function OrderListTagsCell({
       });
     }
 
-    for (const t of customTags) {
+    for (const t of customTags.filter(
+      (row) =>
+        !isWaitPaymentListTagLabel(row.label) &&
+        !isWaitPaymentLinkedBlockSentinel(row.label),
+    )) {
       const inner = listTagCustomLabel(t.label);
       const ctSlot = customTagSlot(t.label);
       items.push({
@@ -2197,12 +2280,12 @@ export function OrderListTagsCell({
 
       {renderTagsOverlay(
         waitPaymentOpen,
-        WAIT_PAYMENT_TAG_BASE,
+        WAIT_PAYMENT_PILL_LABEL,
         closeWaitPayment,
         (
           <>
             <p className="text-base font-semibold text-[var(--app-text)]">
-              {WAIT_PAYMENT_TAG_BASE}
+              {WAIT_PAYMENT_PILL_LABEL}
             </p>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Можно дописать пояснение — не больше {WAIT_PAYMENT_NOTE_MAX}{" "}

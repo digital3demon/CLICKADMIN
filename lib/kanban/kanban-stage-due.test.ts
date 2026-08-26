@@ -63,7 +63,7 @@ describe("kanban stage due field access", () => {
 });
 
 describe("clearAllKanbanStageDueDatesInKanbanState", () => {
-  it("очищает только карточки канбана", () => {
+  it("не стирает сроки", () => {
     const base = structuredClone(defaultAppState()) as KanbanAppState;
     const col = base.boards[0]!.columns[0]!;
     col.cards = [
@@ -72,23 +72,27 @@ describe("clearAllKanbanStageDueDatesInKanbanState", () => {
       card({ id: "c" }),
     ];
     const { state, clearedCount } = clearAllKanbanStageDueDatesInKanbanState(base);
-    expect(clearedCount).toBe(2);
-    expect(getKanbanStageDue(state.boards[0]!.columns[0]!.cards[0]!)).toBe("");
-    expect(getKanbanStageDue(state.boards[0]!.columns[0]!.cards[1]!)).toBe("");
+    expect(clearedCount).toBe(0);
+    expect(getKanbanStageDue(state.boards[0]!.columns[0]!.cards[0]!)).toBe("2026-07-30");
+    expect(getKanbanStageDue(state.boards[0]!.columns[0]!.cards[1]!)).toBe("2026-07-01");
   });
 });
 
 describe("applyKanbanLegacyStageDueClearMigration", () => {
-  it("один раз очищает и ставит флаг", () => {
+  it("только ставит флаг и не чистит сроки", () => {
     const base = structuredClone(defaultAppState()) as KanbanAppState;
     base.boards[0]!.columns[0]!.cards = [card({ dueDate: "2026-07-10" })];
     const first = applyKanbanLegacyStageDueClearMigration(base);
     expect(first.changed).toBe(true);
-    expect(first.clearedCount).toBe(1);
+    expect(first.clearedCount).toBe(0);
     expect(first.state.legacyStageDueClearVersion).toBe(KANBAN_LEGACY_STAGE_DUE_CLEAR_VERSION);
-    setKanbanStageDue(first.state.boards[0]!.columns[0]!.cards[0]!, "2026-08-01");
+    expect(getKanbanStageDue(first.state.boards[0]!.columns[0]!.cards[0]!)).toBe(
+      "2026-07-10",
+    );
     const second = applyKanbanLegacyStageDueClearMigration(first.state);
     expect(second.changed).toBe(false);
-    expect(getKanbanStageDue(second.state.boards[0]!.columns[0]!.cards[0]!)).toBe("2026-08-01");
+    expect(getKanbanStageDue(second.state.boards[0]!.columns[0]!.cards[0]!)).toBe(
+      "2026-07-10",
+    );
   });
 });

@@ -14,7 +14,7 @@ import {
 import { orderPathById } from "@/lib/order-public-ref";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { CorrectionOrderCompositionPanel } from "@/components/orders/CorrectionOrderCompositionPanel";
-import { OrderListKaitenChatModal } from "@/components/orders/OrderListKaitenChatModal";
+import { isChatComposerSendEnter } from "@/lib/kanban/chat-message-edit";
 
 function correctionStatusClass(
   status: "pending" | "accepted" | "rejected" | "arrived",
@@ -62,14 +62,10 @@ export function CorrectionsHistoryActionCard({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const saveCompositionRef = useRef<(() => Promise<boolean>) | null>(null);
-  const [chatTarget, setChatTarget] = useState<{
-    orderId: string;
-    orderNumber: string;
-    patientName: string | null;
-    doctorName: string | null;
-    replyToId: string | null;
-    replyText: string;
-  } | null>(null);
+  const [clarifyId, setClarifyId] = useState<string | null>(null);
+  const [clarifyDraft, setClarifyDraft] = useState("");
+  const [clarifySending, setClarifySending] = useState(false);
+  const [clarifyErr, setClarifyErr] = useState<string | null>(null);
 
   useEffect(() => {
     setPendingCount(initialPendingCount);
@@ -117,6 +113,9 @@ export function CorrectionsHistoryActionCard({
   useEffect(() => {
     if (!open) {
       setExpandedId(null);
+      setClarifyId(null);
+      setClarifyDraft("");
+      setClarifyErr(null);
       saveCompositionRef.current = null;
       return;
     }
@@ -141,31 +140,66 @@ export function CorrectionsHistoryActionCard({
     return () => window.clearInterval(tick);
   }, [open, loadHistory]);
 
-  const openClarifyChat = useCallback(
-    (row: CorrectionHistoryJsonRow) => {
-      const unread = row.clarifyHasUnreadReply === true;
-      if (unread) {
-        void fetch(
-          `/api/orders/${row.orderId}/chat-corrections/${row.id}/clarify-ack`,
-          { method: "POST", credentials: "include" },
-        ).then(() => {
-          setItems((prev) =>
-            prev.map((x) =>
-              x.id === row.id ? { ...x, clarifyHasUnreadReply: false } : x,
-            ),
-          );
-        });
-      }
-      setChatTarget({
-        orderId: row.orderId,
-        orderNumber: row.orderNumber,
-        patientName: row.patientName,
-        doctorName: row.doctorName,
-        replyToId: row.chatReplyToId ?? (row.kaitenCommentId != null ? String(row.kaitenCommentId) : null),
-        replyText: row.text,
+  const toggleClarify = useCallback((row: CorrectionHistoryJsonRow) => {
+    const unread = row.clarifyHasUnreadReply === true;
+    if (unread) {
+      void fetch(
+        `/api/orders/${row.orderId}/chat-corrections/${row.id}/clarify-ack`,
+        { method: "POST", credentials: "include" },
+      ).then(() => {
+        setItems((prev) =>
+          prev.map((x) =>
+            x.id === row.id ? { ...x, clarifyHasUnreadReply: false } : x,
+          ),
+        );
       });
+    }
+    setClarifyErr(null);
+    setClarifyId((cur) => {
+      if (cur === row.id) {
+        setClarifyDraft("");
+        return null;
+      }
+      setClarifyDraft("");
+      return row.id;
+    });
+  }, []);
+
+  const sendClarify = useCallback(
+    async (row: CorrectionHistoryJsonRow) => {
+      const text = clarifyDraft.trim();
+      if (!text || clarifySending) return;
+      const parentId =
+        row.chatReplyToId ??
+        (row.kaitenCommentId != null ? String(row.kaitenCommentId) : null);
+      setClarifySending(true);
+      setClarifyErr(null);
+      try {
+        const res = await fetch(`/api/orders/${row.orderId}/kanban-chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            text,
+            action: "comment",
+            parentId,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setClarifyErr(data.error ?? "Не отправлено");
+          return;
+        }
+        setClarifyId(null);
+        setClarifyDraft("");
+        void loadHistory({ background: true });
+      } catch {
+        setClarifyErr("Сеть недоступна");
+      } finally {
+        setClarifySending(false);
+      }
     },
-    [],
+    [clarifyDraft, clarifySending, loadHistory],
   );
 
   const removeRow = useCallback(
@@ -173,6 +207,7 @@ export function CorrectionsHistoryActionCard({
       setItems((prev) => prev.filter((x) => x.id !== id));
       setPendingCount((n) => Math.max(0, n - 1));
       setExpandedId((cur) => (cur === id ? null : cur));
+      setClarifyId((cur) => (cur === id ? null : cur));
       saveCompositionRef.current = null;
       router.refresh();
     },
@@ -415,12 +450,13 @@ export function CorrectionsHistoryActionCard({
                                 }`}
                                 title={
                                   row.clarifyHasUnreadReply
-                                    ? "Пришёл ответ на уточнение — открыть чат"
-                                    : "Открыть чат с ответом на заявку"
+                                    ? "Пришёл ответ на уточнение"
+                                    : "Написать уточнение в чат наряда"
                                 }
+                                aria-expanded={clarifyId === row.id}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openClarifyChat(row);
+                                  toggleClarify(row);
                                 }}
                               >
                                 Уточнить
@@ -457,6 +493,60 @@ export function CorrectionsHistoryActionCard({
                           </div>
                         </div>
 
+                        {clarifyId === row.id ? (
+                          <div
+                            className="mt-2 border-t border-[var(--card-border)] pt-2"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
+                            <label className="sr-only" htmlFor={`clarify-${row.id}`}>
+                              Текст уточнения
+                            </label>
+                            <textarea
+                              id={`clarify-${row.id}`}
+                              autoFocus
+                              rows={2}
+                              value={clarifyDraft}
+                              disabled={clarifySending}
+                              placeholder="Уточнение в чат наряда…"
+                              className="w-full resize-y rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)]"
+                              onChange={(e) => setClarifyDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (!isChatComposerSendEnter(e)) return;
+                                e.preventDefault();
+                                void sendClarify(row);
+                              }}
+                            />
+                            {clarifyErr ? (
+                              <p className="mt-1 text-xs text-red-600" role="alert">
+                                {clarifyErr}
+                              </p>
+                            ) : null}
+                            <div className="mt-1.5 flex justify-end gap-2">
+                              <button
+                                type="button"
+                                className="rounded-md px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
+                                disabled={clarifySending}
+                                onClick={() => {
+                                  setClarifyId(null);
+                                  setClarifyDraft("");
+                                  setClarifyErr(null);
+                                }}
+                              >
+                                Отмена
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-md bg-[var(--sidebar-blue)] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                                disabled={clarifySending || !clarifyDraft.trim()}
+                                onClick={() => void sendClarify(row)}
+                              >
+                                {clarifySending ? "…" : "Отправить"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
                         {expanded ? (
                           <CorrectionOrderCompositionPanel
                             orderId={row.orderId}
@@ -485,24 +575,6 @@ export function CorrectionsHistoryActionCard({
         </div>
       ) : null}
 
-      {chatTarget ? (
-        <OrderListKaitenChatModal
-          orderId={chatTarget.orderId}
-          orderNumber={chatTarget.orderNumber}
-          patientName={chatTarget.patientName}
-          doctorName={chatTarget.doctorName}
-          open
-          initialReplyToId={chatTarget.replyToId}
-          initialReplyText={chatTarget.replyText}
-          onPosted={() => {
-            void loadHistory({ background: true });
-          }}
-          onClose={() => {
-            setChatTarget(null);
-            void loadHistory({ background: true });
-          }}
-        />
-      ) : null}
     </>
   );
 }

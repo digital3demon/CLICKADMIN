@@ -6,6 +6,7 @@ import {
 } from "@/lib/kaiten-members-parse";
 import {
   KAITEN_MEMBER_TYPE_RESPONSIBLE,
+  kaitenMembersFromCardJson,
   parseKaitenCardMemberRow,
   parseKaitenSpaceUserRow,
 } from "@/lib/kaiten-rest";
@@ -124,5 +125,16 @@ describe("targetKaitenMemberType", () => {
   it("assignee set uses responsible type", () => {
     expect(targetKaitenMemberType(5, new Set([5]))).toBe(KAITEN_MEMBER_TYPE_RESPONSIBLE);
     expect(targetKaitenMemberType(5, new Set())).toBe(1);
+  });
+});
+
+describe("kaitenMembersFromCardJson", () => {
+  it("читает members с карточки, иначе null", () => {
+    expect(kaitenMembersFromCardJson({ title: "Срок от 10.02.2026" })).toBeNull();
+    const rows = kaitenMembersFromCardJson({
+      members: [{ user_id: 7, type: 2, email: "a@b.c" }],
+    });
+    expect(rows).toEqual([{ userId: 7, type: 2, email: "a@b.c" }]);
+    expect(kaitenMembersFromCardJson({ members: [] })).toEqual([]);
   });
 });

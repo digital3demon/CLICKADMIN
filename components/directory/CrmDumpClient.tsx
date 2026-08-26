@@ -55,6 +55,9 @@ export function CrmDumpClient() {
 
   return (
     <div className="space-y-4">
+      <h3 className="text-base font-semibold text-[var(--app-text)]">
+        Срез за месяц
+      </h3>
       <p className="max-w-2xl text-sm text-[var(--text-secondary)]">
         Сырой срез за календарный месяц (наряды по дате создания) плюс
         пользователи, матрица доступов, клиники, врачи, прайс, канбан-состояние и

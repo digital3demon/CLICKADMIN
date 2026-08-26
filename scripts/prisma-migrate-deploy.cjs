@@ -434,21 +434,7 @@ function runOrderMailRulesOnDeploy() {
 }
 
 function runOneTimeMailResetBeforeRules() {
-  if (String(process.env.MAIL_RESET_AUTORUN_DISABLE || "").trim() === "1") {
-    console.warn("[mail-reset] автосброс почты отключён через MAIL_RESET_AUTORUN_DISABLE=1.");
-    return;
-  }
-  const script = pathToEnsure("reset-mail-accounts.cjs");
-  if (!fs.existsSync(script)) {
-    console.warn("[mail-reset] reset-mail-accounts.cjs не найден, пропускаю.");
-    return;
-  }
-  const reset = spawnNodeScript(script, {
-    RESET_MAIL_ACCOUNTS_CONFIRM: "DELETE_ALL_MAIL",
-  }, ["--auto-once"]);
-  if (reset.status !== 0) {
-    process.exit(reset.status === null ? 1 : reset.status);
-  }
+  console.warn("[mail-reset] автосброс почты при деплое отключён (защита данных CRM).");
 }
 
 function runOneTimeMailSeenReconcile() {
@@ -468,21 +454,7 @@ function runOneTimeMailSeenReconcile() {
 }
 
 function runOneTimeKanbanClearLabMatchedDueDates() {
-  if (String(process.env.KANBAN_CLEAR_STAGE_DUE_AUTORUN_DISABLE || "").trim() === "1") {
-    console.warn(
-      "[kanban-due] очистка этапных сроков отключена через KANBAN_CLEAR_STAGE_DUE_AUTORUN_DISABLE=1.",
-    );
-    return;
-  }
-  const script = pathToEnsure("clear-kanban-card-stage-due-dates.cjs");
-  if (!fs.existsSync(script)) {
-    console.warn("[kanban-due] clear-kanban-card-stage-due-dates.cjs не найден, пропускаю.");
-    return;
-  }
-  const run = spawnNodeScript(script, {}, ["--auto-once"]);
-  if (run.status !== 0) {
-    process.exit(run.status === null ? 1 : run.status);
-  }
+  console.warn("[kanban-due] массовая очистка сроков канбана при деплое отключена (защита данных CRM).");
 }
 
 function shouldSkipOptionalDeployHooks() {

@@ -339,6 +339,12 @@ async function importSnapshot(prisma, filePath, wipeFirst) {
   if (await sqliteTableExists(prisma, SQLITE_TABLES.order)) {
     orderCount = await prisma.order.count();
   }
+  if (wipeFirst) {
+    console.error(
+      "ОТКАЗ: --wipe-first отключён. Массовое удаление клиник и врачей в рабочей CRM запрещено.",
+    );
+    process.exit(1);
+  }
   if (wipeFirst && orderCount > 0) {
     console.error(
       "\n[ОШИБКА] В базе есть наряды — полная замена контрагентов опасна (внешние ключи).\n\n" +

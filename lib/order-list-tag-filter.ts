@@ -16,6 +16,11 @@ import {
   ORDER_PAYMENT_NOT_PAID,
 } from "@/lib/order-clinic-client-fields";
 import { kaitenTrackLaneListLabel } from "@/lib/kaiten-column-title";
+import {
+  WAIT_PAYMENT_PILL_LABEL,
+  isWaitPaymentListTagLabel,
+  waitPaymentListTagWhere,
+} from "@/lib/wait-payment-list-tag";
 
 /** Доска Kaiten в списке нарядов (`Order.kaitenTrackLane`). */
 export type ListTagKaitenTrackLane =
@@ -76,6 +81,8 @@ export const LIST_TAG_EDO = "edo";
 export const LIST_TAG_NO_EDO = "no-edo";
 /** Клиника и по ЭДО, и по бумаге */
 export const LIST_TAG_EDO_PAPER = "edo-paper";
+/** Любая отметка «ждем оплату» (+ хвост до 20 символов). */
+export const LIST_TAG_WAIT_PAYMENT = "wait-payment";
 
 /** @deprecated Фильтр по статусу заказа CRM отключён в UI; ключ оставлен для старых ссылок. */
 export function listTagOrderStatus(status: OrderStatus): string {
@@ -131,6 +138,7 @@ export type ParsedListTag =
   | { kind: "edo" }
   | { kind: "noEdo" }
   | { kind: "edoPaper" }
+  | { kind: "waitPayment" }
   | { kind: "custom"; label: string };
 
 const KAITEN_COLUMN_TAG_MAX_LEN = 500;
@@ -197,6 +205,7 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t === LIST_TAG_EDO) return { kind: "edo" };
   if (t === LIST_TAG_NO_EDO) return { kind: "noEdo" };
   if (t === LIST_TAG_EDO_PAPER) return { kind: "edoPaper" };
+  if (t === LIST_TAG_WAIT_PAYMENT) return { kind: "waitPayment" };
 
   if (t.startsWith("k:")) {
     try {
@@ -228,6 +237,7 @@ export function parseListTagParam(decodedTag: string | null | undefined): Parsed
   if (t.startsWith("c:")) {
     const label = t.slice(2).trim();
     if (!isValidCustomListTagLabel(label)) return null;
+    if (isWaitPaymentListTagLabel(label)) return { kind: "waitPayment" };
     return { kind: "custom", label: label.trim() };
   }
   return null;
@@ -354,6 +364,8 @@ export function listTagWhere(parsed: ParsedListTagForSql): Prisma.OrderWhereInpu
           deletedAt: null,
         },
       };
+    case "waitPayment":
+      return waitPaymentListTagWhere();
     case "custom":
       return {
         listCustomTags: { some: { label: parsed.label } },
@@ -426,6 +438,8 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
       return "бумдоки";
     case "edoPaper":
       return "ЭДО+бумдоки";
+    case "waitPayment":
+      return WAIT_PAYMENT_PILL_LABEL;
     case "custom":
       return parsed.label;
   }

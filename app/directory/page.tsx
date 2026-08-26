@@ -139,12 +139,11 @@ export default async function DirectoryHubPage() {
             className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm transition hover:border-[var(--sidebar-blue)] hover:shadow-md"
           >
             <h2 className="text-lg font-semibold text-[var(--app-text)]">
-              Дамп CRM
+              Бекап и восстановление CRM
             </h2>
             <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Срез за месяц в zip: наряды, пользователи, доступы, клиники,
-              прайс и картинки вложений (без PDF). Только чтение; для демо
-              обезличивается отдельно.
+              Автобекап всей CRM в 00:00 МСК (база и файлы, перезапись одного
+              архива), ручной бекап и восстановление. Ниже — срез за месяц.
             </p>
           </Link>
         ) : null}

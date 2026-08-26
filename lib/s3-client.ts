@@ -3,11 +3,15 @@ import "server-only";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import type { Readable } from "node:stream";
-import { assertSafeS3ObjectKey } from "@/lib/storage-path-safe";
+import {
+  APP_S3_KEY_PREFIXES,
+  assertSafeS3ObjectKey,
+} from "@/lib/storage-path-safe";
 
 type S3EnvConfig = {
   enabled: boolean;
@@ -115,6 +119,37 @@ export async function getS3ObjectBytes(key: string): Promise<Buffer> {
     return Buffer.from(arr);
   }
   return streamToBuffer(body as Readable);
+}
+
+export async function listS3ObjectKeys(prefix: string): Promise<string[]> {
+  const p = prefix.trim();
+  if (
+    !p ||
+    p.includes("\\") ||
+    p.includes("\0") ||
+    p.includes("..") ||
+    p.startsWith("/") ||
+    !APP_S3_KEY_PREFIXES.some((allowed) => p === allowed || p.startsWith(allowed))
+  ) {
+    throw new Error("Недопустимый префикс хранилища");
+  }
+  const { client, cfg } = getClientAndConfig();
+  const keys: string[] = [];
+  let token: string | undefined;
+  do {
+    const out = await client.send(
+      new ListObjectsV2Command({
+        Bucket: cfg.bucket,
+        Prefix: p,
+        ContinuationToken: token,
+      }),
+    );
+    for (const obj of out.Contents ?? []) {
+      if (obj.Key) keys.push(obj.Key);
+    }
+    token = out.IsTruncated ? out.NextContinuationToken : undefined;
+  } while (token);
+  return keys;
 }
 
 export async function deleteS3Object(key: string): Promise<void> {

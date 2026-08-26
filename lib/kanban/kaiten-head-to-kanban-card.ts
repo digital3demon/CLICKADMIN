@@ -12,6 +12,7 @@ import {
   setKanbanStageDue,
 } from "@/lib/kanban/kanban-stage-due";
 import { shouldSkipInboundKanbanStageDue } from "@/lib/kanban/optimistic-kaiten-stage-due";
+import { shouldKeepLocalKanbanStageDue } from "@/lib/kanban/preserve-kanban-card-head";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -80,7 +81,10 @@ export function applyKaitenHeadFieldsToKanbanCard(
       /* нераспознанный формат — не затираем срок в CRM */
     } else {
       const next = ymd ?? "";
-      if (getKanbanStageDue(card as never) !== next) {
+      const prev = getKanbanStageDue(card as never);
+      if (shouldKeepLocalKanbanStageDue(prev, next)) {
+        /* пустой due_date Kaiten не снимает срок в CRM */
+      } else if (prev !== next) {
         setKanbanStageDue(card as never, next);
         changed = true;
       }
@@ -100,7 +104,9 @@ export function applyKaitenStageDueByOrderId(
     if (!oid || !Object.prototype.hasOwnProperty.call(byOrderId, oid)) return;
     const next = byOrderId[oid] ?? "";
     if (shouldSkipInboundKanbanStageDue(oid, next)) return;
-    if (getKanbanStageDue(card) !== next) {
+    const prev = getKanbanStageDue(card);
+    if (shouldKeepLocalKanbanStageDue(prev, next)) return;
+    if (prev !== next) {
       setKanbanStageDue(card, next);
       changed = true;
     }

@@ -9,6 +9,10 @@ import {
   setKanbanStageDue,
 } from "@/lib/kanban/kanban-stage-due";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+import {
+  shouldKeepLocalKanbanMembers,
+  shouldKeepLocalKanbanStageDue,
+} from "@/lib/kanban/preserve-kanban-card-head";
 
 function cardUpdatedAtMs(card: KanbanCard): number {
   const n = Date.parse(card.updatedAt || "");
@@ -16,6 +20,14 @@ function cardUpdatedAtMs(card: KanbanCard): number {
 }
 
 function copyInboundMembers(from: KanbanCard, to: KanbanCard): boolean {
+  if (
+    shouldKeepLocalKanbanMembers(to, {
+      assignees: from.assignees,
+      participants: from.participants,
+    })
+  ) {
+    return false;
+  }
   const assignees = [...(from.assignees || [])];
   const participants = [...(from.participants || [])];
   const prevAssign = to.assignees || [];
@@ -77,7 +89,8 @@ export function mergeInboundKaitenMirrorFieldsFromStored(
     const incUp = cardUpdatedAtMs(inc);
     if (stoUp > incUp) {
       const stoDue = getKanbanStageDue(sto);
-      if (stoDue !== getKanbanStageDue(inc)) {
+      const incDue = getKanbanStageDue(inc);
+      if (stoDue !== incDue && !shouldKeepLocalKanbanStageDue(incDue, stoDue)) {
         setKanbanStageDue(inc, stoDue);
         changed = true;
       }

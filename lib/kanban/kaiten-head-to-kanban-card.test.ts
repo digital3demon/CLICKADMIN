@@ -62,10 +62,10 @@ describe("applyKaitenHeadFieldsToKanbanCard", () => {
     expect(card.dueDate).toBe("");
   });
 
-  it("clears stage due when due_date is null", () => {
+  it("не сбрасывает срок при пустом due_date из Kaiten", () => {
     const card = { urgent: true, stageDueDate: "2026-08-01", dueDate: "" };
-    expect(applyKaitenHeadFieldsToKanbanCard(card, { due_date: null })).toBe(true);
-    expect(card.stageDueDate).toBe("");
+    expect(applyKaitenHeadFieldsToKanbanCard(card, { due_date: null })).toBe(false);
+    expect(card.stageDueDate).toBe("2026-08-01");
   });
 
   it("не сбрасывает срок при нераспознанном due_date", () => {
@@ -108,6 +108,12 @@ describe("applyKaitenStageDueByOrderId", () => {
     const state = stateWithCard("ord1", "");
     expect(applyKaitenStageDueByOrderId(state, { ord1: "2026-08-20" })).toBe(true);
     expect(state.boards[0]!.columns[0]!.cards[0]!.stageDueDate).toBe("2026-08-20");
+  });
+
+  it("не снимает локальный срок пустым inbound", () => {
+    const state = stateWithCard("ord-keep", "2026-08-26");
+    expect(applyKaitenStageDueByOrderId(state, { "ord-keep": null })).toBe(false);
+    expect(state.boards[0]!.columns[0]!.cards[0]!.stageDueDate).toBe("2026-08-26");
   });
 
   it("не откатывает оптимистичный срок", () => {

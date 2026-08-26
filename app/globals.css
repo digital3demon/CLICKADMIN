@@ -383,6 +383,14 @@ body {
   padding-inline: 0.25rem;
 }
 
+/*
+ * Как в списке заказов: линия между строками.
+ * border-collapse:separate — border на <tr> не рисуется, только на td.
+ */
+.finance-office-orders-table tbody tr > td {
+  border-bottom: 2px solid var(--card-border);
+}
+
 .finance-office-row-tint-calc {
   background-color: var(--fo-tint-calc);
 }

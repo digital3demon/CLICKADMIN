@@ -20,6 +20,7 @@ import {
   type KaitenLinkedOrderForKanban,
 } from "@/lib/kanban/kaiten-linked-order";
 import { applyKanbanLegacyStageDueClearMigration, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import { overlayLocalKanbanCardHeadOntoRemote } from "@/lib/kanban/preserve-kanban-card-head";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
@@ -1456,6 +1457,7 @@ export function mergeKanbanStatePreservingLocalBoards(
   remoteState: KanbanAppState,
 ): KanbanAppState {
   const merged = structuredClone(remoteState);
+  overlayLocalKanbanCardHeadOntoRemote(localState, merged);
   // Персональный UI всегда с локальной сессии — remote tenant не должен его затирать.
   merged.search = localState.search ?? "";
   merged.filters = structuredClone(localState.filters);

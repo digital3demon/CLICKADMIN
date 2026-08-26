@@ -924,6 +924,24 @@ export function parseKaitenCardMemberRow(o: unknown): KaitenCardMemberRow | null
   };
 }
 
+/**
+ * Участники из GET /cards/:id, если Kaiten отдал массив.
+ * `null` — поля нет, нужен отдельный GET /members.
+ */
+export function kaitenMembersFromCardJson(
+  card: Record<string, unknown> | null | undefined,
+): KaitenCardMemberRow[] | null {
+  if (card == null) return null;
+  for (const key of ["members", "card_members", "users"] as const) {
+    const raw = card[key];
+    if (!Array.isArray(raw)) continue;
+    return raw
+      .map(parseKaitenCardMemberRow)
+      .filter((x): x is KaitenCardMemberRow => x != null);
+  }
+  return null;
+}
+
 export function parseKaitenSpaceUserRow(o: unknown): KaitenSpaceUserRow | null {
   if (o == null || typeof o !== "object" || Array.isArray(o)) return null;
   const r = o as Record<string, unknown>;

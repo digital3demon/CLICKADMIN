@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/kaiten-chat-sync",
       "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/crm-backup",
+      "schedule": "0 21 * * *"
     }
   ]
 }

@@ -11,6 +11,7 @@ import {
   parseListTagParam,
   relatedOrdersListTagQuickFilters,
   LIST_TAG_PROSTHETICS_PENDING,
+  LIST_TAG_WAIT_PAYMENT,
 } from "@/lib/order-list-tag-filter";
 
 describe("parseListTagParam / urgent", () => {
@@ -62,6 +63,17 @@ describe("parseListTagParam / urgent", () => {
 
   it("parses admin-memo (колонка Пометки)", () => {
     expect(parseListTagParam("admin-memo")).toEqual({ kind: "adminMemo" });
+  });
+
+  it("wait-payment: ключ и c: с хвостом — один фильтр ЖДЕМ ОПЛАТУ", () => {
+    expect(parseListTagParam(LIST_TAG_WAIT_PAYMENT)).toEqual({
+      kind: "waitPayment",
+    });
+    expect(parseListTagParam("c:ждем оплату тест")).toEqual({
+      kind: "waitPayment",
+    });
+    expect(humanListTagLabel({ kind: "waitPayment" })).toBe("ЖДЕМ ОПЛАТУ");
+    expect(listTagWhere({ kind: "waitPayment" }).listCustomTags).toBeTruthy();
   });
 });
 

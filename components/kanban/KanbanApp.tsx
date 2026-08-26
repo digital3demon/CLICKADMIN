@@ -496,6 +496,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const linkedOrdersIdsOffsetRef = useRef(0);
   const titlesSyncBackoffRef = useRef(0);
   const titlesSyncLastAtRef = useRef(0);
+  const tenantKanbanReadAtRef = useRef(0);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
@@ -617,14 +618,74 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         }
       }
 
-      /**
-       * Канбан раньше только читал Order.kaitenColumnTitle/sort из БД, а live-pull
-       * колонок из Kaiten шёл лишь со списка заказов → доска отставала.
-       * Перед merge подтягиваем пачку позиций с активной дорожки.
-       */
-      let inboundStageDue: Record<string, string | null> = {};
       const searchQ = (appStateRef.current?.search || "").trim();
       const searchActive = searchQ.length >= 2;
+
+      const boardIds = searchActive
+        ? []
+        : appStateRef.current
+          ? takeLinkedOrderIdsBatch(
+              collectAllLinkedOrderIdsOnBoards(appStateRef.current),
+              linkedOrdersIdsOffsetRef,
+            )
+          : [];
+      const linkedOrdersUrl = linkedOrdersApiUrl(
+        boardIds,
+        appStateRef.current?.search || "",
+      );
+      const [rLinked, rStandalone] = await Promise.all([
+        fetch(linkedOrdersUrl, { credentials: "include" }),
+        fetch("/api/kanban/standalone-cards", { credentials: "include" }),
+      ]);
+      if (!rLinked.ok) {
+        console.error("[kanban] linked-orders", rLinked.status);
+        return;
+      }
+      const jL = (await rLinked.json()) as {
+        orders?: KaitenLinkedOrderForKanban[];
+        goneIds?: string[];
+      };
+      const linkedRows = applyOptimisticKaitenBlocksToLinkedRows(
+        applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []),
+      );
+      const incomingAppt = linkedOrdersToAppointmentMap(linkedRows);
+      setLinkedAppointmentByOrderId((prev) => {
+        const next = new Map(prev);
+        for (const [id, snap] of incomingAppt) next.set(id, snap);
+        return next;
+      });
+      let standaloneRows: StandaloneRow[] = [];
+      if (rStandalone.ok) {
+        const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };
+        standaloneRows = Array.isArray(jS.rows) ? jS.rows : [];
+      }
+      const skipFreshTenantRead =
+        tenantKanbanReadAtRef.current > 0 &&
+        Date.now() - tenantKanbanReadAtRef.current < 15_000;
+      const remoteKanban = skipFreshTenantRead
+        ? null
+        : parseKanbanAppState(
+            await readClientState<unknown>("tenant", "kanbanAppStateV3"),
+          );
+      if (!skipFreshTenantRead) tenantKanbanReadAtRef.current = Date.now();
+      setAppState((prev) => {
+        if (!prev) return prev;
+        let next = mergeKaitenLinkedOrdersIntoAppState(prev, linkedRows, {
+          demo: false,
+          mode: "upsertOnly",
+        });
+        next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? []);
+        next = applyStandaloneRowsFromServer(next, standaloneRows);
+        if (remoteKanban) {
+          mergeInboundKaitenMirrorFieldsFromStored(next, remoteKanban);
+        }
+        return next;
+      });
+
+      /**
+       * Сроки/колонки из Kaiten — после первой отрисовки зеркала,
+       * чтобы открытие доски не ждало внешний API.
+       */
       const curForTitles = appStateRef.current;
       const titlesMinGapMs = Math.max(8_000, kaitenClientPollIntervalMs() - 2_000);
       if (
@@ -665,76 +726,21 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               const tsJson = (await tsRes.json()) as {
                 stageDueByOrderId?: Record<string, string | null>;
               };
-              if (
-                tsJson.stageDueByOrderId &&
-                typeof tsJson.stageDueByOrderId === "object"
-              ) {
-                inboundStageDue = tsJson.stageDueByOrderId;
+              const inboundStageDue = tsJson.stageDueByOrderId;
+              if (inboundStageDue && typeof inboundStageDue === "object") {
+                setAppState((prev) => {
+                  if (!prev) return prev;
+                  const next = structuredClone(prev);
+                  applyKaitenStageDueByOrderId(next, inboundStageDue);
+                  return next;
+                });
               }
             }
           } catch {
-            /* offline — всё равно тянем БД-снимок */
+            /* offline */
           }
         }
       }
-
-      const boardIds = searchActive
-        ? []
-        : appStateRef.current
-          ? takeLinkedOrderIdsBatch(
-              collectAllLinkedOrderIdsOnBoards(appStateRef.current),
-              linkedOrdersIdsOffsetRef,
-            )
-          : [];
-      const linkedOrdersUrl = linkedOrdersApiUrl(
-        boardIds,
-        appStateRef.current?.search || "",
-      );
-      const [rLinked, rStandalone] = await Promise.all([
-        fetch(linkedOrdersUrl, { credentials: "include" }),
-        fetch("/api/kanban/standalone-cards", { credentials: "include" }),
-      ]);
-      if (!rLinked.ok) {
-        console.error("[kanban] linked-orders", rLinked.status);
-        return;
-      }
-      const jL = (await rLinked.json()) as {
-        orders?: KaitenLinkedOrderForKanban[];
-        goneIds?: string[];
-      };
-      const linkedRows = applyOptimisticKaitenBlocksToLinkedRows(
-        applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []),
-      );
-      const incomingAppt = linkedOrdersToAppointmentMap(linkedRows);
-      setLinkedAppointmentByOrderId((prev) => {
-        const next = new Map(prev);
-        for (const [id, snap] of incomingAppt) next.set(id, snap);
-        return next;
-      });
-      let standaloneRows: StandaloneRow[] = [];
-      if (rStandalone.ok) {
-        const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };
-        standaloneRows = Array.isArray(jS.rows) ? jS.rows : [];
-      }
-      const remoteKanban = parseKanbanAppState(
-        await readClientState<unknown>("tenant", "kanbanAppStateV3"),
-      );
-      setAppState((prev) => {
-        if (!prev) return prev;
-        let next = mergeKaitenLinkedOrdersIntoAppState(prev, linkedRows, {
-          demo: false,
-          mode: "upsertOnly",
-        });
-        next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? []);
-        next = applyStandaloneRowsFromServer(next, standaloneRows);
-        if (remoteKanban) {
-          mergeInboundKaitenMirrorFieldsFromStored(next, remoteKanban);
-        }
-        if (Object.keys(inboundStageDue).length > 0) {
-          applyKaitenStageDueByOrderId(next, inboundStageDue);
-        }
-        return next;
-      });
     } catch {
       /* offline */
     } finally {
@@ -859,6 +865,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = isDemo ? "user" : "tenant";
       const remote = await readClientState<unknown>(scope, key);
+      if (!isDemo) tenantKanbanReadAtRef.current = Date.now();
       if (cancelled) return;
       if (remote && typeof remote === "object") {
         setAppState((prev) => {

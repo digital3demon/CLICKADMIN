@@ -70,6 +70,8 @@ describe("financeOfficeRowTintClass", () => {
     expect(financeOfficeRowTintClass(null)).toContain(
       "hover:bg-[var(--table-row-hover)]",
     );
+    expect(financeOfficeRowTintClass(null)).toContain("border-b-2");
+    expect(financeOfficeRowTintClass("calculated")).toContain("[&>td]:border-b-2");
     expect(financeOfficeRowTintClass("calculated")).not.toContain("both");
     expect(financeOfficeRowTintClass("invoiced")).not.toContain("gradient");
   });

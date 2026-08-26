@@ -5,11 +5,7 @@ import type {
   KanbanBoard,
   KanbanCard,
 } from "./types";
-import {
-  clearKanbanStageDue,
-  getKanbanStageDue,
-  setKanbanStageDue,
-} from "./kanban-stage-due";
+import { setKanbanStageDue } from "./kanban-stage-due";
 import {
   actorUserId,
   findCard,
@@ -125,10 +121,7 @@ function applyNonMoveAction(
       return true;
     }
     case "clear_due": {
-      if (!getKanbanStageDue(card)) return false;
-      clearKanbanStageDue(card);
-      card.updatedAt = new Date().toISOString();
-      return true;
+      return false;
     }
     case "add_comment": {
       const t = (action.text || "").trim();
