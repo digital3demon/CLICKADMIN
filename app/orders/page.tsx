@@ -85,6 +85,10 @@ import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { orderPathById } from "@/lib/order-public-ref";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
 import {
+  crmCityAddressTextClass,
+  isClinicAddressInCrmCity,
+} from "@/lib/crm-lab-city";
+import {
   mergeOrderListRowClass,
   resolveOrderListHarmonyRowState,
   resolveOrderListRowAccentKind,
@@ -1385,7 +1389,7 @@ export default async function OrdersPage({
                     <div data-col-body>
                     {o.clinic?.address?.trim() ? (
                       <span
-                        className="block hyphens-auto break-words text-center text-[var(--text-secondary)]"
+                        className={`block hyphens-auto break-words text-center ${crmCityAddressTextClass(isClinicAddressInCrmCity(o.clinic.address))}`}
                         title={o.clinic.address.trim()}
                       >
                         {o.clinic.address.trim()}
