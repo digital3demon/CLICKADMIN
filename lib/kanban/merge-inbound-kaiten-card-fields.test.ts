@@ -97,6 +97,26 @@ describe("mergeInboundKaitenMirrorFieldsFromStored", () => {
     expect(incoming.boards[0]!.columns[0]!.cards[0]!.stageDueDate).toBe("2026-08-20");
   });
 
+  it("возвращает участников со stored, если incoming после F5 пустой", () => {
+    const incoming = stateWithCard({
+      linkedOrderId: "ord1",
+      title: "наряд кириллица от 10.02.2026",
+      assignees: [],
+      participants: [],
+    });
+    const stored = stateWithCard({
+      linkedOrderId: "ord1",
+      assignees: [],
+      participants: ["u-саша"],
+    });
+    expect(mergeInboundKaitenMirrorFieldsFromStored(incoming, stored)).toBe(
+      true,
+    );
+    expect(incoming.boards[0]!.columns[0]!.cards[0]!.participants).toEqual([
+      "u-саша",
+    ]);
+  });
+
   it("не снимает локальный срок пустым более свежим stored", () => {
     const incoming = stateWithCard({
       linkedOrderId: "ord1",

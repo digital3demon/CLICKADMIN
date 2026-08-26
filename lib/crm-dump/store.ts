@@ -2,15 +2,10 @@ import "server-only";
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { getCrmDumpLocalDir } from "@/lib/crm-dump/local-dir";
 import { isS3StorageEnabled, putS3ObjectBytes } from "@/lib/s3-client";
 
-export function getCrmDumpLocalDir(): string {
-  const raw = process.env.CRM_DUMP_DIR?.trim();
-  if (raw) {
-    return path.isAbsolute(raw) ? raw : path.join(process.cwd(), raw);
-  }
-  return path.join(process.cwd(), "data", "crm-dumps");
-}
+export { getCrmDumpLocalDir };
 
 /**
  * Сохранить zip дампа: S3 при включённом storage, иначе локальный каталог.

@@ -1,18 +1,47 @@
-import { randomBytes } from "node:crypto";
-import { msUntilNextMskMidnight } from "@/lib/crm-backup/next-midnight-msk";
+import {
+  isWithinCrmBackupCatchUpWindow,
+  msUntilNextMskMidnight,
+} from "@/lib/crm-backup/next-midnight-msk";
 import { isCrmBackupDisabled } from "@/lib/crm-backup/types";
+import { formatYmdInMsk } from "@/lib/msk-calendar";
+import { DEFAULT_TENANT_ID } from "@/lib/tenant-constants";
 
 const FLAG = "__crmDailyBackupStarted";
 
-function ensureInternalSecret(): string {
-  const existing = String(process.env.INTERNAL_CRM_BACKUP_SECRET || "").trim();
-  if (existing) return existing;
-  const generated = randomBytes(32).toString("hex");
-  process.env.INTERNAL_CRM_BACKUP_SECRET = generated;
-  return generated;
+async function fireScheduledBackup(reason: string): Promise<void> {
+  try {
+    const { runScheduledCrmBackup } = await import(
+      "@/lib/crm-backup/run-auto-backup"
+    );
+    const result = await runScheduledCrmBackup();
+    console.log("[cron] crm-backup", reason, result);
+  } catch (e) {
+    console.error("[cron] crm-backup", reason, e);
+  }
 }
 
-/** Один таймер на процесс: wrapper server.js или Next instrumentation. */
+async function maybeCatchUpAfterRestart(): Promise<void> {
+  if (!isWithinCrmBackupCatchUpWindow()) return;
+  await new Promise((r) => setTimeout(r, 8_000));
+  try {
+    const { loadCurrentCrmBackupMeta } = await import("@/lib/crm-backup/store");
+    const last = await loadCurrentCrmBackupMeta(DEFAULT_TENANT_ID);
+    const today = formatYmdInMsk(new Date());
+    if (
+      last &&
+      last.source === "auto" &&
+      formatYmdInMsk(new Date(last.createdAt)) === today
+    ) {
+      console.log("[cron] crm-backup catch-up skipped: auto already today");
+      return;
+    }
+  } catch (e) {
+    console.error("[cron] crm-backup catch-up meta", e);
+  }
+  await fireScheduledBackup("catch-up-after-restart");
+}
+
+/** Один таймер на процесс: Next instrumentation. Пишет zip in-process, без HTTP/middleware. */
 export function startCrmDailyBackupInProcess(): void {
   const g = globalThis as typeof globalThis & { [FLAG]?: boolean };
   if (g[FLAG]) return;
@@ -20,36 +49,16 @@ export function startCrmDailyBackupInProcess(): void {
 
   if (isCrmBackupDisabled()) return;
 
-  const secret = ensureInternalSecret();
-  const port = process.env.PORT || "3000";
-  const url = `http://127.0.0.1:${port}/api/cron/crm-backup`;
-
-  const run = () => {
-    fetch(url, {
-      headers: { "x-internal-crm-backup-secret": secret },
-      signal: AbortSignal.timeout(10 * 60 * 1000),
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          console.error(
-            `[cron] crm-backup failed: ${res.status} ${res.statusText}`,
-            await res.text().catch(() => ""),
-          );
-        } else {
-          console.log("[cron] crm-backup ok", await res.text().catch(() => ""));
-        }
-      })
-      .catch((err: { message?: string }) => {
-        console.error("[cron] crm-backup network error:", err?.message);
-      })
-      .finally(() => {
-        setTimeout(run, msUntilNextMskMidnight());
-      });
+  const scheduleNext = () => {
+    const wait = msUntilNextMskMidnight();
+    console.log(
+      `[cron] crm-backup scheduled in ${Math.round(wait / 1000)}s (00:00 Europe/Moscow)`,
+    );
+    setTimeout(() => {
+      void fireScheduledBackup("scheduled-midnight").finally(scheduleNext);
+    }, wait);
   };
 
-  const wait = msUntilNextMskMidnight();
-  console.log(
-    `[cron] crm-backup scheduled in ${Math.round(wait / 1000)}s (00:00 Europe/Moscow)`,
-  );
-  setTimeout(run, wait);
+  scheduleNext();
+  void maybeCatchUpAfterRestart();
 }

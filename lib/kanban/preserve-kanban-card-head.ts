@@ -52,12 +52,17 @@ export function overlayLocalKanbanCardHeadOntoRemote(
   remote: KanbanAppState,
 ): void {
   const localById = new Map<string, KanbanCard>();
+  const localByOrder = new Map<string, KanbanCard>();
   forEachKanbanCardInState(local, (card) => {
     const id = String(card.id || "").trim();
     if (id) localById.set(id, card);
+    const oid = String(card.linkedOrderId || "").trim();
+    if (oid) localByOrder.set(oid, card);
   });
   forEachKanbanCardInState(remote, (card) => {
-    const loc = localById.get(String(card.id || "").trim());
+    const loc =
+      localById.get(String(card.id || "").trim()) ??
+      localByOrder.get(String(card.linkedOrderId || "").trim());
     if (!loc) return;
     if (
       shouldKeepLocalKanbanMembers(loc, {

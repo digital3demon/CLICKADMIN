@@ -83,4 +83,57 @@ describe("overlayLocalKanbanCardHeadOntoRemote", () => {
     expect(out.participants).toEqual(["u2"]);
     expect(out.stageDueDate).toBe("2026-08-26");
   });
+
+  it("находит карточку по наряду, если id после merge другой", () => {
+    const local = {
+      boards: [
+        {
+          id: "b",
+          columns: [
+            {
+              id: "col",
+              cards: [
+                {
+                  id: "old-id",
+                  linkedOrderId: "ord-юля",
+                  title: "наряд",
+                  assignees: [],
+                  participants: ["u-саша"],
+                  stageDueDate: "",
+                  dueDate: "",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as KanbanAppState;
+    const remote = {
+      boards: [
+        {
+          id: "b",
+          columns: [
+            {
+              id: "col",
+              cards: [
+                {
+                  id: "kaiten-order-ord-юля",
+                  linkedOrderId: "ord-юля",
+                  title: "наряд",
+                  assignees: [],
+                  participants: [],
+                  stageDueDate: "",
+                  dueDate: "",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as KanbanAppState;
+    overlayLocalKanbanCardHeadOntoRemote(local, remote);
+    expect(remote.boards[0]!.columns[0]!.cards[0]!.participants).toEqual([
+      "u-саша",
+    ]);
+  });
 });

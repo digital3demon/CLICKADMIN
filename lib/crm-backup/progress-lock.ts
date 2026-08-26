@@ -4,6 +4,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { getCrmDumpLocalDir } from "@/lib/crm-dump/local-dir";
 
 export type CrmMaintenancePhase = "backup" | "restore";
 
@@ -15,7 +16,7 @@ export type CrmMaintenanceState = {
 const STALE_MS = 25 * 60 * 1000;
 
 function lockFilePath(): string {
-  return path.join(process.cwd(), "data", "crm-dumps", "_progress.json");
+  return path.join(getCrmDumpLocalDir(), "_progress.json");
 }
 
 function parseState(raw: unknown): CrmMaintenanceState | null {

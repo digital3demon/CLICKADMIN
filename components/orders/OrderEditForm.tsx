@@ -212,7 +212,7 @@ function formatDocumentFlowCompositionAllText(
   return lines.map(formatDocumentFlowCompositionLineText).join("\n");
 }
 
-/** Состав наряда на вкладке «Документооборот»: полная ширина, по макету открыт. */
+/** Состав наряда: вложенный блок в левой колонке макета (не на всю ширину). */
 function DocumentFlowCompositionSpoiler({
   lines,
   onCopy,
@@ -222,37 +222,23 @@ function DocumentFlowCompositionSpoiler({
 }) {
   const allText = formatDocumentFlowCompositionAllText(lines);
   return (
-    <details
-      open
-      className="group w-full min-w-0 max-w-none rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)]"
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-1.5 select-none hover:brightness-105 [&::-webkit-details-marker]:hidden">
+    <div className="min-w-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
+      <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
         <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-          Состав заказа
-          {lines.length > 0 ? ` · ${lines.length}` : ""}
+          Состав заказа{lines.length > 0 ? `: ${lines.length}` : ""}
         </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            disabled={lines.length === 0}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (allText) onCopy(allText);
-            }}
-            title="Скопировать весь состав построчно"
-            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] disabled:cursor-default disabled:opacity-50"
-          >
-            Скопировать все
-          </button>
-          <span
-            aria-hidden
-            className="text-[var(--text-muted)] transition-transform group-open:rotate-180"
-          >
-            ▾
-          </span>
-        </span>
-      </summary>
+        <button
+          type="button"
+          disabled={lines.length === 0}
+          onClick={() => {
+            if (allText) onCopy(allText);
+          }}
+          title="Скопировать весь состав построчно"
+          className="rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-strong)] shadow-sm hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] disabled:cursor-default disabled:opacity-50"
+        >
+          Скопировать все
+        </button>
+      </div>
       <div className="max-h-56 overflow-y-auto border-t border-[var(--card-border)] px-2.5 py-2">
         {lines.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">Нет позиций в составе</p>
@@ -269,17 +255,17 @@ function DocumentFlowCompositionSpoiler({
                     type="button"
                     title="Нажмите — скопировать в буфер обмена"
                     onClick={() => onCopy(line.title)}
-                    className="min-w-0 max-w-full break-words rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                    className="min-w-0 max-w-full break-words rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
                   >
                     {line.title}
                   </button>
                   <InvoiceCopyChip
-                    label="Кол-во"
+                    label="кол-во"
                     value={String(line.quantity)}
                     onCopy={onCopy}
                   />
                   <InvoiceCopyChip
-                    label="Сумма"
+                    label="сумма"
                     value={sumValue}
                     onCopy={onCopy}
                   />
@@ -289,7 +275,7 @@ function DocumentFlowCompositionSpoiler({
           </ul>
         )}
       </div>
-    </details>
+    </div>
   );
 }
 
@@ -2036,7 +2022,7 @@ export function OrderEditForm({
         const code = row.priceListCode.trim();
         const name = row.priceListName.trim();
         const title =
-          code && name ? `${code} · ${name}` : name || code || "Позиция";
+          code && name ? `${code} - ${name}` : name || code || "Позиция";
         const quantity =
           Number.isFinite(row.quantity) && row.quantity > 0 ? row.quantity : 1;
         return { title, quantity, amountRub };
@@ -3834,33 +3820,33 @@ export function OrderEditForm({
             disabled={!canEditOrder}
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
-          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
-              title="Нажмите — скопировать в буфер обмена"
-              className="max-w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
-            >
-              {invoiceCopyClipboardText}
-            </button>
-            <InvoiceCopyChip
-              label="Клиника"
-              value={clientLegalNameForCopy}
-              onCopy={(t) => void copyInvoiceBlockText(t)}
-            />
-            <InvoiceCopyChip
-              label="ИНН"
-              value={clientInnForCopy}
-              onCopy={(t) => void copyInvoiceBlockText(t)}
-            />
-          </div>
-          <div className="mt-3 min-w-0 w-full">
-            <DocumentFlowCompositionSpoiler
-              lines={documentFlowCompositionRows}
-              onCopy={(t) => void copyInvoiceBlockText(t)}
-            />
-          </div>
-          <div className="mt-4 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(12rem,16rem)] crm-t3:gap-5">
+          <div className="mt-3 grid grid-cols-1 items-start gap-4 crm-t3:grid-cols-3 crm-t3:gap-4">
+            <div className="min-w-0 space-y-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] p-2.5">
+              <button
+                type="button"
+                onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
+                title="Нажмите — скопировать в буфер обмена"
+                className="max-w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+              >
+                {invoiceCopyClipboardText}
+              </button>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <InvoiceCopyChip
+                  label="клиника"
+                  value={clientLegalNameForCopy}
+                  onCopy={(t) => void copyInvoiceBlockText(t)}
+                />
+                <InvoiceCopyChip
+                  label="ИНН"
+                  value={clientInnForCopy}
+                  onCopy={(t) => void copyInvoiceBlockText(t)}
+                />
+              </div>
+              <DocumentFlowCompositionSpoiler
+                lines={documentFlowCompositionRows}
+                onCopy={(t) => void copyInvoiceBlockText(t)}
+              />
+            </div>
             <div className="w-full min-w-0 max-w-full space-y-3">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
@@ -3893,16 +3879,19 @@ export function OrderEditForm({
                     Скачать счёт
                   </span>
                 )}
-                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs text-[var(--text-strong)] sm:text-sm">
-                  <input
-                    type="checkbox"
-                    checked={invoiceIssued}
-                    disabled={invoiceSaving}
-                    onChange={(e) => void toggleInvoiceIssued(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
-                  />
-                  <span>Счёт выставлен</span>
-                </label>
+                <button
+                  type="button"
+                  disabled={invoiceSaving}
+                  aria-pressed={invoiceIssued}
+                  onClick={() => void toggleInvoiceIssued(!invoiceIssued)}
+                  className={
+                    invoiceIssued
+                      ? "rounded-md border-2 border-sky-400 bg-[var(--card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                      : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                  }
+                >
+                  Счёт выставлен
+                </button>
               </div>
               <div>
                 <label className={labelClass} htmlFor="oe-invoice-number">
@@ -3958,16 +3947,8 @@ export function OrderEditForm({
                   </div>
                 ) : null}
               </div>
-              <div className="border-t border-[var(--card-border)] pt-2">
-                <OrderDocumentMailPanel
-                  orderId={initial.id}
-                  hasInvoice={Boolean(invoiceAttachmentId)}
-                  mode="thread"
-                  compact
-                />
-              </div>
             </div>
-            <div className="w-full min-w-0 max-w-full space-y-3 border-t border-[var(--card-border)] pt-3 crm-t2:border-t-0 crm-t2:pt-0">
+            <div className="w-full min-w-0 max-w-full space-y-3">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
                   type="button"
@@ -4008,6 +3989,13 @@ export function OrderEditForm({
                 >
                   УПД загружен
                 </span>
+                <div className="min-w-0 crm-t3:ml-auto">
+                  <OrderDocumentMailPanel
+                    orderId={initial.id}
+                    hasInvoice={Boolean(invoiceAttachmentId)}
+                    mode="actions"
+                  />
+                </div>
               </div>
               <div>
                 <label className={labelClass} htmlFor="oe-upd-number">
@@ -4061,16 +4049,8 @@ export function OrderEditForm({
                 ) : null}
               </div>
             </div>
-            <div className="min-w-0 crm-t2:col-span-2 crm-t3:col-span-1">
-              <OrderDocumentMailPanel
-                orderId={initial.id}
-                hasInvoice={Boolean(invoiceAttachmentId)}
-                mode="actions"
-                actionsStretch
-              />
-            </div>
           </div>
-          <div className="mt-4 grid grid-cols-1 items-start gap-4 border-t border-[var(--card-border)] pt-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(0,1.35fr)_minmax(12rem,16rem)_minmax(0,1fr)] crm-t3:gap-5">
+          <div className="mt-4 grid grid-cols-1 items-start gap-4 border-t border-[var(--card-border)] pt-4 crm-t3:grid-cols-3 crm-t3:gap-4">
             <div className="min-w-0 space-y-3">
               <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
                 Выставлено по счёту
@@ -4256,7 +4236,7 @@ export function OrderEditForm({
                   className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
                   htmlFor="oe-invoice-payment-notes"
                 >
-                  Комментарии к счёту и оплате
+                  Комментарий к счёту и оплате
                 </label>
                 <textarea
                   id="oe-invoice-payment-notes"

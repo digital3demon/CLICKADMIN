@@ -205,6 +205,42 @@ describe("demo kanban visual = main CRM", () => {
   });
 });
 
+describe("mergeKaitenLinkedOrders members survive recreate", () => {
+  it("не теряет участников, если карточку собрали заново", () => {
+    const base = defaultAppState();
+    const withPeople = mergeKaitenLinkedOrdersIntoAppState(
+      base,
+      [sampleRow("order-a", { kaitenTrackLane: "ORTHOPEDICS" })],
+      { mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(withPeople, "order-a")!;
+    const card =
+      withPeople.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[
+        loc.cardIndex
+      ]!;
+    card.participants = ["u-саша"];
+    card.assignees = [];
+    card.id = "other-card-id";
+
+    const again = mergeKaitenLinkedOrdersIntoAppState(
+      withPeople,
+      [
+        sampleRow("order-a", {
+          kaitenTrackLane: "ORTHOPEDICS",
+          kaitenColumnTitle: "К исполнению",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    const loc2 = findCardByLinkedOrderId(again, "order-a")!;
+    const card2 =
+      again.boards[loc2.boardIndex]!.columns[loc2.columnIndex]!.cards[
+        loc2.cardIndex
+      ]!;
+    expect(card2.participants).toEqual(["u-саша"]);
+  });
+});
+
 describe("removeLinkedOrderCardsFromAppState", () => {
   it("снимает карточку удалённого наряда", () => {
     const withTwo = mergeKaitenLinkedOrdersIntoAppState(

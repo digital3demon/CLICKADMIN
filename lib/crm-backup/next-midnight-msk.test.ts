@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { msUntilNextMskMidnight, nextMskMidnightUtcMs } from "./next-midnight-msk";
+import {
+  isWithinCrmBackupCatchUpWindow,
+  msUntilNextMskMidnight,
+  nextMskMidnightUtcMs,
+} from "./next-midnight-msk";
 
 describe("nextMskMidnightUtcMs", () => {
   it("от дневного времени МСК до следующей полуночи, кириллица в дате не нужна", () => {
@@ -17,5 +21,13 @@ describe("nextMskMidnightUtcMs", () => {
     expect(nextMskMidnightUtcMs(justAfter)).toBe(
       Date.parse("2026-08-27T00:00:00+03:00"),
     );
+    expect(isWithinCrmBackupCatchUpWindow(justAfter)).toBe(true);
+  });
+
+  it("догон только в первые 20 минут после полуночи МСК", () => {
+    const noon = Date.parse("2026-08-26T12:00:00+03:00");
+    expect(isWithinCrmBackupCatchUpWindow(noon)).toBe(false);
+    const late = Date.parse("2026-08-26T00:21:00+03:00");
+    expect(isWithinCrmBackupCatchUpWindow(late)).toBe(false);
   });
 });

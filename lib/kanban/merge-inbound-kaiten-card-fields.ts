@@ -10,6 +10,8 @@ import {
 } from "@/lib/kanban/kanban-stage-due";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 import {
+  hasKanbanCardMembers,
+  inboundKanbanMembersEmpty,
   shouldKeepLocalKanbanMembers,
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
@@ -77,7 +79,14 @@ export function mergeInboundKaitenMirrorFieldsFromStored(
 
     const stoFp = sto.kaitenMembersFingerprint ?? null;
     const incFp = inc.kaitenMembersFingerprint ?? null;
-    if (
+    const incomingEmpty = inboundKanbanMembersEmpty(
+      inc.assignees,
+      inc.participants,
+    );
+    /** Зеркало нарядов после F5 часто без людей — не ждать смены fingerprint. */
+    if (incomingEmpty && hasKanbanCardMembers(sto)) {
+      if (copyInboundMembers(sto, inc)) changed = true;
+    } else if (
       stoFp &&
       stoFp !== incFp &&
       inc.lastPushedMembersFingerprint !== stoFp

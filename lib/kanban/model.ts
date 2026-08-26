@@ -20,7 +20,10 @@ import {
   type KaitenLinkedOrderForKanban,
 } from "@/lib/kanban/kaiten-linked-order";
 import { applyKanbanLegacyStageDueClearMigration, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
-import { overlayLocalKanbanCardHeadOntoRemote } from "@/lib/kanban/preserve-kanban-card-head";
+import {
+  hasKanbanCardMembers,
+  overlayLocalKanbanCardHeadOntoRemote,
+} from "@/lib/kanban/preserve-kanban-card-head";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
@@ -2680,6 +2683,42 @@ function linkedOrderKanbanBlockedAtIso(
   return fallbackIso;
 }
 
+type KanbanMembersSnap = {
+  assignees: string[];
+  participants: string[];
+  fingerprint: string | null;
+};
+
+function snapshotKanbanMembersByOrderId(
+  state: KanbanAppState,
+): Map<string, KanbanMembersSnap> {
+  const map = new Map<string, KanbanMembersSnap>();
+  for (const b of state.boards) {
+    for (const col of b.columns || []) {
+      for (const c of col.cards || []) {
+        const oid = String(c.linkedOrderId || "").trim();
+        if (!oid || !hasKanbanCardMembers(c)) continue;
+        map.set(oid, {
+          assignees: [...(c.assignees || [])],
+          participants: [...(c.participants || [])],
+          fingerprint: c.kaitenMembersFingerprint ?? null,
+        });
+      }
+    }
+  }
+  return map;
+}
+
+function restoreKanbanMembersFromSnap(
+  card: KanbanCard,
+  snap: KanbanMembersSnap | undefined,
+): void {
+  if (!snap || hasKanbanCardMembers(card)) return;
+  card.assignees = [...snap.assignees];
+  card.participants = [...snap.participants];
+  if (snap.fingerprint) card.kaitenMembersFingerprint = snap.fingerprint;
+}
+
 /**
  * Подмешивает карточки нарядов на канбан.
  * Демо и бой — доски «Ортопедия» / «Ортодонтия» по `kaitenTrackLane` наряда.
@@ -2690,6 +2729,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   opts?: MergeKaitenLinkedOrdersOptions,
 ): KanbanAppState {
   const next = structuredClone(state);
+  const membersByOrder = snapshotKanbanMembersByOrderId(next);
   const hidden = new Set(next.hiddenLinkedOrderIds || []);
   const visibleRows = rows.filter((r) => !hidden.has(r.id));
   const orderIds = new Set(visibleRows.map((r) => r.id));
@@ -2781,7 +2821,9 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       }
       foundEff.card.updatedAt = nowIso;
       mergeOrderAttachmentsIntoLinkedCard(foundEff.card, row.id, row);
+      restoreKanbanMembersFromSnap(foundEff.card, membersByOrder.get(row.id));
     } else {
+      const kept = membersByOrder.get(row.id);
       const card = createCard({
         id: cardDbId,
         title,
@@ -2793,6 +2835,8 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         linkedOrderNumber: row.orderNumber,
         kaitenCardId: row.kaitenCardId ?? null,
         kaitenCardSortOrder: row.kaitenCardSortOrder ?? null,
+        assignees: kept?.assignees ?? reuseCard?.assignees ?? [],
+        participants: kept?.participants ?? reuseCard?.participants ?? [],
         trackLane: lane,
         blocked: !!row.kaitenBlocked,
         blockReason: (row.kaitenBlockReason || "").trim(),
@@ -2810,6 +2854,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       });
       applyContinuesFromOrderToKanbanCard(card, row);
       mergeOrderAttachmentsIntoLinkedCard(card, row.id, row);
+      restoreKanbanMembersFromSnap(card, kept);
       targetCol.cards.unshift(card);
     }
   }

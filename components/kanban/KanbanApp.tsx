@@ -55,6 +55,7 @@ import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban
 import { applyKaitenRefreshPatchesToState } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
+import { overlayLocalKanbanCardHeadOntoRemote } from "@/lib/kanban/preserve-kanban-card-head";
 import {
   forgetOptimisticKanbanStageDue,
   rememberOptimisticKanbanStageDue,
@@ -498,6 +499,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const titlesSyncBackoffRef = useRef(0);
   const titlesSyncLastAtRef = useRef(0);
   const tenantKanbanReadAtRef = useRef(0);
+  const lastTenantKanbanRef = useRef<KanbanAppState | null>(null);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
@@ -669,6 +671,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             await readClientState<unknown>("tenant", "kanbanAppStateV3"),
           );
       if (!skipFreshTenantRead) tenantKanbanReadAtRef.current = Date.now();
+      if (remoteKanban) lastTenantKanbanRef.current = remoteKanban;
       setAppState((prev) => {
         if (!prev) return prev;
         let next = mergeKaitenLinkedOrdersIntoAppState(prev, linkedRows, {
@@ -677,8 +680,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
         next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? []);
         next = applyStandaloneRowsFromServer(next, standaloneRows);
-        if (remoteKanban) {
-          mergeInboundKaitenMirrorFieldsFromStored(next, remoteKanban);
+        overlayLocalKanbanCardHeadOntoRemote(prev, next);
+        const storedMembers = remoteKanban ?? lastTenantKanbanRef.current;
+        if (storedMembers) {
+          mergeInboundKaitenMirrorFieldsFromStored(next, storedMembers);
         }
         return next;
       });
@@ -791,10 +796,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             }),
           );
         }
-        return mergeKaitenLinkedOrdersIntoAppState(prev, rows, {
+        const merged = mergeKaitenLinkedOrdersIntoAppState(prev, rows, {
           demo: false,
           mode: "upsertOnly",
         });
+        overlayLocalKanbanCardHeadOntoRemote(prev, merged);
+        return merged;
       });
     } catch {
       /* offline */
@@ -889,6 +896,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             setCardModalId(null);
           }
           saveKanbanState(finalState, isDemo);
+          if (!isDemo) lastTenantKanbanRef.current = finalState;
           return finalState;
         });
       }

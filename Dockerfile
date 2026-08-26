@@ -42,6 +42,9 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/templates ./templates
 
+# Standalone cwd = /app/.next/standalone (read-only для mkdir). Дампы и lock — сюда.
+RUN mkdir -p /app/data/crm-dumps && chmod -R 777 /app/data
+
 EXPOSE 3000
 
 CMD ["npm", "run", "start:platform"]
