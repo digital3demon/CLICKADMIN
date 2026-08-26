@@ -1,4 +1,4 @@
-import type { KanbanAppState } from "@/lib/kanban/types";
+import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
 /** Наряды с карточкой в колонках доски (не архив и не СТОП). */
 export function linkedOrderIdsOnKanbanBoard(
@@ -15,6 +15,67 @@ export function linkedOrderIdsOnKanbanBoard(
     }
   }
   return [...ids];
+}
+
+export type KanbanKaitenRefreshTarget = {
+  cardId: string;
+  kaitenCardId: number | null;
+  linkedOrderId: string | null;
+};
+
+function numericKaitenCardId(card: KanbanCard): number | null {
+  const n = Number(card.kaitenCardId);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pushRefreshTarget(
+  out: KanbanKaitenRefreshTarget[],
+  seen: Set<string>,
+  card: KanbanCard | null | undefined,
+): void {
+  if (!card) return;
+  const cardId = String(card.id || "").trim();
+  if (!cardId || seen.has(cardId)) return;
+  seen.add(cardId);
+  const linkedOrderId = String(card.linkedOrderId || "").trim() || null;
+  out.push({
+    cardId,
+    kaitenCardId: numericKaitenCardId(card),
+    linkedOrderId,
+  });
+}
+
+/**
+ * Все карточки колонок и СТОП (не архив) — для обновления с Kaiten.
+ * Сначала активная доска, чтобы экран обновился раньше.
+ */
+export function collectKanbanKaitenRefreshTargets(
+  state: KanbanAppState | null | undefined,
+  preferBoardId?: string | null,
+): KanbanKaitenRefreshTarget[] {
+  if (!state) return [];
+  const prefer = String(preferBoardId || state.activeBoardId || "").trim();
+  const boards = [...(state.boards ?? [])];
+  if (prefer) {
+    boards.sort((a, b) => {
+      const ap = a.id === prefer ? 0 : 1;
+      const bp = b.id === prefer ? 0 : 1;
+      return ap - bp;
+    });
+  }
+  const out: KanbanKaitenRefreshTarget[] = [];
+  const seen = new Set<string>();
+  for (const board of boards) {
+    for (const col of board.columns ?? []) {
+      for (const card of col.cards ?? []) {
+        pushRefreshTarget(out, seen, card);
+      }
+    }
+    for (const row of board.stoppedCards ?? []) {
+      pushRefreshTarget(out, seen, row.card);
+    }
+  }
+  return out;
 }
 
 /**

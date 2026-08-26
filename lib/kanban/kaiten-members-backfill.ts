@@ -9,14 +9,16 @@ import {
   mapKaitenCardMembersToCrm,
 } from "@/lib/kanban/kaiten-members-inbound";
 import {
-  linkedOrderIdsOnKanbanBoard,
+  collectKanbanKaitenRefreshTargets,
   nextLinkedOrderIdPage,
+  type KanbanKaitenRefreshTarget,
 } from "@/lib/kanban/kanban-linked-order-ids";
 import {
-  findCardByLinkedOrderId,
+  findCardLocationByCardId,
   KANBAN_CHAT_STATE_KEY,
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
+import type { KanbanCard } from "@/lib/kanban/types";
 import {
   kaitenGetCard,
   kaitenListBoardColumns,
@@ -75,7 +77,31 @@ export async function countKanbanMembersBackfillOrders(
   const tid = tenantId.trim();
   if (!tid) return 0;
   const state = await loadTenantKanbanState(tid);
-  return linkedOrderIdsOnKanbanBoard(state).length;
+  return collectKanbanKaitenRefreshTargets(state).length;
+}
+
+function parseRefreshTargets(raw: unknown): KanbanKaitenRefreshTarget[] {
+  if (!Array.isArray(raw)) return [];
+  const out: KanbanKaitenRefreshTarget[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    if (row == null || typeof row !== "object") continue;
+    const r = row as {
+      cardId?: unknown;
+      kaitenCardId?: unknown;
+      linkedOrderId?: unknown;
+    };
+    const cardId = String(r.cardId ?? "").trim();
+    if (!cardId || seen.has(cardId)) continue;
+    seen.add(cardId);
+    const kid = Number(r.kaitenCardId);
+    out.push({
+      cardId,
+      kaitenCardId: Number.isFinite(kid) ? kid : null,
+      linkedOrderId: String(r.linkedOrderId ?? "").trim() || null,
+    });
+  }
+  return out;
 }
 
 export async function runKanbanMembersBackfillBatch(
@@ -85,6 +111,8 @@ export async function runKanbanMembersBackfillBatch(
     tenantId: string;
     afterOrderId?: string | null;
     limit?: number;
+    targets?: unknown;
+    clientTotal?: number;
   },
 ): Promise<KanbanMembersBackfillBatchResult> {
   const tenantId = input.tenantId.trim();
@@ -113,26 +141,47 @@ export async function runKanbanMembersBackfillBatch(
 
   const corePrisma = await getPrisma();
   const state = await loadTenantKanbanState(tenantId);
-  const boardOrderIds = linkedOrderIdsOnKanbanBoard(state);
-  if (!state || boardOrderIds.length === 0) {
+  if (!state) {
     return { ...empty, total: 0, finished: true };
   }
 
-  const total = boardOrderIds.length;
-  const afterOrderId = input.afterOrderId?.trim() || null;
-  const { page: pageIds, finished: pageFinished } = nextLinkedOrderIdPage(
-    boardOrderIds,
-    afterOrderId,
-    limit,
-  );
-  if (pageIds.length === 0) {
+  const fromClient = parseRefreshTargets(input.targets);
+  const allFromState = collectKanbanKaitenRefreshTargets(state);
+  const work =
+    fromClient.length > 0
+      ? fromClient
+      : (() => {
+          const after = input.afterOrderId?.trim() || null;
+          const { page } = nextLinkedOrderIdPage(
+            allFromState.map((t) => t.cardId),
+            after,
+            limit,
+          );
+          const byId = new Map(allFromState.map((t) => [t.cardId, t]));
+          return page.map((id) => byId.get(id)!).filter(Boolean);
+        })();
+
+  const clientTotal =
+    typeof input.clientTotal === "number" &&
+    Number.isFinite(input.clientTotal) &&
+    input.clientTotal > 0
+      ? Math.floor(input.clientTotal)
+      : 0;
+  const total = Math.max(clientTotal, allFromState.length, fromClient.length);
+
+  if (work.length === 0) {
     return { ...empty, total, finished: true };
   }
 
-  const orders = await db.order.findMany({
-    where: { tenantId, id: { in: pageIds } },
-    select: { id: true, kaitenCardId: true, kaitenTrackLane: true },
-  });
+  const orderIds = [
+    ...new Set(work.map((t) => t.linkedOrderId).filter((x): x is string => Boolean(x))),
+  ];
+  const orders = orderIds.length
+    ? await db.order.findMany({
+        where: { tenantId, id: { in: orderIds } },
+        select: { id: true, kaitenCardId: true, kaitenTrackLane: true },
+      })
+    : [];
   const orderById = new Map(orders.map((row) => [row.id, row]));
 
   let changed = 0;
@@ -140,7 +189,7 @@ export async function runKanbanMembersBackfillBatch(
   let noCard = 0;
   let unmapped = 0;
   let rateLimited = false;
-  let lastOrderId: string | null = afterOrderId;
+  let lastOrderId: string | null = input.afterOrderId?.trim() || null;
   let processed = 0;
   const columnsByBoardId = new Map<
     number,
@@ -151,28 +200,49 @@ export async function runKanbanMembersBackfillBatch(
   const directory = await loadKaitenUsersDirectory(db, tenantId, auth);
   const burst = { burst: true as const };
 
-  for (const pageId of pageIds) {
-    lastOrderId = pageId;
-    const order = orderById.get(pageId);
-    if (
-      !order ||
-      order.kaitenCardId == null ||
-      !Number.isFinite(order.kaitenCardId)
-    ) {
-      skipped += 1;
-      processed += 1;
-      continue;
-    }
+  for (const target of work) {
+    lastOrderId = target.cardId;
+    const order = target.linkedOrderId
+      ? orderById.get(target.linkedOrderId)
+      : undefined;
+    const kaitenId =
+      target.kaitenCardId != null && Number.isFinite(target.kaitenCardId)
+        ? target.kaitenCardId
+        : order?.kaitenCardId != null && Number.isFinite(order.kaitenCardId)
+          ? order.kaitenCardId
+          : null;
 
-    const loc = findCardByLinkedOrderId(state, order.id);
-    if (!loc) {
+    const colLoc = findCardLocationByCardId(state, target.cardId);
+    let card: KanbanCard | null = null;
+    if (colLoc) {
+      card =
+        state.boards[colLoc.boardIndex]!.columns[colLoc.columnIndex]!.cards[
+          colLoc.cardIndex
+        ] ?? null;
+    } else {
+      for (const board of state.boards) {
+        const stopped = (board.stoppedCards ?? []).find(
+          (row) => String(row.card?.id || "").trim() === target.cardId,
+        );
+        if (stopped?.card) {
+          card = stopped.card;
+          break;
+        }
+      }
+    }
+    if (!card) {
       noCard += 1;
       skipped += 1;
       processed += 1;
       continue;
     }
+    if (kaitenId == null) {
+      skipped += 1;
+      processed += 1;
+      continue;
+    }
 
-    const head = await kaitenGetCard(auth, order.kaitenCardId, burst);
+    const head = await kaitenGetCard(auth, kaitenId, burst);
     if (!head.ok) {
       if (isKaitenRateLimitedStatus(head.status)) {
         rateLimited = true;
@@ -187,7 +257,7 @@ export async function runKanbanMembersBackfillBatch(
       head.card,
     );
     if (members == null) {
-      const list = await kaitenListCardMembers(auth, order.kaitenCardId, burst);
+      const list = await kaitenListCardMembers(auth, kaitenId, burst);
       if (!list.ok) {
         if (isKaitenRateLimitedStatus(list.status)) {
           rateLimited = true;
@@ -210,8 +280,6 @@ export async function runKanbanMembersBackfillBatch(
     if (mapped.unmappedLabels.length > 0) {
       unmapped += 1;
     }
-    const card =
-      state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
     const membersChanged = applyInboundMembersToKanbanCard(card, {
       assignees: mapped.assignees,
       participants: mapped.participants,
@@ -285,7 +353,16 @@ export async function runKanbanMembersBackfillBatch(
     });
   }
 
-  const finished = !rateLimited && pageFinished;
+  const finished =
+    !rateLimited &&
+    fromClient.length === 0 &&
+    work.length > 0 &&
+    lastOrderId != null &&
+    nextLinkedOrderIdPage(
+      allFromState.map((t) => t.cardId),
+      lastOrderId,
+      1,
+    ).page.length === 0;
 
   return {
     total,

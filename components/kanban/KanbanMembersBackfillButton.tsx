@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import type { KanbanKaitenRefreshTarget } from "@/lib/kanban/kanban-linked-order-ids";
 import { IconRefresh } from "./kanban-icons";
 
 type BackfillBatchResponse = {
@@ -18,7 +19,9 @@ type BackfillBatchResponse = {
 
 type KanbanMembersBackfillButtonProps = {
   disabled?: boolean;
-  /** Сколько нарядов уже на доске — без отдельного «подсчёта» на сервере. */
+  /** Все карточки канбана (колонки + СТОП) — пакеты идут по этому списку. */
+  refreshTargets?: KanbanKaitenRefreshTarget[];
+  /** Сколько карточек на доске, если targets ещё не передали. */
   linkedOrderCount?: number;
   onRunningChange?: (running: boolean) => void;
   onComplete: () => void | Promise<void>;
@@ -70,6 +73,7 @@ function formatFetchError(err: unknown): string {
  */
 export function KanbanMembersBackfillButton({
   disabled,
+  refreshTargets = [],
   linkedOrderCount = 0,
   onRunningChange,
   onComplete,
@@ -115,7 +119,14 @@ export function KanbanMembersBackfillButton({
     onRunningChange?.(true);
     setRunning(true);
     setDone(0);
-    let totalCount = Math.max(0, Math.floor(linkedOrderCount));
+    const queue =
+      refreshTargets.length > 0
+        ? refreshTargets.map((t) => ({ ...t }))
+        : [];
+    let totalCount = Math.max(
+      0,
+      queue.length > 0 ? queue.length : Math.floor(linkedOrderCount),
+    );
     setTotal(totalCount);
     setStatus(
       totalCount > 0
@@ -125,6 +136,7 @@ export function KanbanMembersBackfillButton({
 
     try {
       let afterOrderId: string | null = null;
+      let queueIndex = 0;
       let processed = 0;
       let changedSum = 0;
       let skippedSum = 0;
@@ -133,6 +145,14 @@ export function KanbanMembersBackfillButton({
       let finished = false;
 
       while (!finished && !abortRef.current) {
+        const slice =
+          queue.length > 0
+            ? queue.slice(queueIndex, queueIndex + BATCH_LIMIT)
+            : [];
+        if (queue.length > 0 && slice.length === 0) {
+          finished = true;
+          break;
+        }
         const batchRes = await fetch("/api/kanban/members-backfill", {
           method: "POST",
           credentials: "include",
@@ -142,39 +162,53 @@ export function KanbanMembersBackfillButton({
             action: "batch",
             afterOrderId,
             limit: BATCH_LIMIT,
+            total: totalCount,
+            ...(slice.length > 0 ? { targets: slice } : {}),
           }),
         });
         const batch = await readBackfillJson(batchRes);
         if (!batchRes.ok) {
           throw new Error(batch.error || "Ошибка пакетного обновления");
         }
-        if (typeof batch.total === "number" && batch.total > 0) {
+        if (typeof batch.total === "number" && batch.total > totalCount) {
           totalCount = batch.total;
           setTotal(batch.total);
         }
         if (totalCount === 0 && (batch.processed ?? 0) === 0 && batch.finished) {
-          setStatus("Нет карточек Kaiten для обновления");
-          showToast("Нет привязанных карточек Kaiten");
+          setStatus("Нет карточек канбана для обновления");
+          showToast("Нет карточек канбана для обновления");
           return;
         }
 
-        processed += batch.processed ?? 0;
+        const batchProcessed = batch.processed ?? 0;
+        processed += batchProcessed;
         changedSum += batch.changed ?? 0;
         skippedSum += batch.skipped ?? 0;
         noCardSum += batch.noCard ?? 0;
         unmappedSum += batch.unmapped ?? 0;
-        const nextAfter =
-          typeof batch.afterOrderId === "string" ? batch.afterOrderId : null;
-        if (
-          !batch.finished &&
-          !batch.rateLimited &&
-          nextAfter &&
-          nextAfter === afterOrderId
-        ) {
-          throw new Error("Пакет не сдвинулся. Повторите обновление.");
+        if (queue.length > 0) {
+          if (batch.rateLimited && batchProcessed === 0) {
+            /* тот же пакет после паузы */
+          } else if (batchProcessed > 0) {
+            queueIndex += batchProcessed;
+          } else {
+            queueIndex += slice.length;
+          }
+          finished = queueIndex >= queue.length && !batch.rateLimited;
+        } else {
+          const nextAfter =
+            typeof batch.afterOrderId === "string" ? batch.afterOrderId : null;
+          if (
+            !batch.finished &&
+            !batch.rateLimited &&
+            nextAfter &&
+            nextAfter === afterOrderId
+          ) {
+            throw new Error("Пакет не сдвинулся. Повторите обновление.");
+          }
+          afterOrderId = nextAfter ?? afterOrderId;
+          finished = Boolean(batch.finished);
         }
-        afterOrderId = nextAfter ?? afterOrderId;
-        finished = Boolean(batch.finished);
         const shownTotal = Math.max(totalCount, processed);
         setDone(Math.min(processed, shownTotal));
         setStatus(
@@ -243,6 +277,7 @@ export function KanbanMembersBackfillButton({
     disabled,
     formatProgressLine,
     linkedOrderCount,
+    refreshTargets,
     onComplete,
     onRunningChange,
     running,
@@ -251,7 +286,7 @@ export function KanbanMembersBackfillButton({
 
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   const tip =
-    "Обновить с Kaiten карточки на доске: колонку, сроки, срочность, участников (наряды CRM не меняет)";
+    "Обновить с Kaiten все карточки канбана: колонку, сроки, срочность, участников (наряды CRM не меняет)";
 
   return (
     <div className="contents">

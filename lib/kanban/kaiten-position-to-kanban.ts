@@ -1,5 +1,8 @@
 import type { KanbanAppState, KanbanBoard, KanbanCard, KanbanColumn } from "@/lib/kanban/types";
-import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
+import {
+  findCardByLinkedOrderId,
+  findCardLocationByCardId,
+} from "@/lib/kanban/chat-sync";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import {
@@ -92,9 +95,12 @@ export function applyKaitenPositionToKanbanState(
     columnTitle: string | null;
     sortOrder?: number | null;
     trackLane?: string | null;
+    cardId?: string;
   },
 ): boolean {
-  const loc = findCardByLinkedOrderId(state, orderId);
+  const loc = opts.cardId
+    ? findCardLocationByCardId(state, opts.cardId)
+    : findCardByLinkedOrderId(state, orderId);
   if (!loc) return false;
   const board = state.boards[loc.boardIndex];
   if (!board?.columns?.length) return false;

@@ -19,6 +19,8 @@ type Body = {
   action?: unknown;
   afterOrderId?: unknown;
   limit?: unknown;
+  targets?: unknown;
+  total?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -77,10 +79,19 @@ export async function POST(req: Request) {
         : KANBAN_MEMBERS_BACKFILL_BATCH_SIZE;
   const limit = Number.isFinite(limitRaw) ? limitRaw : KANBAN_MEMBERS_BACKFILL_BATCH_SIZE;
 
+  const clientTotal =
+    typeof body.total === "number"
+      ? body.total
+      : typeof body.total === "string"
+        ? Number.parseInt(body.total, 10)
+        : undefined;
+
   const result = await runKanbanMembersBackfillBatch(ordersPrisma, auth, {
     tenantId,
     afterOrderId,
     limit,
+    targets: body.targets,
+    clientTotal,
   });
 
   return NextResponse.json(result);

@@ -54,6 +54,26 @@ export function parseKanbanAppState(raw: unknown): KanbanAppState | null {
   return state as KanbanAppState;
 }
 
+export function findCardLocationByCardId(
+  state: KanbanAppState,
+  cardId: string,
+): CardLocation | null {
+  const want = String(cardId || "").trim();
+  if (!want) return null;
+  for (let bi = 0; bi < state.boards.length; bi += 1) {
+    const board = state.boards[bi]!;
+    for (let ci = 0; ci < board.columns.length; ci += 1) {
+      const col = board.columns[ci]!;
+      for (let i = 0; i < col.cards.length; i += 1) {
+        if (String(col.cards[i]!.id || "").trim() === want) {
+          return { boardIndex: bi, columnIndex: ci, cardIndex: i };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export function findCardByLinkedOrderId(
   state: KanbanAppState,
   orderId: string,
