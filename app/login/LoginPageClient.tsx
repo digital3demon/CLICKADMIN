@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import { writeUiDesignToLocalStorage } from "@/lib/ui-design";
 
 const inputClass =
   "input-elegant mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500";
@@ -106,6 +107,7 @@ export function LoginPageClient() {
         return;
       }
       writeClientStorageBucket("demo");
+      writeUiDesignToLocalStorage("harmony");
       const dest =
         typeof j.next === "string" && j.next.startsWith("/") ? j.next : "/orders";
       router.replace(dest);

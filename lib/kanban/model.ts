@@ -1620,34 +1620,33 @@ export function defaultAppState(): KanbanAppState {
 }
 
 /**
- * Демо-сессия: одна доска «Работы», карточки без привязки к наряду (linkedOrderId) удаляются.
+ * Демо: те же доски, что в основной CRM (ортопедия / ортодонтия / производство).
+ * Карточки без наряда убираем — в демо нет «свободных» зеркал Kaiten.
  */
 export function normalizeDemoKanbanAppState(state: KanbanAppState): KanbanAppState {
   const next = structuredClone(state);
-  const pick =
-    next.boards.find((b) => b.id === next.activeBoardId) ?? next.boards[0];
-  if (!pick) {
-    const b = createInitialBoard();
-    b.title = "Работы";
-    b.cardTypes = demoKanbanPriceCardTypes();
-    migrateBoard(b);
-    next.boards = [b];
-    next.activeBoardId = b.id;
-    return next;
+  if (!next.boards?.length) {
+    return defaultAppState();
   }
-  migrateBoard(pick);
-  pick.title = "Работы";
-  pick.cardTypes = demoKanbanPriceCardTypes();
-  for (const col of pick.columns) {
-    col.cards = (col.cards || []).filter((c) => Boolean(c.linkedOrderId));
+  ensureMirroredKanbanBoardsForKaiten(next);
+  ensureProductionBoardInState(next);
+  for (const board of next.boards) {
+    migrateBoard(board);
+    for (const col of board.columns) {
+      col.cards = (col.cards || []).filter((c) => Boolean(c.linkedOrderId));
+    }
+    normalizeBoardCardTypes(board);
   }
-  normalizeBoardCardTypes(pick);
-  next.boards = [pick];
-  next.activeBoardId = pick.id;
+  if (!next.boards.some((b) => b.id === next.activeBoardId)) {
+    next.activeBoardId =
+      next.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
+      next.boards[0]?.id ??
+      next.activeBoardId;
+  }
   return next;
 }
 
-/** Начальное состояние канбана для демо (одна доска «Работы», без лишних карточек). */
+/** Начальное состояние канбана для демо — как defaultAppState основной CRM. */
 export function demoKanbanDefaultState(): KanbanAppState {
   return normalizeDemoKanbanAppState(defaultAppState());
 }
@@ -2437,7 +2436,7 @@ function linkedOrderKanbanActivityCreateText(
 }
 
 export type MergeKaitenLinkedOrdersOptions = {
-  /** В демо: тип карточки по первой позиции прайса; дорожка = доска «Работы». */
+  /** Демо: тип по позиции прайса, если совпал; раскладка досок как в основной CRM. */
   demo?: boolean;
   /**
    * `replaceEligible` (default) — убрать linked-карточки, которых нет в `rows`
@@ -2683,8 +2682,7 @@ function linkedOrderKanbanBlockedAtIso(
 
 /**
  * Подмешивает карточки нарядов на канбан.
- * Демо — только активная доска «Работы».
- * Боевой режим — две доски «Ортопедия» / «Ортодонтия» по `kaitenTrackLane` наряда.
+ * Демо и бой — доски «Ортопедия» / «Ортодонтия» по `kaitenTrackLane` наряда.
  */
 export function mergeKaitenLinkedOrdersIntoAppState(
   state: KanbanAppState,
@@ -2697,105 +2695,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   const orderIds = new Set(visibleRows.map((r) => r.id));
   const demo = Boolean(opts?.demo);
   const upsertOnly = opts?.mode === "upsertOnly";
-
-  if (demo) {
-    const activeBoard =
-      next.boards.find((b) => b.id === next.activeBoardId) ??
-      getKanbanLayoutTemplateBoard(next);
-    if (!activeBoard || !activeBoard.columns.length) return next;
-    if (!upsertOnly) {
-      for (const col of activeBoard.columns) {
-        col.cards = col.cards.filter(
-          (c) => !c.linkedOrderId || orderIds.has(c.linkedOrderId),
-        );
-      }
-    }
-    normalizeBoardCardTypes(activeBoard);
-    for (const row of visibleRows) {
-      if (isLinkedOrderArchivedOnBoard(activeBoard, row.id)) continue;
-      const cardDbId = `kaiten-order-${row.id}`;
-      const dueDateAt = parseIsoToDate(row.dueDate);
-      const title = buildKaitenCardTitle({
-        orderNumber: row.orderNumber,
-        patientName: row.patientName,
-        doctor: { fullName: row.doctorFullName || "—" },
-        dueDate: dueDateAt,
-        kaitenLabDueHasTime: row.kaitenAdminDueHasTime !== false,
-        kaitenCardTitleLabel: row.kaitenCardTitleLabel,
-        kaitenCardType: row.kaitenCardTypeName
-          ? { name: row.kaitenCardTypeName }
-          : null,
-        isUrgent: row.isUrgent,
-        urgentCoefficient: row.urgentCoefficient,
-      });
-      const desc = linkedOrderKanbanDescription(row, true);
-      const effType = resolveLinkedOrderCardTypeId(activeBoard, row, true);
-      const fallbackTypeId = effType || (activeBoard.cardTypes?.[0]?.id ?? "");
-      const targetCol = resolveOrderKanbanColumn(
-        activeBoard,
-        row.demoKanbanColumn,
-      );
-      const found = findLinkedCardOnBoard(activeBoard, row.id);
-      const nowIso = new Date().toISOString();
-      if (found) {
-        const hasKaiten =
-          row.kaitenCardId != null && Number.isFinite(row.kaitenCardId);
-        if (hasKaiten && found.col.id !== targetCol.id) {
-          moveLinkedCardToColumn(found.card, found.col, targetCol);
-        }
-        found.card.title = title;
-        found.card.description = desc;
-        applyContinuesFromOrderToKanbanCard(found.card, row);
-        found.card.kaitenCardId = row.kaitenCardId ?? null;
-        found.card.linkedOrderId = row.id;
-        found.card.linkedOrderNumber = row.orderNumber;
-        found.card.cardTypeId = fallbackTypeId;
-        found.card.trackLane = DEMO_KANBAN_TRACK_LANE_ID;
-        found.card.blocked = !!row.kaitenBlocked;
-        found.card.blockReason = (row.kaitenBlockReason || "").trim();
-        found.card.kaitenCardSortOrder = row.kaitenCardSortOrder ?? null;
-        found.card.blockedAt = linkedOrderKanbanBlockedAtIso(row, nowIso);
-        if (!found.card.blocked) {
-          found.card.blockedByUserId = "";
-        }
-        found.card.updatedAt = nowIso;
-        mergeOrderAttachmentsIntoLinkedCard(found.card, row.id, row);
-      } else {
-        const card = createCard({
-          id: cardDbId,
-          title,
-          description: desc,
-          cardTypeId: fallbackTypeId,
-          dueDate: "",
-          urgent: false,
-          linkedOrderId: row.id,
-          linkedOrderNumber: row.orderNumber,
-          kaitenCardId: row.kaitenCardId ?? null,
-          kaitenCardSortOrder: row.kaitenCardSortOrder ?? null,
-          trackLane: DEMO_KANBAN_TRACK_LANE_ID,
-          blocked: !!row.kaitenBlocked,
-          blockReason: (row.kaitenBlockReason || "").trim(),
-          blockedAt: linkedOrderKanbanBlockedAtIso(row, nowIso),
-          blockedByUserId: "",
-          activity: [
-            {
-              id: generateId("act"),
-              type: "create",
-              text: linkedOrderKanbanActivityCreateText(row, true),
-              userId: "",
-              at: nowIso,
-            },
-        ],
-      });
-        applyContinuesFromOrderToKanbanCard(card, row);
-        mergeOrderAttachmentsIntoLinkedCard(card, row.id, row);
-        targetCol.cards.unshift(card);
-      }
-    }
-    dedupeLinkedOrderCardsOnBoard(activeBoard);
-    sortMirrorLinkedCardsInBoard(activeBoard);
-    return next;
-  }
 
   ensureMirroredKanbanBoardsForKaiten(next);
   if (!upsertOnly) {
@@ -2837,8 +2736,8 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       urgentCoefficient: row.urgentCoefficient,
     });
     const title = resolveLinkedOrderKanbanTitle(row, titleFromOrder);
-    const desc = linkedOrderKanbanDescription(row, false);
-    const effType = resolveLinkedOrderCardTypeId(targetBoard, row, false);
+    const desc = linkedOrderKanbanDescription(row, demo);
+    const effType = resolveLinkedOrderCardTypeId(targetBoard, row, demo);
     const fallbackTypeId = effType || (targetBoard.cardTypes?.[0]?.id ?? "");
     const lane = normalizeKaitenTrackLaneForBoard(row.kaitenTrackLane);
 
@@ -2856,7 +2755,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     if (foundEff) {
       const hasKaiten =
         row.kaitenCardId != null && Number.isFinite(row.kaitenCardId);
-      if (hasKaiten && foundEff.col.id !== targetCol.id) {
+      if (foundEff.col.id !== targetCol.id && (hasKaiten || demo)) {
         pushActivity(
           foundEff.card,
           `Перемещена в «${targetCol.title}» (Kaiten)`,
@@ -2903,7 +2802,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
           {
             id: generateId("act"),
             type: "create",
-            text: linkedOrderKanbanActivityCreateText(row, false),
+            text: linkedOrderKanbanActivityCreateText(row, demo),
             userId: "",
             at: nowIso,
           },

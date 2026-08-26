@@ -84,10 +84,7 @@ import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { orderPathById } from "@/lib/order-public-ref";
 import { ORDER_SHIPPED_ROW_CLASS } from "@/lib/order-shipped-row-class";
-import {
-  crmCityAddressTextClass,
-  isClinicAddressInCrmCity,
-} from "@/lib/crm-lab-city";
+import { crmCityAddressTextClass } from "@/lib/crm-lab-city";
 import {
   mergeOrderListRowClass,
   resolveOrderListHarmonyRowState,
@@ -1157,14 +1154,14 @@ export default async function OrdersPage({
                   labDate={labDateFormatted}
                   appointmentDate={appointmentDateFormatted}
                   kaitenColumnTitle={o.kaitenColumnTitle}
-                  kaitenTrackLane={isDemo ? null : o.kaitenTrackLane}
+                  kaitenTrackLane={o.kaitenTrackLane}
                   demoKanbanColumn={o.demoKanbanColumn}
                   demoCardTypeName={o.kaitenCardType?.name ?? null}
                   kaitenCardId={isDemo ? null : o.kaitenCardId}
                   kaitenBlocked={isDemo ? false : blocked}
                   kaitenBlockReason={isDemo ? null : o.kaitenBlockReason}
                   kaitenFilterHref={kaitenStatusFilterHref}
-                  boardFilterHref={isDemo ? null : boardFilterHref}
+                  boardFilterHref={boardFilterHref}
                   isDemoMode={isDemo}
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
@@ -1302,11 +1299,11 @@ export default async function OrdersPage({
                         demoKanbanColumn={o.demoKanbanColumn}
                         demoCardTypeName={o.kaitenCardType?.name ?? null}
                         kaitenColumnTitle={o.kaitenColumnTitle}
-                        kaitenTrackLane={isDemo ? null : o.kaitenTrackLane}
+                        kaitenTrackLane={o.kaitenTrackLane}
                         kaitenBlocked={isDemo ? false : blocked}
                         kaitenBlockReason={isDemo ? null : o.kaitenBlockReason}
                         filterHref={kaitenStatusFilterHref}
-                        boardFilterHref={isDemo ? null : boardFilterHref}
+                        boardFilterHref={boardFilterHref}
                         placement="underOrderNumber"
                         isDemoMode={isDemo}
                         includeCardType={false}
@@ -1389,7 +1386,7 @@ export default async function OrdersPage({
                     <div data-col-body>
                     {o.clinic?.address?.trim() ? (
                       <span
-                        className={`block hyphens-auto break-words text-center ${crmCityAddressTextClass(isClinicAddressInCrmCity(o.clinic.address))}`}
+                        className={`block hyphens-auto break-words text-center ${crmCityAddressTextClass(o.clinic.address)}`}
                         title={o.clinic.address.trim()}
                       >
                         {o.clinic.address.trim()}

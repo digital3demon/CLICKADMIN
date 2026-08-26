@@ -155,9 +155,7 @@ export function OrderListKaitenColumnTag({
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
   const underOrder = placement === "underOrderNumber";
-  const boardLabel = isDemoMode
-    ? null
-    : kaitenTrackLaneListLabel(kaitenTrackLane);
+  const boardLabel = kaitenTrackLaneListLabel(kaitenTrackLane);
   // Под №: чуть крупнее и с запасом по бокам (раньше text-[9–10px]/px-1.5 было «впритык»).
   const padClass = underOrder
     ? "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:text-[12px]"
@@ -238,7 +236,7 @@ export function OrderListKaitenColumnTag({
     !hasKaitenColumnLabel &&
     kaitenCardId == null;
   const effectiveFilterHref = filterHref;
-  const effectiveBoardFilterHref = isDemoMode ? null : boardFilterHref;
+  const effectiveBoardFilterHref = boardFilterHref;
   const kaitenColTrimmed = kaitenColumnTitle?.trim() ?? "";
   const kaitenPillClass = getKaitenColumnPillClassFromOrder({
     kaitenColumnTitle: kaitenColTrimmed || null,

@@ -35,9 +35,10 @@ async function prepareClient(
     await ensureClinicSourceDoctorColumn(client);
     await ensureClinicUsesPaperDocsColumn(client);
     await ensureOrderAttachmentDiskRelPathColumn(client);
-    await ensureFinanceOfficeDebtColumns(client);
     await ensureCorrectionClarifyColumns(client);
   }
+  /** SQLite без migrate и демо-Postgres после старого db push. */
+  await ensureFinanceOfficeDebtColumns(client);
   return client;
 }
 

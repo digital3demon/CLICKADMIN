@@ -13,10 +13,7 @@ import {
 } from "@/lib/order-list-row-accent";
 import { orderPathById } from "@/lib/order-public-ref";
 import { SHELL_LAPTOP_MEDIA } from "@/lib/crm-layout-tiers";
-import {
-  crmCityAddressTextClass,
-  isClinicAddressInCrmCity,
-} from "@/lib/crm-lab-city";
+import { crmCityAddressTextClass } from "@/lib/crm-lab-city";
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -227,7 +224,7 @@ export function OrdersListTableRow({
               ) : null}
               {clinicAddress ? (
                 <div
-                  className={`truncate text-xs ${crmCityAddressTextClass(isClinicAddressInCrmCity(clinicAddress))}`}
+                  className={`truncate text-xs ${crmCityAddressTextClass(clinicAddress)}`}
                   title={clinicAddress}
                 >
                   {clinicAddress}

@@ -30,10 +30,7 @@ import {
   resolveOrderListRowAccentKind,
 } from "@/lib/order-list-row-accent";
 import { shipmentsListHref } from "@/lib/shipments-list-query";
-import {
-  crmCityAddressTextClass,
-  isClinicAddressInCrmCity,
-} from "@/lib/crm-lab-city";
+import { crmCityAddressTextClass } from "@/lib/crm-lab-city";
 import { ListRowUnfold } from "@/components/layout/ListRowUnfold";
 
 const TAGS_PAGE_SIZE = clampOrdersPageSize(null);
@@ -487,7 +484,7 @@ export function ShipmentsOrdersTable({
                   <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-body)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     {o.clinic?.address?.trim() ? (
                       <span
-                        className={`block hyphens-auto break-words text-center ${crmCityAddressTextClass(isClinicAddressInCrmCity(o.clinic.address))}`}
+                        className={`block hyphens-auto break-words text-center ${crmCityAddressTextClass(o.clinic.address)}`}
                         title={o.clinic.address.trim()}
                       >
                         {o.clinic.address.trim()}

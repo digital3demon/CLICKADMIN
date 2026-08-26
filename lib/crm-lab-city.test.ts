@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isClinicAddressInCrmCity } from "./crm-lab-city";
+import {
+  crmCityAddressTextClass,
+  isClinicAddressInCrmCity,
+} from "./crm-lab-city";
 
 describe("isClinicAddressInCrmCity", () => {
   it("улица без города — свой (СПб)", () => {
@@ -16,7 +19,7 @@ describe("isClinicAddressInCrmCity", () => {
     );
   });
 
-  it("чужой город не подсвечиваем", () => {
+  it("чужой город — не свой (янтарь в списке)", () => {
     expect(isClinicAddressInCrmCity("г. Москва, Тверская ул., 1")).toBe(false);
     expect(isClinicAddressInCrmCity("Казань, ул. Баумана, 10")).toBe(false);
     expect(
@@ -27,5 +30,27 @@ describe("isClinicAddressInCrmCity", () => {
   it("пустой адрес — не свой", () => {
     expect(isClinicAddressInCrmCity("")).toBe(false);
     expect(isClinicAddressInCrmCity("   ")).toBe(false);
+  });
+});
+
+describe("crmCityAddressTextClass", () => {
+  it("СПб и улица без города — без янтаря", () => {
+    expect(crmCityAddressTextClass("Кондратьевский пр., д. 39")).not.toContain(
+      "amber",
+    );
+    expect(crmCityAddressTextClass("г. Санкт-Петербург, Невский пр.")).not.toContain(
+      "amber",
+    );
+  });
+
+  it("чужой город — янтарь, кириллица до и после", () => {
+    expect(
+      crmCityAddressTextClass("клиника г. Москва, Тверская ул., 1 филиал"),
+    ).toContain("amber");
+  });
+
+  it("пустой адрес — без янтаря", () => {
+    expect(crmCityAddressTextClass("")).not.toContain("amber");
+    expect(crmCityAddressTextClass("   ")).not.toContain("amber");
   });
 });

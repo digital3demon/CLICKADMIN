@@ -30,7 +30,6 @@ import {
   mergeKaitenLinkedOrdersIntoAppState,
   removeLinkedOrderCardsFromAppState,
   normalizeDemoKanbanAppState,
-  demoTrackLanes,
   pushActivity,
   restoreArchivedCardOnBoard,
   restoreStoppedCardOnBoard,
@@ -3250,8 +3249,6 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         canManageKanbanBlock={canManageKanbanBlock}
         onOpenLinkedCard={(id) => setCardModalId(id)}
         onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}
-        trackLaneOptions={isDemo ? [...demoTrackLanes()] : undefined}
-        trackLaneFieldLabel={isDemo ? "Доска" : undefined}
         isDemo={isDemo}
       />
 

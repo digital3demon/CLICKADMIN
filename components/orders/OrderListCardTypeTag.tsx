@@ -54,7 +54,7 @@ export function OrderListCardTypeTag({
     <span
       className={`inline-flex min-w-0 max-w-full items-center justify-center rounded-full text-center font-medium uppercase tracking-wide ${padClass} ${
         color
-          ? ""
+          ? "saturate-50"
           : "bg-[var(--surface-subtle)] text-[var(--text-secondary)] ring-1 ring-[var(--card-border)]"
       }`}
       style={

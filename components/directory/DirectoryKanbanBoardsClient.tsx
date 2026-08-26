@@ -168,7 +168,7 @@ export function DirectoryKanbanBoardsClient({
           mergeKanbanStatePreservingLocalBoards(appState, remoteState),
           lastCardTypeLanesRef.current,
         );
-        if (!isDemo) ensureProductionBoardInState(next);
+        ensureProductionBoardInState(next);
         setAppState(next);
         saveKanbanState(next, isDemo);
       }
@@ -601,8 +601,9 @@ export function DirectoryKanbanBoardsClient({
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             {isDemo ? (
               <>
-                В демо доступна одна доска «Работы»; на ней только карточки нарядов.
-                Данные сохраняются в хранилище CRM, как на{" "}
+                В демо те же доски, что в основной CRM (ортопедия, ортодонтия,
+                производство); на них только карточки нарядов. Данные — в хранилище
+                CRM, как на{" "}
                 <Link
                   href="/kanban"
                   className="text-[var(--sidebar-blue)] hover:underline"

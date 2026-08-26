@@ -17,6 +17,7 @@ import type {
 } from "@/lib/auth/client-session-bootstrap.server";
 import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
 import { writeClientStorageBucket } from "@/lib/client-storage-bucket";
+import { writeUiDesignToLocalStorage } from "@/lib/ui-design";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
 
 type SessionUserContextValue = {
@@ -162,6 +163,7 @@ export function SessionUserProvider({
     const next = parseSessionPayload(j);
     setSingleUser(next.singleUser);
     setIsDemo(next.isDemo);
+    if (next.isDemo) writeUiDesignToLocalStorage("harmony");
     setKanbanAdminMentionTag(next.kanbanAdminMentionTag);
     setUser(next.user);
     setReady(true);
@@ -171,6 +173,7 @@ export function SessionUserProvider({
     setSingleUser(Boolean(boot.singleUser));
     setIsDemo(Boolean(boot.demo));
     writeClientStorageBucket(boot.demo ? "demo" : "live");
+    if (boot.demo) writeUiDesignToLocalStorage("harmony");
     setKanbanAdminMentionTag(boot.kanbanAdminMentionTag ?? null);
     setUser(boot.user);
     setReady(true);

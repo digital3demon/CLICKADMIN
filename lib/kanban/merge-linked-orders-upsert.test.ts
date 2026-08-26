@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import {
   defaultAppState,
+  demoKanbanDefaultState,
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
+  KANBAN_BOARD_PRODUCTION_ID,
   mergeKaitenLinkedOrdersIntoAppState,
+  normalizeDemoKanbanAppState,
   removeLinkedOrderCardsFromAppState,
 } from "@/lib/kanban/model";
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
@@ -169,6 +172,36 @@ describe("mergeKaitenLinkedOrdersIntoAppState upsertOnly", () => {
       ]!;
     expect(card.linkedOrderNumber).toBe("2607-299");
     expect(card.title).toContain("2607-299");
+  });
+});
+
+describe("demo kanban visual = main CRM", () => {
+  it("демо-состояние держит ортопедию, ортодонтию и производство", () => {
+    const demo = demoKanbanDefaultState();
+    const ids = demo.boards.map((b) => b.id);
+    expect(ids).toContain(KANBAN_BOARD_ORTHOPEDICS_ID);
+    expect(ids).toContain(KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(ids).toContain(KANBAN_BOARD_PRODUCTION_ID);
+    expect(demo.boards.some((b) => b.title === "Работы")).toBe(false);
+  });
+
+  it("демо-merge кладёт наряд на ортодонтию по lane", () => {
+    const merged = mergeKaitenLinkedOrdersIntoAppState(
+      normalizeDemoKanbanAppState(defaultAppState()),
+      [
+        sampleRow("order-odon", {
+          kaitenTrackLane: "ORTHODONTICS",
+          kaitenColumnTitle: "К исполнению",
+        }),
+      ],
+      { demo: true, mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(merged, "order-odon")!;
+    expect(merged.boards[loc.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(
+      merged.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!
+        .trackLane,
+    ).toBe("ORTHODONTICS");
   });
 });
 

@@ -5,6 +5,7 @@ import {
   DemoKanbanColumn,
   EmailDirection,
   EmailFolderType,
+  KaitenTrackLane,
   LabWorkStatus,
   OrderChatCorrectionSource,
   OrderChatInboxItemType,
@@ -15,8 +16,11 @@ import {
 } from "@prisma/client";
 import { emptyProsthetics, prostheticsToJson } from "@/lib/order-prosthetics";
 import { ORDER_NUMBER_SETTINGS_ID } from "@/lib/order-number";
+import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
 import { ensureKaitenDirectory } from "@/lib/kaiten-directory-bootstrap";
 import { DEFAULT_TENANT_ID } from "@/lib/tenant-constants";
+import { KAITEN_MIRROR_KANBAN_COLUMNS } from "@/lib/kanban/model";
+import { UI_DESIGN_CLIENT_STATE_KEY } from "@/lib/ui-design";
 import { kanbanOrderCommentsStateKey } from "@/lib/kanban/kanban-order-comments";
 
 const OWNER_ID = "cm_demo_owner_user_v1";
@@ -28,10 +32,22 @@ const DEMO_AUTHOR = "Владелец (демо)";
  * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
  * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
  */
-export const DEMO_SEED_REVISION = 6;
+export const DEMO_SEED_REVISION = 7;
 const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
 /** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
 const DEMO_ORDER_COUNT_MIN = 50;
+
+function demoMirrorColumnTitle(
+  col: (typeof DemoKanbanColumn)[keyof typeof DemoKanbanColumn],
+  ix: number,
+): string {
+  if (col === DemoKanbanColumn.NEW) return "НА СКАН";
+  if (col === DemoKanbanColumn.DONE) return "Сдана админам";
+  const mid = KAITEN_MIRROR_KANBAN_COLUMNS.filter(
+    (c) => c.title !== "НА СКАН" && c.title !== "Сдана админам",
+  );
+  return mid[ix % mid.length]?.title ?? "К исполнению";
+}
 
 function pad3(n: number): string {
   return String(n).padStart(3, "0");
@@ -99,6 +115,7 @@ export async function isDemoDatabaseSeeded(db: PrismaClient): Promise<boolean> {
 
 /** Полная демо-выгрузка: клиники, врачи, наряды, прайс, склад, курьеры, фейковая почта и чат. */
 export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
+  await ensureFinanceOfficeDebtColumns(db);
   await db.$transaction(
     async (tx) => {
     await tx.orderCustomTag.deleteMany();
@@ -210,6 +227,18 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           passwordHash: demoStaffPasswordHash,
           isActive: true,
           lastLoginAt: hoursAgo(12 + si),
+        },
+      });
+    }
+
+    const demoUserIds = [OWNER_ID, ...staffSeeds.map((u) => u.id)];
+    for (const userId of demoUserIds) {
+      await tx.userClientState.create({
+        data: {
+          userId,
+          tenantId: DEFAULT_TENANT_ID,
+          key: UI_DESIGN_CLIENT_STATE_KEY,
+          value: { design: "harmony" },
         },
       });
     }
@@ -842,12 +871,11 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           : null;
       /** Как в CRM-списке: ФИО без «(подсказка)» — иначе personNameSurnameInitials даёт «О. (.». */
       const patientName = `${surname} ${initials}`;
-      const kaitenColumnTitle =
-        col === DemoKanbanColumn.NEW
-          ? "Новые"
-          : col === DemoKanbanColumn.IN_PROGRESS
-            ? "В работе"
-            : "Готово";
+      const kaitenColumnTitle = demoMirrorColumnTitle(col, ix);
+      const kaitenTrackLane =
+        ix % 5 === 0
+          ? KaitenTrackLane.ORTHODONTICS
+          : KaitenTrackLane.ORTHOPEDICS;
 
       const order = await tx.order.create({
         data: {
@@ -866,7 +894,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           demoKanbanColumn: col,
           kaitenColumnTitle,
           kaitenCardTypeId: kt.id,
-          kaitenTrackLane: null,
+          kaitenTrackLane,
           kaitenDecideLater: false,
           clientOrderText,
           notes,

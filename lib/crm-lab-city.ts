@@ -1,6 +1,6 @@
 /**
  * Город лаборатории CRM (по умолчанию СПб) ↔ адрес клиники в списке нарядов.
- * Явный чужой город («г. Москва») — не свой; улица без города — считаем местной.
+ * Явный чужой город («г. Москва») — не свой (янтарь в списке); улица без города — местная.
  * Границы токенов без \b: кириллица для JS не «словесные» буквы.
  */
 
@@ -92,9 +92,16 @@ export function isClinicAddressInCrmCity(
   return true;
 }
 
-/** Жирный янтарь — тот же город, что лаборатория. */
-export function crmCityAddressTextClass(inCrmCity: boolean): string {
-  return inCrmCity
-    ? "font-bold text-amber-700 dark:text-amber-400"
-    : "text-[var(--text-secondary)]";
+const ADDRESS_MUTED_CLASS = "text-[var(--text-secondary)]";
+const ADDRESS_OUT_OF_CITY_CLASS = "font-bold text-amber-700 dark:text-amber-400";
+
+/** Жирный янтарь — другой город; СПб / улица без города — обычный цвет. */
+export function crmCityAddressTextClass(
+  address: string | null | undefined,
+): string {
+  const raw = String(address ?? "").trim();
+  if (!raw) return ADDRESS_MUTED_CLASS;
+  return isClinicAddressInCrmCity(raw)
+    ? ADDRESS_MUTED_CLASS
+    : ADDRESS_OUT_OF_CITY_CLASS;
 }

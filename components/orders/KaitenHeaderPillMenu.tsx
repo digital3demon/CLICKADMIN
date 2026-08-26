@@ -67,7 +67,7 @@ function DemoKanbanHeaderPill({
   return (
     <div
       className={`inline-flex min-h-9 max-w-[min(100vw-8rem,16rem)] items-center gap-1.5 rounded-full px-2.5 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide shadow-sm sm:min-h-10 sm:px-3 sm:text-xs ${LAB_WORK_STATUS_PILL_STYLES.TO_SCAN}`}
-      title="Колонка на доске «Работы» (канбан демо)"
+      title="Колонка канбана (демо, как в основной CRM)"
       role="status"
     >
       <span className="truncate">{label}</span>

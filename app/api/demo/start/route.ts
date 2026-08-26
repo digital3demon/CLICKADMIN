@@ -11,6 +11,7 @@ import { isDemoDatabaseSeeded, OWNER_EMAIL, OWNER_ID } from "@/lib/demo-seed";
 import { getDemoPrisma } from "@/lib/prisma-demo";
 import { isSingleUserPortable } from "@/lib/auth/single-user";
 import { DEFAULT_TENANT_ID } from "@/lib/tenant-constants";
+import { UI_DESIGN_COOKIE_KEY } from "@/lib/ui-design";
 import {
   consumeDemoAccessCodeOrThrow,
   DemoAccessCodeError,
@@ -94,5 +95,11 @@ export async function POST(req: Request) {
   const res = NextResponse.json({ ok: true, next: "/orders" });
   clearSessionCookie(res);
   setDemoSessionCookie(res, token);
+  res.cookies.set(UI_DESIGN_COOKIE_KEY, "harmony", {
+    httpOnly: false,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
   return res;
 }

@@ -13,6 +13,7 @@ import {
 } from "@/lib/prisma-demo";
 import { unlinkDemoSqliteFiles } from "@/lib/demo-db-path";
 import { seedDemoDatabase } from "@/lib/demo-seed";
+import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
 import { resolvePrismaSchemaPath } from "@/lib/prisma-schema-path";
 
 /**
@@ -31,14 +32,18 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
   if (isSqliteFileUrl(url)) {
     unlinkDemoSqliteFiles();
     await runPrismaDbPush(url);
-    await seedDemoDatabase(getDemoPrisma());
+    const demo = getDemoPrisma();
+    await ensureFinanceOfficeDebtColumns(demo);
+    await seedDemoDatabase(demo);
     return;
   }
 
   if (isPostgresUrl(url)) {
     const ready = await isDemoPostgresSchemaReady();
     if (ready) {
-      await seedDemoDatabase(getDemoPrisma());
+      const demo = getDemoPrisma();
+      await ensureFinanceOfficeDebtColumns(demo);
+      await seedDemoDatabase(demo);
       return;
     }
     await disconnectDemoPrisma();
