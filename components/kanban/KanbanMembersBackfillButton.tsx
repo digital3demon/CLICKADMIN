@@ -76,6 +76,7 @@ export function KanbanMembersBackfillButton({
   disabled,
   refreshTargets = [],
   linkedOrderCount = 0,
+  onBeforeRefresh,
   onRunningChange,
   onComplete,
   showToast,
