@@ -2,6 +2,7 @@ import "server-only";
 
 import type JSZip from "jszip";
 import { CRM_BACKUP_S3_DATA_PREFIXES } from "@/lib/crm-backup/file-roots";
+import { zipRelFromS3ObjectKey } from "@/lib/crm-backup/s3-key-to-disk";
 import {
   getS3ObjectBytes,
   isS3StorageEnabled,
@@ -21,6 +22,10 @@ export async function addS3CrmFilesToZip(zip: JSZip): Promise<{
       if (key.startsWith("crm-dumps/")) continue;
       const buf = await getS3ObjectBytes(key);
       zip.file(`s3/${key}`, buf);
+      const diskZip = zipRelFromS3ObjectKey(key);
+      if (diskZip && !zip.file(diskZip)) {
+        zip.file(diskZip, buf);
+      }
       fileCount += 1;
       bytes += buf.length;
     }

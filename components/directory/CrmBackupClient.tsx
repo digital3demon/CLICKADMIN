@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { announceCrmMaintenance } from "@/components/layout/CrmMaintenanceOverlay";
 import { CRM_BACKUP_CONFIRM_PHRASE } from "@/lib/crm-backup/types";
 
 type LastBackup = {
@@ -62,6 +63,7 @@ export function CrmBackupClient() {
     setBusy("backup");
     setErr(null);
     setOkInfo(null);
+    announceCrmMaintenance("backup");
     try {
       const res = await fetch("/api/directory/crm-backup", {
         method: "POST",
@@ -81,6 +83,7 @@ export function CrmBackupClient() {
     } catch {
       setErr("Не удалось сделать бекап");
     } finally {
+      announceCrmMaintenance(null);
       setBusy(null);
     }
   }, []);
@@ -122,6 +125,7 @@ export function CrmBackupClient() {
     setBusy("restore");
     setErr(null);
     setOkInfo(null);
+    announceCrmMaintenance("restore");
     try {
       const body = new FormData();
       body.set("file", file);
@@ -141,11 +145,12 @@ export function CrmBackupClient() {
       }
       setOkInfo(
         j.hint ??
-          "База восстановлена. Обновите страницу. При ошибках — перезапустите CRM.",
+          "База восстановлена, почта и Kaiten подтянуты. Обновите страницу. При ошибках — перезапустите CRM.",
       );
     } catch {
       setErr("Не удалось восстановить");
     } finally {
+      announceCrmMaintenance(null);
       setBusy(null);
     }
   }, [confirm, file]);
@@ -157,10 +162,9 @@ export function CrmBackupClient() {
           Полный бекап CRM
         </h3>
         <p className="mt-1 max-w-2xl text-sm text-[var(--text-secondary)]">
-          В архив входит вся база и все файлы: вложения нарядов, почта,
-          ClickMig, аватары, шаблоны договоров, датасет ИИ, объекты S3 (кроме
-          логов и самих zip-дампов). Каждый день в 00:00 МСК файл в хранилище
-          перезаписывается. Восстановление заменяет базу и эти файлы.
+          Архив рассчитан на переезд: база, папка data, вложения (диск и S3),
+          .env. На новом сервере ставите тот же релиз CRM, восстанавливаете
+          архивом — данные те же. Логи и старые zip-дампы не входят.
         </p>
       </div>
       {disabled ? (
@@ -197,11 +201,34 @@ export function CrmBackupClient() {
       </div>
       <div className="space-y-2 border-t border-[var(--card-border)] pt-4">
         <h4 className="text-sm font-semibold text-[var(--text-strong)]">
+          Новый сервер
+        </h4>
+        <p className="max-w-2xl text-sm text-[var(--text-secondary)]">
+          Скачайте текущий zip, на новой машине разверните тот же код CRM,
+          CRM не запускайте. Затем из корня проекта:
+        </p>
+        <pre className="max-w-3xl overflow-x-auto rounded-md border border-[var(--card-border)] bg-[var(--input-bg)] p-3 text-xs text-[var(--text-strong)]">
+          {`cd /home/ВАШ_ПУТЬ
+node scripts/crm-restore-from-backup.cjs --file /home/ВАШ_ПУТЬ/crm-backup-current.zip --confirm ВОССТАНОВИТЬ --write-env
+npm run db:migrate:deploy
+npm start`}
+        </pre>
+        <pre className="max-w-3xl overflow-x-auto rounded-md border border-[var(--card-border)] bg-[var(--input-bg)] p-3 text-xs text-[var(--text-strong)]">
+          {`cd C:\\Users\\sevas\\Documents\\Курсор проекты\\dental-lab-crm
+node scripts/crm-restore-from-backup.cjs --file C:\\путь\\crm-backup-current.zip --confirm ВОССТАНОВИТЬ --write-env
+npm run db:migrate:deploy
+npm start`}
+        </pre>
+      </div>
+      <div className="space-y-2 border-t border-[var(--card-border)] pt-4">
+        <h4 className="text-sm font-semibold text-[var(--text-strong)]">
           Восстановление
         </h4>
         <p className="text-sm text-[var(--text-secondary)]">
           Загрузите zip полного бекапа и введите {CRM_BACKUP_CONFIRM_PHRASE}.
-          Текущие данные будут заменены.
+          Текущие данные будут заменены. В конце подтянутся почта и Kaiten
+          (если интеграция включена в конфигурации). На время операции CRM
+          недоступна.
         </p>
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-semibold text-[var(--text-strong)]">Файл</span>

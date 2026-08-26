@@ -15,6 +15,7 @@ import {
 } from "@/components/layout/desktop-sidebar-collapse";
 import { APP_SIDEBAR_W_COLLAPSED } from "@/lib/app-sidebar-collapse";
 import { APP_SIDEBAR_W_EXPANDED } from "@/lib/crm-layout-tiers";
+import { CrmMaintenanceOverlay } from "@/components/layout/CrmMaintenanceOverlay";
 import { Sidebar } from "./Sidebar";
 
 /** Слева от липких полос на mobile: кнопка меню (0.75rem + 2.75rem) + небольшой зазор. */
@@ -172,6 +173,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
 
       <OrderCorrectionToastStack />
       <OrderBackgroundUploadToast />
+      <CrmMaintenanceOverlay />
     </div>
   );
 }

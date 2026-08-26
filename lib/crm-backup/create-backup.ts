@@ -14,6 +14,7 @@ import {
 import { addLocalCrmFilesToZip } from "@/lib/crm-backup/pack-local-files";
 import { addS3CrmFilesToZip } from "@/lib/crm-backup/pack-s3-files";
 import { storeCurrentCrmBackup } from "@/lib/crm-backup/store";
+import { withCrmMaintenance } from "@/lib/crm-backup/progress-lock";
 import {
   CRM_FULL_BACKUP_KIND,
   CRM_FULL_BACKUP_VERSION,
@@ -22,6 +23,13 @@ import {
 } from "@/lib/crm-backup/types";
 
 export async function createAndStoreCrmBackup(opts: {
+  tenantId: string;
+  source: CrmBackupSource;
+}): Promise<CrmBackupMeta> {
+  return withCrmMaintenance("backup", () => createAndStoreCrmBackupUnlocked(opts));
+}
+
+async function createAndStoreCrmBackupUnlocked(opts: {
   tenantId: string;
   source: CrmBackupSource;
 }): Promise<CrmBackupMeta> {
@@ -46,6 +54,28 @@ export async function createAndStoreCrmBackup(opts: {
   const remote = await addS3CrmFilesToZip(zip);
   payloadBytes += local.bytes + remote.bytes;
   zip.file(
+    "HOW_TO_RESTORE.txt",
+    [
+      "Перенос CRM на новый сервер из этого архива.",
+      "",
+      "1) Поставьте тот же релиз CRM (код + npm ci + сборка), сервер не запускайте.",
+      "2) Скопируйте архив в каталог проекта.",
+      "3) Linux:",
+      "   cd /home/ВАШ_ПУТЬ",
+      "   node scripts/crm-restore-from-backup.cjs --file /home/ВАШ_ПУТЬ/crm-backup-current.zip --confirm ВОССТАНОВИТЬ --write-env",
+      "   npm run db:migrate:deploy",
+      "   npm start",
+      "4) Windows (PowerShell):",
+      "   cd C:\\Users\\sevas\\Documents\\Курсор проекты\\dental-lab-crm",
+      "   node scripts/crm-restore-from-backup.cjs --file C:\\путь\\crm-backup-current.zip --confirm ВОССТАНОВИТЬ --write-env",
+      "   npm run db:migrate:deploy",
+      "   npm start",
+      "",
+      "Архив: база, папка data (кроме логов/дампов), файлы вне data, .env, объекты S3.",
+      "",
+    ].join("\n"),
+  );
+  zip.file(
     "meta.json",
     JSON.stringify(
       {
@@ -58,6 +88,8 @@ export async function createAndStoreCrmBackup(opts: {
         bytes: payloadBytes,
         localFileCount: local.fileCount,
         s3FileCount: remote.fileCount,
+        envFiles: local.envFiles,
+        portable: true,
       },
       null,
       2,

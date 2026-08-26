@@ -50,12 +50,14 @@ async function mapMembersToCrm(
   tenantId: string,
   auth: KaitenAuth,
   members: KaitenCardMemberRow[],
+  directoryCache?: Awaited<ReturnType<typeof loadKaitenUsersDirectory>>,
 ): Promise<{
   assignees: string[];
   participants: string[];
   unmappedLabels: string[];
 }> {
-  const directory = await loadKaitenUsersDirectory(db, tenantId, auth);
+  const directory =
+    directoryCache ?? (await loadKaitenUsersDirectory(db, tenantId, auth));
   const assignees: string[] = [];
   const participants: string[] = [];
   const unmappedLabels: string[] = [];
@@ -87,12 +89,13 @@ export async function mapKaitenCardMembersToCrm(
   tenantId: string,
   auth: KaitenAuth,
   members: KaitenCardMemberRow[],
+  directoryCache?: Awaited<ReturnType<typeof loadKaitenUsersDirectory>>,
 ): Promise<{
   assignees: string[];
   participants: string[];
   unmappedLabels: string[];
 }> {
-  return mapMembersToCrm(db, tenantId, auth, members);
+  return mapMembersToCrm(db, tenantId, auth, members, directoryCache);
 }
 
 export function applyInboundMembersToKanbanCard(

@@ -33,6 +33,7 @@
     "db:migrate:deploy": "node scripts/prisma-migrate-deploy.cjs",
     "db:migrate:resolve:attachment-disk": "prisma migrate resolve --applied 20260420190000_order_attachment_disk_rel_path",
     "db:backup": "node --env-file=.env scripts/db-backup.cjs",
+    "crm:restore": "node scripts/crm-restore-from-backup.cjs",
     "db:migrate:sqlite-to-pg:dry-run": "node --env-file=.env scripts/migrate-sqlite-to-postgres.cjs --dry-run",
     "db:migrate:sqlite-to-pg": "node --env-file=.env scripts/migrate-sqlite-to-postgres.cjs",
     "db:migrate:sqlite-to-pg:force": "node --env-file=.env scripts/migrate-sqlite-to-postgres.cjs --force",

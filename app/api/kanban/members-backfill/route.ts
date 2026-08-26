@@ -12,6 +12,8 @@ import {
 } from "@/lib/kanban/kaiten-members-backfill";
 
 export const dynamic = "force-dynamic";
+/** Не держать пакет дольше прокси — клиент шлёт следующие сам. */
+export const maxDuration = 60;
 
 type Body = {
   action?: unknown;
@@ -55,12 +57,13 @@ export async function POST(req: Request) {
   }
 
   const action = typeof body.action === "string" ? body.action.trim() : "batch";
-  const ordersPrisma = await getOrdersPrisma();
 
   if (action === "count") {
-    const total = await countKanbanMembersBackfillOrders(ordersPrisma, tenantId);
+    const total = await countKanbanMembersBackfillOrders(tenantId);
     return NextResponse.json({ total });
   }
+
+  const ordersPrisma = await getOrdersPrisma();
 
   const afterOrderId =
     typeof body.afterOrderId === "string" && body.afterOrderId.trim()

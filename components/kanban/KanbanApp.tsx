@@ -130,6 +130,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { KanbanMembersBackfillButton } from "./KanbanMembersBackfillButton";
+import { linkedOrderIdsOnKanbanBoard } from "@/lib/kanban/kanban-linked-order-ids";
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
 import { BoardCanvas } from "./BoardCanvas";
@@ -2821,6 +2822,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             {!isDemo &&
             (kanbanCardPerms.manageAssignees || kanbanCardPerms.manageParticipants) ? (
               <KanbanMembersBackfillButton
+                linkedOrderCount={linkedOrderIdsOnKanbanBoard(appState).length}
                 onRunningChange={(running) => {
                   kanbanPersistPausedRef.current = running;
                   if (running && kanbanStateSaveTimerRef.current) {

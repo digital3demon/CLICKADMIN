@@ -203,7 +203,8 @@ function isRateLimitExemptPath(pathname: string, method: string): boolean {
     pathname.startsWith("/api/order-chat-messages/toasts") ||
     pathname.startsWith("/api/order-notifications/toasts") ||
     pathname.startsWith("/api/order-prosthetics-requests/toasts") ||
-    pathname.startsWith("/api/orders/search-suggest")
+    pathname.startsWith("/api/orders/search-suggest") ||
+    pathname.startsWith("/api/crm-backup/progress")
   );
 }
 

@@ -16,3 +16,27 @@ export function linkedOrderIdsOnKanbanBoard(
   }
   return [...ids];
 }
+
+/**
+ * Следующая страница id (лексикографически, как Prisma orderBy id asc).
+ * Без огромного `IN (...)` на всю доску — иначе SQLite/драйвер зависает на «подсчёте».
+ */
+export function nextLinkedOrderIdPage(
+  ids: readonly string[],
+  afterOrderId: string | null | undefined,
+  limit: number,
+): { page: string[]; finished: boolean } {
+  const take = Math.max(1, Math.floor(limit));
+  const sorted = [...ids].filter((id) => String(id).trim()).sort();
+  const after = String(afterOrderId ?? "").trim();
+  let start = 0;
+  if (after) {
+    start = sorted.findIndex((id) => id > after);
+    if (start < 0) return { page: [], finished: true };
+  }
+  const page = sorted.slice(start, start + take);
+  return {
+    page,
+    finished: page.length === 0 || start + page.length >= sorted.length,
+  };
+}

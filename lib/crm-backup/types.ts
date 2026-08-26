@@ -1,5 +1,5 @@
 export const CRM_FULL_BACKUP_KIND = "crm-full-backup";
-export const CRM_FULL_BACKUP_VERSION = 2;
+export const CRM_FULL_BACKUP_VERSION = 3;
 export const CRM_BACKUP_CONFIRM_PHRASE = "ВОССТАНОВИТЬ";
 
 export function isCrmBackupDisabled(): boolean {

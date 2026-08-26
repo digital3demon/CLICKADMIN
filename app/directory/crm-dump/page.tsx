@@ -16,7 +16,7 @@ export default async function DirectoryCrmDumpPage() {
   return (
     <ModuleFrame
       title="Бекап и восстановление CRM"
-      description="Полный бекап всей CRM (база и файлы) в хранилище — каждый день в 00:00 МСК перезаписывает предыдущий. Срез за месяц — отдельно, только скачивание."
+      description="Полный бекап для переезда на другой сервер: база, файлы и .env. Каждый день в 00:00 МСК архив перезаписывается. Срез за месяц — отдельно."
       descriptionClassName="max-w-3xl"
     >
       <div className="space-y-8">

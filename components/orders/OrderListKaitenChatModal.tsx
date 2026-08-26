@@ -108,11 +108,6 @@ type KanbanChatPayload = {
   } | null;
 };
 
-function isNoKaitenCardError(errorText: string | null | undefined): boolean {
-  const t = String(errorText || "").toLowerCase();
-  return t.includes("не привяз") || t.includes("нет карточки kaiten");
-}
-
 type KanbanChatCommentPayload = {
   id: string | number;
   text?: string;
@@ -168,13 +163,6 @@ function kaitenSnapshotToCommentRows(
     source: "KAITEN" as const,
     syncStatus: "synced" as const,
   }));
-}
-
-function mergeChatCommentsForDisplay(
-  kanbanComments: CommentRow[],
-  kaitenComments: CommentRow[],
-): CommentRow[] {
-  return kanbanComments.length > 0 ? kanbanComments : kaitenComments;
 }
 
 export function OrderListKaitenChatModal({
@@ -279,88 +267,65 @@ export function OrderListKaitenChatModal({
   );
 
   const load = useCallback(async () => {
-    setLoading(true);
     setLoadError(null);
     setChatMode("kanban");
+    setLoading(true);
     try {
-      // Как карточка на доске: local=1 — без полного JSON канбана.
       const chatRes = await fetch(`/api/orders/${orderId}/kanban-chat?local=1`, {
         credentials: "include",
         cache: "no-store",
       });
       const chatData = (await chatRes.json().catch(() => ({}))) as KanbanChatPayload;
       applyOrderHeader(chatData.orderHeader);
-      const hasCard = chatRes.ok && chatData.hasCard === true;
-      let kanbanComments =
-        hasCard
-          ? normalizeKanbanChatComments(chatData.comments)
-          : chatRes.ok && Array.isArray(chatData.comments) && chatData.comments.length > 0
-            ? normalizeKanbanChatComments(chatData.comments)
-            : [];
-      const kanbanImages =
-        chatRes.ok && Array.isArray(chatData.cardImages) ? chatData.cardImages : [];
-
-      if (
-        needsOrderListKaitenChatFallback({
-          mirrorOk: chatRes.ok,
-          commentCount: kanbanComments.length,
-        })
-      ) {
-        const kaitenChatRes = await fetch(`/api/orders/${orderId}/kaiten/chat`, {
-          credentials: "include",
-          cache: "no-store",
-        });
-        if (kaitenChatRes.ok) {
-          const kaitenChatData = (await kaitenChatRes.json().catch(() => ({}))) as {
-            comments?: KaitenSnapshot["comments"];
-          };
-          const fromKaiten = kaitenSnapshotToCommentRows(kaitenChatData.comments);
-          if (fromKaiten.length > 0) {
-            kanbanComments = fromKaiten;
-          }
-        }
-      }
-
-      if (chatRes.ok && (hasCard || kanbanComments.length > 0)) {
-        setChatMode(hasCard ? "kanban" : "kaiten");
-        setSnap({
-          configured: true,
-          card: {},
-          trackLane: null,
-          columns: [],
-          lanes: [],
-          comments: kanbanComments,
-          cardImages: kanbanImages,
-          kaitenCardUrl: null,
-        });
-        return;
-      }
-
-      // Нет карточки канбана — fallback на полный snapshot Kaiten.
-      const kaitenRes = await fetch(`/api/orders/${orderId}/kaiten`);
-      const kaitenData = (await kaitenRes.json().catch(() => ({}))) as {
-        error?: string;
-      } & Partial<KaitenSnapshot>;
-      if (kaitenRes.ok) {
-        const s = kaitenData as KaitenSnapshot;
-        const kaitenComments = kaitenSnapshotToCommentRows(s.comments);
-        setChatMode("kaiten");
-        setSnap({
-          ...s,
-          comments: mergeChatCommentsForDisplay(kanbanComments, kaitenComments),
-          cardImages: kanbanImages.length > 0 ? kanbanImages : s.cardImages ?? [],
-        });
-        return;
-      }
-
-      if (isNoKaitenCardError(kaitenData.error)) {
-        setLoadError(kaitenData.error ?? "Нет карточки чата для этого наряда");
+      if (!chatRes.ok) {
+        setLoadError(chatData.error ?? "Не удалось загрузить чат канбана");
         setSnap(null);
         return;
       }
 
-      setLoadError(kaitenData.error ?? "Не удалось загрузить чат");
-      setSnap(null);
+      const kanbanComments = Array.isArray(chatData.comments)
+        ? normalizeKanbanChatComments(chatData.comments)
+        : [];
+      const kanbanImages = Array.isArray(chatData.cardImages)
+        ? chatData.cardImages
+        : [];
+      setChatMode("kanban");
+      setSnap({
+        configured: true,
+        card: {},
+        trackLane: null,
+        columns: [],
+        lanes: [],
+        comments: kanbanComments,
+        cardImages: kanbanImages,
+        kaitenCardUrl: null,
+      });
+      setLoading(false);
+
+      if (
+        !needsOrderListKaitenChatFallback({
+          mirrorOk: true,
+          commentCount: kanbanComments.length,
+        })
+      ) {
+        return;
+      }
+
+      const kaitenChatRes = await fetch(`/api/orders/${orderId}/kaiten/chat`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!kaitenChatRes.ok) return;
+      const kaitenChatData = (await kaitenChatRes.json().catch(() => ({}))) as {
+        comments?: KaitenSnapshot["comments"];
+      };
+      const fromKaiten = kaitenSnapshotToCommentRows(kaitenChatData.comments);
+      if (fromKaiten.length === 0) return;
+      setSnap((prev) =>
+        prev && prev.comments.length === 0
+          ? { ...prev, comments: fromKaiten }
+          : prev,
+      );
     } catch {
       setLoadError("Сеть недоступна");
       setSnap(null);
@@ -794,9 +759,9 @@ export function OrderListKaitenChatModal({
 
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">
-          {loading ? (
+          {loading && !snap ? (
             <p className="text-sm text-[var(--text-muted)]">Загрузка…</p>
-          ) : loadError ? (
+          ) : loadError && !snap ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
               <p>{loadError}</p>
               <button
