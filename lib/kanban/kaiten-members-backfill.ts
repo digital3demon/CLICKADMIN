@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { PrismaClient } from "@prisma/client";
+import type { KaitenTrackLane, PrismaClient } from "@prisma/client";
 import { getPrisma } from "@/lib/get-prisma";
 import { kaitenMembersFingerprint } from "@/lib/kaiten-members-parse";
 import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
@@ -210,7 +210,7 @@ export async function runKanbanMembersBackfillBatch(
   const cfg = cfg0 ? await withResolvedKaitenBoards(cfg0) : null;
   const directory = await loadKaitenUsersDirectory(db, tenantId, auth);
   const burst = { burst: true as const };
-  const pendingLaneByOrderId = new Map<string, string>();
+  const pendingLaneByOrderId = new Map<string, KaitenTrackLane>();
 
   for (const target of work) {
     lastOrderId = target.cardId;
