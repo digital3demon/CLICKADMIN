@@ -8,7 +8,10 @@ import {
   applyInboundMembersToKanbanCard,
   mapKaitenCardMembersToCrm,
 } from "@/lib/kanban/kaiten-members-inbound";
-import type { KaitenRefreshCardPatch } from "@/lib/kanban/apply-kaiten-refresh-patches";
+import {
+  slimKaitenHeadForPatch,
+  type KaitenRefreshCardPatch,
+} from "@/lib/kanban/apply-kaiten-refresh-patches";
 import {
   collectKanbanKaitenRefreshTargets,
   nextLinkedOrderIdPage,
@@ -199,6 +202,7 @@ export async function runKanbanMembersBackfillBatch(
   const orderById = new Map(orders.map((row) => [row.id, row]));
 
   let changed = 0;
+  let snapshotDirty = false;
   let skipped = 0;
   let noCard = 0;
   let unmapped = 0;
@@ -217,6 +221,7 @@ export async function runKanbanMembersBackfillBatch(
   const patches: KaitenRefreshCardPatch[] = [];
   type FetchedKaiten = {
     headCard: Record<string, unknown> | null;
+    patchHead: Record<string, unknown> | null;
     assignees: string[];
     participants: string[];
     fingerprint: string;
@@ -304,7 +309,7 @@ export async function runKanbanMembersBackfillBatch(
         directory,
       );
       fetched = {
-        headCard: head.card ?? null,
+        headCard: slimKaitenHeadForPatch(head.card) ?? head.card ?? null,
         assignees: mapped.assignees,
         participants: mapped.participants,
         fingerprint,
@@ -324,7 +329,7 @@ export async function runKanbanMembersBackfillBatch(
       participants: fetched.participants,
       fingerprint: fetched.fingerprint,
       unmappedLabels: fetched.unmappedLabels,
-      kaitenHead: fetched.headCard,
+      kaitenHead: fetched.patchHead,
     });
 
     let membersChanged = false;
@@ -426,6 +431,9 @@ export async function runKanbanMembersBackfillBatch(
           (fetched.headCard.due_date != null &&
             fetched.headCard.due_date !== false &&
             String(fetched.headCard.due_date).trim() !== "")));
+    if (membersChanged || headChanged || positionChanged) {
+      snapshotDirty = true;
+    }
     if (membersChanged || headChanged || positionChanged || inboundUseful) {
       changed += 1;
     } else {
@@ -458,12 +466,16 @@ export async function runKanbanMembersBackfillBatch(
         /* снимок канбана уже обновлён */
       }
     }
-    if (changed > 0) {
-      await corePrisma.tenantClientState.upsert({
-        where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-        create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
-        update: { value: state as never },
-      });
+    if (snapshotDirty) {
+      try {
+        await corePrisma.tenantClientState.upsert({
+          where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
+          create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
+          update: { value: state as never },
+        });
+      } catch {
+        /* клиент всё равно применит patches */
+      }
     }
   }
 

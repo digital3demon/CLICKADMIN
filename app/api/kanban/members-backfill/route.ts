@@ -87,14 +87,20 @@ export async function POST(req: Request) {
         ? Number.parseInt(body.total, 10)
         : undefined;
 
-  const result = await runKanbanMembersBackfillBatch(ordersPrisma, auth, {
-    tenantId,
-    afterOrderId,
-    limit,
-    targets: body.targets,
-    clientTotal,
-    all: body.all === true,
-  });
-
-  return NextResponse.json(result);
+  try {
+    const result = await runKanbanMembersBackfillBatch(ordersPrisma, auth, {
+      tenantId,
+      afterOrderId,
+      limit,
+      targets: body.targets,
+      clientTotal,
+      all: body.all === true,
+    });
+    return NextResponse.json(result);
+  } catch {
+    return NextResponse.json(
+      { error: "Не удалось обновить с Kaiten. Повторите." },
+      { status: 500 },
+    );
+  }
 }

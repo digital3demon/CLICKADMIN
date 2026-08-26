@@ -53,7 +53,12 @@ async function readBackfillJson(res: Response): Promise<BackfillBatchResponse> {
   try {
     return JSON.parse(text) as BackfillBatchResponse;
   } catch {
-    throw new Error("Сервер вернул не JSON. Повторите обновление.");
+    const looksHtml = /^\s*</.test(text);
+    throw new Error(
+      looksHtml
+        ? "Сервер оборвал ответ (таймаут или сбой). Повторите обновление."
+        : "Сервер вернул не JSON. Повторите обновление.",
+    );
   }
 }
 

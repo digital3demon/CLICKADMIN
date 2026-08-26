@@ -20,6 +20,26 @@ export type KaitenRefreshCardPatch = {
   kaitenHead: Record<string, unknown> | null;
 };
 
+/** В ответ API — только asap/due_date. Полная карточка Kaiten ломает JSON.stringify. */
+export function slimKaitenHeadForPatch(
+  card: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!card) return null;
+  const out: Record<string, unknown> = {};
+  if ("asap" in card) out.asap = card.asap === true;
+  if ("due_date" in card) {
+    const raw = card.due_date;
+    if (raw == null || raw === false || String(raw).trim() === "") {
+      out.due_date = null;
+    } else if (typeof raw === "string" || typeof raw === "number") {
+      out.due_date = raw;
+    } else {
+      out.due_date = String(raw);
+    }
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function applyMembersPatch(card: KanbanCard, patch: KaitenRefreshCardPatch): boolean {
   if (
     shouldKeepLocalKanbanMembers(card, {

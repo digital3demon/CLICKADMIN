@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { applyKaitenRefreshPatchesToState } from "./apply-kaiten-refresh-patches";
+import {
+  applyKaitenRefreshPatchesToState,
+  slimKaitenHeadForPatch,
+} from "./apply-kaiten-refresh-patches";
 import type { KanbanAppState, KanbanCard } from "./types";
+
+describe("slimKaitenHeadForPatch", () => {
+  it("оставляет только asap и due_date", () => {
+    const slim = slimKaitenHeadForPatch({
+      asap: true,
+      due_date: "2026-09-03",
+      description: "x".repeat(5000),
+      members: [{ id: 1 }],
+    });
+    expect(slim).toEqual({ asap: true, due_date: "2026-09-03" });
+  });
+});
 
 describe("applyKaitenRefreshPatchesToState", () => {
   it("ставит срок и людей по linkedOrderId, если cardId другой (кириллица в title)", () => {
