@@ -317,15 +317,26 @@ export async function runKanbanMembersBackfillBatch(
               ? trackLaneForBoardId(
                   boardId,
                   cfg.boardByLane,
-                  order.kaitenTrackLane,
+                  order?.kaitenTrackLane,
                 )
               : null;
-          positionChanged = applyKaitenPositionToKanbanState(state, order.id, {
-            columnTitle,
-            sortOrder,
-            trackLane: inboundLane,
-          });
-          if (inboundLane != null && inboundLane !== order.kaitenTrackLane) {
+          if (colLoc) {
+            positionChanged = applyKaitenPositionToKanbanState(
+              state,
+              target.linkedOrderId ?? "",
+              {
+                columnTitle,
+                sortOrder,
+                trackLane: inboundLane,
+                cardId: target.cardId,
+              },
+            );
+          }
+          if (
+            order &&
+            inboundLane != null &&
+            inboundLane !== order.kaitenTrackLane
+          ) {
             try {
               await db.order.update({
                 where: { id: order.id },
