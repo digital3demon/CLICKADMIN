@@ -79,7 +79,7 @@ export function payableAfterDepositRub(
  * + протетика «наше» без скидки и срочности.
  */
 async function prostheticsOurSaleTotalForDb(
-  db: PrismaClient,
+  db: DepositDb,
   prosthetics: unknown,
 ): Promise<number> {
   const ids = collectProstheticsOurItemIds([prosthetics]);
