@@ -60,7 +60,7 @@ export async function restoreCrmBackupSidecarFiles(zip: JSZip): Promise<{
       } else {
         const mapped = localRelFromS3ObjectKey(key);
         const root = mapped ? crmBackupFileRootById(mapped.rootId) : null;
-        if (root) {
+        if (mapped && root) {
           writeUnder(root.absPath, mapped.rel, bytes);
           localFiles += 1;
         }
