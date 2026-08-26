@@ -70,6 +70,7 @@ import {
   orderPayableAfterDepositRub,
   parseDraftDiscountPercentString,
 } from "@/lib/format-order-construction";
+import { depositPartyForOrder } from "@/lib/deposit-ledger";
 import {
   normalizeLegacyLabWorkStatus,
   type LabWorkStatus,
@@ -3437,6 +3438,11 @@ export function OrderEditForm({
     }
   }, [canEditOrder, initial.id, previewMode, router]);
 
+  const depositPartyLive = depositPartyForOrder(
+    clinicId === ORDER_CLINIC_PRIVATE ? null : clinicId,
+    legalEntity === LEGAL_ENTITIES[0] ? null : legalEntity,
+  );
+
   const depositTile =
     depositBalanceRub > 0 || (depositAppliedRub != null && depositAppliedRub > 0) ? (
       <div className="flex min-h-[11rem] w-full min-w-0 flex-col gap-2 rounded-lg border border-violet-400/50 bg-violet-500/10 p-3">
@@ -3444,7 +3450,7 @@ export function OrderEditForm({
           Депозит
         </div>
         <p className="text-xs text-[var(--text-secondary)]">
-          Баланс:{" "}
+          Баланс {depositPartyLive === "DOCTOR" ? "врача" : "клиники"}:{" "}
           <strong className="tabular-nums text-[var(--text-strong)]">
             {moneyRu(depositBalanceRub)}
           </strong>
@@ -3703,26 +3709,6 @@ export function OrderEditForm({
               Скопировать все
             </button>
           </div>
-          <div className="mt-3 flex w-fit max-w-full flex-nowrap items-center gap-2 overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
-              title="Нажмите — скопировать в буфер обмена"
-              className="w-fit shrink-0 truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
-            >
-              {invoiceCopyClipboardText}
-            </button>
-            <InvoiceCopyChip
-              label="Юрлицо"
-              value={clientLegalNameForCopy}
-              onCopy={(t) => void copyInvoiceBlockText(t)}
-            />
-            <InvoiceCopyChip
-              label="ИНН"
-              value={clientInnForCopy}
-              onCopy={(t) => void copyInvoiceBlockText(t)}
-            />
-          </div>
           {invoiceCopyToast ? (
             <p className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
               {invoiceCopyToast}
@@ -3732,107 +3718,117 @@ export function OrderEditForm({
             disabled={!canEditOrder}
             className="min-w-0 border-0 p-0 disabled:opacity-[0.42]"
           >
-          <div className="mt-3 min-w-0">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-5">
-                <div className="flex shrink-0 flex-col gap-2.5 sm:max-w-[15rem] sm:pt-0.5">
-                  <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-                    ЭДО и бумаги
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={invoiceSaving || !canEditOrder}
-                      aria-pressed={invoicePaperDocs}
-                      title="Бумажные документы распечатаны"
-                      onClick={() =>
-                        void toggleInvoiceDocFlag(
-                          "invoicePaperDocs",
-                          !invoicePaperDocs,
-                        )
-                      }
-                      className={
-                        invoicePaperDocs
-                          ? "rounded-md border border-stone-500 bg-stone-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-stone-800 disabled:opacity-50 sm:text-sm"
-                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                      }
-                    >
-                      бум доки
-                    </button>
-                    <button
-                      type="button"
-                      disabled={invoiceSaving || !canEditOrder}
-                      aria-pressed={invoiceSentToEdo}
-                      title="Отправлен в ЭДО"
-                      onClick={() =>
-                        void toggleInvoiceDocFlag(
-                          "invoiceSentToEdo",
-                          !invoiceSentToEdo,
-                        )
-                      }
-                      className={
-                        invoiceSentToEdo
-                          ? "rounded-md border border-cyan-500 bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-cyan-700 disabled:opacity-50 sm:text-sm"
-                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                      }
-                    >
-                      отпр эдо
-                    </button>
-                    <button
-                      type="button"
-                      disabled={invoiceSaving || !canEditOrder}
-                      aria-pressed={invoiceEdoSigned}
-                      title="Подпись в ЭДО"
-                      onClick={() =>
-                        void toggleInvoiceDocFlag(
-                          "invoiceEdoSigned",
-                          !invoiceEdoSigned,
-                        )
-                      }
-                      className={
-                        invoiceEdoSigned
-                          ? "rounded-md border border-indigo-500 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 sm:text-sm"
-                          : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
-                      }
-                    >
-                      пдпс эдо
-                    </button>
-                  </div>
-                </div>
-                <div className="min-w-0 flex-1 border-t border-[var(--card-border)] pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-                  <label
-                    className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
-                    htmlFor="oe-invoice-payment-notes"
+          <div className="mt-3 grid grid-cols-1 items-start gap-4 crm-t2:grid-cols-2 crm-t3:grid-cols-[minmax(15rem,17.5rem)_minmax(0,1fr)_minmax(0,1fr)] crm-t3:gap-5">
+            <div className="flex min-w-0 w-full max-w-md flex-col gap-3 crm-t3:max-w-none">
+              <div className="flex w-full flex-col gap-1.5 [&_button]:w-full">
+                <button
+                  type="button"
+                  onClick={() => void copyInvoiceBlockText(invoiceCopyClipboardText)}
+                  title="Нажмите — скопировать в буфер обмена"
+                  className="w-full truncate rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1 text-left font-mono text-xs font-semibold text-[var(--text-strong)] shadow-sm outline-none hover:border-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)] focus-visible:ring-1 focus-visible:ring-sky-500 sm:text-sm"
+                >
+                  {invoiceCopyClipboardText}
+                </button>
+                <InvoiceCopyChip
+                  label="Клиника"
+                  value={clientLegalNameForCopy}
+                  onCopy={(t) => void copyInvoiceBlockText(t)}
+                />
+                <InvoiceCopyChip
+                  label="ИНН"
+                  value={clientInnForCopy}
+                  onCopy={(t) => void copyInvoiceBlockText(t)}
+                />
+              </div>
+              <div className="w-full min-w-0 [&_details]:w-full [&_details]:max-w-none">
+                <DocumentFlowCompositionSpoiler
+                  lines={documentFlowCompositionRows}
+                  onCopy={(t) => void copyInvoiceBlockText(t)}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <h3 className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                  ЭДО и бумаги
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={invoiceSaving || !canEditOrder}
+                    aria-pressed={invoicePaperDocs}
+                    title="Бумажные документы распечатаны"
+                    onClick={() =>
+                      void toggleInvoiceDocFlag(
+                        "invoicePaperDocs",
+                        !invoicePaperDocs,
+                      )
+                    }
+                    className={
+                      invoicePaperDocs
+                        ? "rounded-md border border-stone-500 bg-stone-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-stone-800 disabled:opacity-50 sm:text-sm"
+                        : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                    }
                   >
-                    Комментарии к счёту и оплатам
-                  </label>
-                  <textarea
-                    id="oe-invoice-payment-notes"
-                    className={`${inputClass} min-h-[2.5rem] w-full max-w-md resize-y`}
-                    rows={2}
-                    maxLength={8000}
-                    value={invoicePaymentNotes}
-                    onChange={(e) => setInvoicePaymentNotes(e.target.value)}
-                    placeholder="Условия оплаты, напоминания, переписка с бухгалтерией…"
-                  />
-                  <div className="mt-2 border-t border-[var(--card-border)] pt-2">
-                    <OrderDocumentMailPanel
-                      orderId={initial.id}
-                      hasInvoice={Boolean(invoiceAttachmentId)}
-                      mode="thread"
-                      compact
-                    />
-                  </div>
+                    бум доки
+                  </button>
+                  <button
+                    type="button"
+                    disabled={invoiceSaving || !canEditOrder}
+                    aria-pressed={invoiceSentToEdo}
+                    title="Отправлен в ЭДО"
+                    onClick={() =>
+                      void toggleInvoiceDocFlag(
+                        "invoiceSentToEdo",
+                        !invoiceSentToEdo,
+                      )
+                    }
+                    className={
+                      invoiceSentToEdo
+                        ? "rounded-md border border-cyan-500 bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-cyan-700 disabled:opacity-50 sm:text-sm"
+                        : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                    }
+                  >
+                    отпр эдо
+                  </button>
+                  <button
+                    type="button"
+                    disabled={invoiceSaving || !canEditOrder}
+                    aria-pressed={invoiceEdoSigned}
+                    title="Подпись в ЭДО"
+                    onClick={() =>
+                      void toggleInvoiceDocFlag(
+                        "invoiceEdoSigned",
+                        !invoiceEdoSigned,
+                      )
+                    }
+                    className={
+                      invoiceEdoSigned
+                        ? "rounded-md border border-indigo-500 bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 sm:text-sm"
+                        : "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] disabled:opacity-50 sm:text-sm"
+                    }
+                  >
+                    пдпс эдо
+                  </button>
                 </div>
               </div>
+              <div>
+                <label
+                  className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]"
+                  htmlFor="oe-invoice-payment-notes"
+                >
+                  Комментарии к счёту и оплате
+                </label>
+                <textarea
+                  id="oe-invoice-payment-notes"
+                  className={`${inputClass} min-h-[7.5rem] w-full resize-y`}
+                  rows={5}
+                  maxLength={8000}
+                  value={invoicePaymentNotes}
+                  onChange={(e) => setInvoicePaymentNotes(e.target.value)}
+                  placeholder="Условия оплаты, напоминания, переписка с бухгалтерией…"
+                />
+              </div>
             </div>
-          <div
-            className="mt-3 grid grid-cols-1 items-start justify-items-start gap-4 crm-t2:grid-cols-2 crm-t2:gap-6"
-          >
-            <div className="w-fit max-w-full space-y-3">
-              <DocumentFlowCompositionSpoiler
-                lines={documentFlowCompositionRows}
-                onCopy={(t) => void copyInvoiceBlockText(t)}
-              />
+            <div className="w-full min-w-0 max-w-full space-y-3">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
                   type="button"
@@ -3934,8 +3930,16 @@ export function OrderEditForm({
                   </div>
                 ) : null}
               </div>
+              <div className="border-t border-[var(--card-border)] pt-2">
+                <OrderDocumentMailPanel
+                  orderId={initial.id}
+                  hasInvoice={Boolean(invoiceAttachmentId)}
+                  mode="thread"
+                  compact
+                />
+              </div>
             </div>
-            <div className="w-fit max-w-full space-y-3 border-t border-[var(--card-border)] pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+            <div className="w-full min-w-0 max-w-full space-y-3 border-t border-[var(--card-border)] pt-3 crm-t2:border-t-0 crm-t2:pt-0">
               <div className="flex flex-wrap items-start gap-x-3 gap-y-3">
                 <button
                   type="button"

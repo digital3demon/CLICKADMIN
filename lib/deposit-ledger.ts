@@ -12,6 +12,23 @@ import type {
 import {
   orderCompositionSubtotalAfterDiscountsRub,
 } from "@/lib/format-order-construction";
+import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
+
+/** Юрлицо наряда «Частное лицо» — депозит врача, не клиники. */
+export const ORDER_LEGAL_ENTITY_PRIVATE = "Частное лицо";
+
+export function isOrderClinicAbsent(
+  clinicId: string | null | undefined,
+): boolean {
+  const id = String(clinicId ?? "").trim();
+  return !id || id === ORDER_CLINIC_PRIVATE;
+}
+
+export function isOrderPrivatePersonLegalEntity(
+  legalEntity: string | null | undefined,
+): boolean {
+  return String(legalEntity ?? "").trim() === ORDER_LEGAL_ENTITY_PRIVATE;
+}
 
 export type DepositDb = PrismaClient | Prisma.TransactionClient;
 
@@ -63,9 +80,16 @@ export function orderPayableBeforeDepositRub(opts: {
   return clampNonNegIntRub(Math.round(sub * m));
 }
 
-/** Релевантная сторона депозита для наряда. */
-export function depositPartyForOrder(clinicId: string | null | undefined): DepositParty {
-  return clinicId ? "CLINIC" : "DOCTOR";
+/**
+ * Сторона депозита наряда: клиника, если клиника реально выбрана
+ * и юрлицо не «Частное лицо». Иначе врач (частная практика / частное лицо).
+ */
+export function depositPartyForOrder(
+  clinicId: string | null | undefined,
+  legalEntity?: string | null,
+): DepositParty {
+  if (isOrderPrivatePersonLegalEntity(legalEntity)) return "DOCTOR";
+  return isOrderClinicAbsent(clinicId) ? "DOCTOR" : "CLINIC";
 }
 
 export type DepositMutationResult = {
@@ -219,6 +243,7 @@ export async function applyDepositToOrder(
       id: true,
       clinicId: true,
       doctorId: true,
+      legalEntity: true,
       compositionDiscountPercent: true,
       urgentCoefficient: true,
       isUrgent: true,
@@ -249,6 +274,7 @@ export async function applyDepositToOrder(
     select: {
       clinicId: true,
       doctorId: true,
+      legalEntity: true,
       compositionDiscountPercent: true,
       urgentCoefficient: true,
       constructions: {
@@ -262,7 +288,7 @@ export async function applyDepositToOrder(
   });
   if (!refreshed) throw new Error("Наряд не найден");
 
-  const party = depositPartyForOrder(refreshed.clinicId);
+  const party = depositPartyForOrder(refreshed.clinicId, refreshed.legalEntity);
   const urgentMult =
     refreshed.urgentCoefficient != null &&
     Number.isFinite(refreshed.urgentCoefficient) &&

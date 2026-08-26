@@ -30,10 +30,16 @@ describe("deposit apply math", () => {
     expect(payableAfterDepositRub(5000, null)).toBe(5000);
   });
 
-  it("частная практика → DOCTOR, клиника → CLINIC", () => {
+  it("частная практика / частное лицо → DOCTOR, клиника → CLINIC", () => {
     expect(depositPartyForOrder(null)).toBe("DOCTOR");
     expect(depositPartyForOrder(undefined)).toBe("DOCTOR");
+    expect(depositPartyForOrder("__private__")).toBe("DOCTOR");
     expect(depositPartyForOrder("clinic-1")).toBe("CLINIC");
+    expect(depositPartyForOrder("clinic-1", "Частное лицо")).toBe("DOCTOR");
+    expect(depositPartyForOrder("clinic-1", "шапка Частное лицо хвост")).toBe(
+      "CLINIC",
+    );
+    expect(depositPartyForOrder("clinic-1", "ООО")).toBe("CLINIC");
   });
 
   it("payable до депозита: состав × срочность", () => {

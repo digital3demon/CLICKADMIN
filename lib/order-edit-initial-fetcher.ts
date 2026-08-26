@@ -18,6 +18,7 @@ import { getLabDueSettingsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenan
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 import { fetchMergedOrderChatCorrections } from "@/lib/order-chat-corrections-read";
+import { depositPartyForOrder } from "@/lib/deposit-ledger";
 import { fetchMergedOrderProstheticsRequests } from "@/lib/order-prosthetics-requests-read";
 
 export type FetchOrderEditInitialResult = {
@@ -239,9 +240,10 @@ export async function fetchOrderEditInitial(
     compositionDiscountPercent: order.compositionDiscountPercent ?? 0,
     depositAppliedRub: order.depositAppliedRub ?? null,
     depositAppliedParty: order.depositAppliedParty ?? null,
-    depositBalanceRub: order.clinicId
-      ? (clinic?.depositBalanceRub ?? 0)
-      : (doctor?.depositBalanceRub ?? 0),
+    depositBalanceRub:
+      depositPartyForOrder(order.clinicId, order.legalEntity) === "DOCTOR"
+        ? (doctor?.depositBalanceRub ?? 0)
+        : (clinic?.depositBalanceRub ?? 0),
     financeCalculated: order.financeCalculated === true,
     constructions: order.constructions.map((c) => ({
       category: c.category,
