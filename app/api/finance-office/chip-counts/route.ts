@@ -64,6 +64,7 @@ export async function GET(req: Request) {
         noEdoCount: 0,
         edoPaperCount: 0,
         labMentionCount: 0,
+        waitPaymentCount: 0,
       },
       { headers: { "Cache-Control": "no-store" } },
     );

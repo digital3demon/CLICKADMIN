@@ -38,6 +38,7 @@ import {
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
+  LIST_TAG_WAIT_PAYMENT,
   parseListTagParam,
   relatedOrdersListTagQuickFilters,
   listTagParamsEqual,
@@ -78,6 +79,7 @@ import { getPrisma } from "@/lib/get-prisma";
 import { loadKaitenIntegrationTenantState } from "@/lib/kaiten-integration/settings";
 import { PrismaDataLoadErrorCallout } from "@/components/layout/PrismaDataLoadErrorCallout";
 import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
+import { waitPaymentListTagWhere } from "@/lib/wait-payment-list-tag";
 import { getLabDueHmSlotsForTenant } from "@/lib/get-lab-due-hm-slots-for-tenant";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { orderPathById } from "@/lib/order-public-ref";
@@ -524,12 +526,18 @@ export default async function OrdersPage({
   const prostheticsPendingCount = prostheticsToOrderOrderCount;
 
   let labMentionCount = 0;
+  let waitPaymentCount = 0;
   if (tenantId) {
-    labMentionCount = await countOrdersWithPendingKaitenLabMentionForUser(
-      ordersPrisma,
-      statusChipCountWhere,
-      session?.sub,
-    );
+    [labMentionCount, waitPaymentCount] = await Promise.all([
+      countOrdersWithPendingKaitenLabMentionForUser(
+        ordersPrisma,
+        statusChipCountWhere,
+        session?.sub,
+      ),
+      ordersPrisma.order.count({
+        where: { AND: [statusChipCountWhere, waitPaymentListTagWhere()] },
+      }),
+    ]);
   }
 
   let kaitenColumnAlternates: string[] = [];
@@ -637,6 +645,8 @@ export default async function OrdersPage({
     (alwaysShowOrderAttentionChips ||
       labMentionCount > 0 ||
       activeFilter?.kind === "kaitenLabMention");
+  const showWaitPaymentChip =
+    waitPaymentCount > 0 || activeFilter?.kind === "waitPayment";
   return (
     <ModuleFrame
       title="Заказы"
@@ -839,6 +849,28 @@ export default async function OrdersPage({
               </span>
               <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
                 {prostheticsPendingCount}
+              </span>
+            </Link>
+          ) : null}
+          {showWaitPaymentChip ? (
+            <Link
+              href={ordersListHref({
+                limit: pageSize,
+                ...listHrefCommon,
+                tag: LIST_TAG_WAIT_PAYMENT,
+              })}
+              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+                activeFilter?.kind === "waitPayment"
+                  ? "border-rose-400/90 bg-rose-100 text-rose-950 ring-2 ring-rose-500/85 dark:border-rose-700 dark:bg-rose-950/45 dark:text-rose-100 dark:ring-rose-500/70"
+                  : "border-rose-300/70 bg-rose-100/70 text-rose-950 hover:bg-rose-100 dark:border-rose-800/60 dark:bg-rose-950/35 dark:text-rose-100 dark:hover:bg-rose-950/50"
+              }`}
+              title="Наряды с отметкой «ждем оплату»"
+            >
+              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+                Ждем оплату
+              </span>
+              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+                {waitPaymentCount}
               </span>
             </Link>
           ) : null}

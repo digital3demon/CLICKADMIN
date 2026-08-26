@@ -15,6 +15,7 @@ import {
   LIST_TAG_EDO_PAPER,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
+  LIST_TAG_WAIT_PAYMENT,
   type ParsedListTag,
 } from "@/lib/order-list-tag-filter";
 
@@ -27,6 +28,7 @@ type FinanceOfficeChipCounts = {
   noEdoCount: number;
   edoPaperCount: number;
   labMentionCount: number;
+  waitPaymentCount: number;
 };
 
 const EMPTY_COUNTS: FinanceOfficeChipCounts = {
@@ -38,6 +40,7 @@ const EMPTY_COUNTS: FinanceOfficeChipCounts = {
   noEdoCount: 0,
   edoPaperCount: 0,
   labMentionCount: 0,
+  waitPaymentCount: 0,
 };
 
 export function FinanceOfficeQuickFilterChips({
@@ -120,6 +123,8 @@ export function FinanceOfficeQuickFilterChips({
             typeof j.edoPaperCount === "number" ? j.edoPaperCount : 0,
           labMentionCount:
             typeof j.labMentionCount === "number" ? j.labMentionCount : 0,
+          waitPaymentCount:
+            typeof j.waitPaymentCount === "number" ? j.waitPaymentCount : 0,
         });
       })
       .catch(() => {
@@ -143,6 +148,7 @@ export function FinanceOfficeQuickFilterChips({
     noEdoCount,
     edoPaperCount,
     labMentionCount,
+    waitPaymentCount,
   } = counts ?? EMPTY_COUNTS;
 
   const { user } = useSessionUser();
@@ -189,6 +195,8 @@ export function FinanceOfficeQuickFilterChips({
   const showEdo = edoCount > 0 || activeFilter?.kind === "edo";
   const showNoEdo = noEdoCount > 0 || activeFilter?.kind === "noEdo";
   const showEdoPaper = edoPaperCount > 0 || activeFilter?.kind === "edoPaper";
+  const showWaitPayment =
+    waitPaymentCount > 0 || activeFilter?.kind === "waitPayment";
   const showChat =
     canAdmin &&
     (labMentionCount > 0 || activeFilter?.kind === "kaitenLabMention");
@@ -201,6 +209,7 @@ export function FinanceOfficeQuickFilterChips({
     showEdo ||
     showEdoPaper ||
     showNoEdo ||
+    showWaitPayment ||
     showChat ||
     activeFilter != null;
 
@@ -297,6 +306,27 @@ export function FinanceOfficeQuickFilterChips({
             </span>
             <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
               {financeCalculatedCount}
+            </span>
+          </Link>
+        ) : null}
+        {showWaitPayment ? (
+          <Link
+            href={financeOfficeListHref({
+              ...listCtx,
+              tag: LIST_TAG_WAIT_PAYMENT,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "waitPayment"
+                ? "border-rose-400/90 bg-rose-100 text-rose-950 ring-2 ring-rose-500/85 dark:border-rose-700 dark:bg-rose-950/45 dark:text-rose-100 dark:ring-rose-500/70"
+                : "border-rose-300/70 bg-rose-100/70 text-rose-950 hover:bg-rose-100 dark:border-rose-800/60 dark:bg-rose-950/35 dark:text-rose-100 dark:hover:bg-rose-950/50"
+            }`}
+            title="Наряды с отметкой «ждем оплату» (в выбранном периоде)"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              Ждем оплату
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {waitPaymentCount}
             </span>
           </Link>
         ) : null}

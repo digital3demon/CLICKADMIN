@@ -12,6 +12,7 @@ import {
   LIST_TAG_KAITEN_LAB_MENTION,
   LIST_TAG_ORDER_ATTENTION,
   LIST_TAG_PROSTHETICS_PENDING,
+  LIST_TAG_WAIT_PAYMENT,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 
@@ -112,6 +113,17 @@ describe("financeOfficeChipCountScopeWhere", () => {
     const json = JSON.stringify(w);
     expect(json).toContain("financeCalculated");
     expect(json).toContain("dueDate");
+  });
+
+  it("с тегом «ждем оплату» снимает clamp непросчитанных", () => {
+    const w = financeOfficeChipCountScopeWhere("t1", {
+      mode: "actual",
+      listTag: LIST_TAG_WAIT_PAYMENT,
+    });
+    const json = JSON.stringify(w);
+    expect(json).not.toContain('"financeCalculated":false');
+    expect(json).toContain("listCustomTags");
+    expect(json).toContain("ждем оплату");
   });
 
   it("с тегом Просчитано снимает clamp и добавляет financeCalculated:true", () => {

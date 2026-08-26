@@ -131,7 +131,8 @@ export function financeOfficeTagOverridesCalculated(
     parsed.kind === "noEdo" ||
     parsed.kind === "orderAttention" ||
     parsed.kind === "prostheticsPending" ||
-    parsed.kind === "kaitenLabMention"
+    parsed.kind === "kaitenLabMention" ||
+    parsed.kind === "waitPayment"
   );
 }
 

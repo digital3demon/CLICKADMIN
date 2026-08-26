@@ -29,6 +29,7 @@ import {
   orderAttentionListSupersetWhere,
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
+import { waitPaymentListTagWhere } from "@/lib/wait-payment-list-tag";
 import { clinicDocChannel } from "@/lib/clinic-doc-channel";
 import { orderInvoiceCompositionMismatch, uniqueAttentionOrderCount } from "@/lib/order-invoice-composition-mismatch";
 
@@ -260,6 +261,7 @@ export async function countFinanceOfficeQuickFilterChips(
   noEdoCount: number;
   edoPaperCount: number;
   labMentionCount: number;
+  waitPaymentCount: number;
 }> {
   // Просчитано/Не просчитано — по всему окну срока.
   // «Корректировки» — тоже по окну срока (включая просчитанные), иначе пилюля
@@ -281,6 +283,7 @@ export async function countFinanceOfficeQuickFilterChips(
     financeCalculatedCount,
     edoCounts,
     labMentionCount,
+    waitPaymentCount,
     invoiceTotalCandidates,
   ] = await Promise.all([
     db.orderChatCorrection.findMany({
@@ -333,6 +336,9 @@ export async function countFinanceOfficeQuickFilterChips(
       scope,
       opts.userId,
     ),
+    db.order.count({
+      where: { AND: [dueWindow, waitPaymentListTagWhere()] },
+    }),
     db.order.findMany({
       where: { AND: [dueWindow, { invoiceParsedTotalRub: { not: null } }] },
       select: {
@@ -403,6 +409,7 @@ export async function countFinanceOfficeQuickFilterChips(
     noEdoCount: edoCounts.noEdoCount,
     edoPaperCount: edoCounts.edoPaperCount,
     labMentionCount,
+    waitPaymentCount,
   };
 }
 
