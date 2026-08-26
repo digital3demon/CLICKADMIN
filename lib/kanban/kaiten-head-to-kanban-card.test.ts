@@ -23,6 +23,12 @@ describe("ymdFromKaitenDueDate", () => {
     expect(ymdFromKaitenDueDate(sec)).toBe("2026-08-19");
   });
 
+  it("читает due_date из объекта Kaiten", () => {
+    expect(ymdFromKaitenDueDate({ date: "2026-09-08T00:00:00.000+03:00" })).toBe(
+      "2026-09-08",
+    );
+  });
+
   it("returns null for empty", () => {
     expect(ymdFromKaitenDueDate(null)).toBeNull();
     expect(ymdFromKaitenDueDate("")).toBeNull();
@@ -51,6 +57,16 @@ describe("applyKaitenHeadFieldsToKanbanCard", () => {
     const card = { urgent: false, stageDueDate: "", dueDate: "" };
     expect(applyKaitenHeadFieldsToKanbanCard(card, { asap: true })).toBe(true);
     expect(card.urgent).toBe(true);
+  });
+
+  it("ставит срок из обёртки data и dueDate", () => {
+    const card = { urgent: false, stageDueDate: "", dueDate: "" };
+    expect(
+      applyKaitenHeadFieldsToKanbanCard(card, {
+        data: { dueDate: "2026-09-08T09:00:00.000+03:00" },
+      }),
+    ).toBe(true);
+    expect(card.stageDueDate).toBe("2026-09-08");
   });
 
   it("sets stage due from due_date", () => {

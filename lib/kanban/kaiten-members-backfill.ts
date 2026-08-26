@@ -35,7 +35,10 @@ import {
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
-import { applyKaitenHeadFieldsToKanbanCard } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import {
+  applyKaitenHeadFieldsToKanbanCard,
+  unwrapKaitenCardPayload,
+} from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { loadKaitenUsersDirectory } from "@/lib/kaiten-user-directory";
 import {
   applyKaitenPositionToKanbanState,
@@ -310,11 +313,12 @@ export async function runKanbanMembersBackfillBatch(
       );
       const fullHead =
         head.card && typeof head.card === "object"
-          ? (head.card as Record<string, unknown>)
+          ? unwrapKaitenCardPayload(head.card as Record<string, unknown>)
           : null;
+      const patchHead = slimKaitenHeadForPatch(fullHead);
       fetched = {
         headCard: fullHead,
-        patchHead: slimKaitenHeadForPatch(fullHead),
+        patchHead,
         assignees: mapped.assignees,
         participants: mapped.participants,
         fingerprint,
@@ -355,10 +359,8 @@ export async function runKanbanMembersBackfillBatch(
       ) {
         membersChanged = true;
       }
-      if (
-        fetched.headCard &&
-        applyKaitenHeadFieldsToKanbanCard(card, fetched.headCard)
-      ) {
+      const headForDue = fetched.patchHead ?? fetched.headCard;
+      if (headForDue && applyKaitenHeadFieldsToKanbanCard(card, headForDue)) {
         headChanged = true;
       }
     }

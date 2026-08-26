@@ -5,7 +5,11 @@
 import {
   findKanbanCardsForKaitenRefresh,
 } from "@/lib/kanban/chat-sync";
-import { applyKaitenHeadFieldsToKanbanCard } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import {
+  applyKaitenHeadFieldsToKanbanCard,
+  unwrapKaitenCardPayload,
+  ymdFromKaitenDueDate,
+} from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { shouldKeepLocalKanbanMembers } from "@/lib/kanban/preserve-kanban-card-head";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
@@ -20,22 +24,17 @@ export type KaitenRefreshCardPatch = {
   kaitenHead: Record<string, unknown> | null;
 };
 
-/** В ответ API — только asap/due_date. Полная карточка Kaiten ломает JSON.stringify. */
+/** В ответ API — только asap и due_date как YYYY-MM-DD. Полная карточка Kaiten ломает JSON. */
 export function slimKaitenHeadForPatch(
   card: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | null {
-  if (!card) return null;
+  const src = unwrapKaitenCardPayload(card ?? null);
+  if (!src) return null;
   const out: Record<string, unknown> = {};
-  if ("asap" in card) out.asap = card.asap === true;
-  if ("due_date" in card) {
-    const raw = card.due_date;
-    if (raw == null || raw === false || String(raw).trim() === "") {
-      out.due_date = null;
-    } else if (typeof raw === "string" || typeof raw === "number") {
-      out.due_date = raw;
-    } else {
-      out.due_date = String(raw);
-    }
+  if ("asap" in src) out.asap = src.asap === true;
+  if ("due_date" in src || "dueDate" in src) {
+    const raw = "due_date" in src ? src.due_date : src.dueDate;
+    out.due_date = ymdFromKaitenDueDate(raw);
   }
   return Object.keys(out).length > 0 ? out : null;
 }

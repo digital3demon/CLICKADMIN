@@ -16,8 +16,44 @@ import { shouldKeepLocalKanbanStageDue } from "@/lib/kanban/preserve-kanban-card
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** GET /cards/:id иногда `{ data: { due_date, asap, ... } }`. */
+export function unwrapKaitenCardPayload(
+  raw: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const inner = raw.data;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    const nested = inner as Record<string, unknown>;
+    const rawLooksLikeCard =
+      "board_id" in raw ||
+      "due_date" in raw ||
+      "asap" in raw ||
+      "column_id" in raw;
+    if (!rawLooksLikeCard) return nested;
+  }
+  return raw;
+}
+
+function dueRawFromCard(card: Record<string, unknown>): {
+  found: boolean;
+  value: unknown;
+} {
+  if ("due_date" in card) return { found: true, value: card.due_date };
+  if ("dueDate" in card) return { found: true, value: card.dueDate };
+  return { found: false, value: undefined };
+}
+
 /** due_date из Kaiten → YYYY-MM-DD (календарь МСК). */
 export function ymdFromKaitenDueDate(raw: unknown): string | null {
+  if (raw != null && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    return (
+      ymdFromKaitenDueDate(o.date) ??
+      ymdFromKaitenDueDate(o.datetime) ??
+      ymdFromKaitenDueDate(o.value) ??
+      ymdFromKaitenDueDate(o.due_date)
+    );
+  }
   if (raw == null || raw === false) return null;
   if (typeof raw === "number" && Number.isFinite(raw)) {
     const ms = raw > 0 && raw < 1e12 ? raw * 1000 : raw;
@@ -65,16 +101,18 @@ export function applyKaitenHeadFieldsToKanbanCard(
   card: KanbanHeadTarget,
   kaitenCard: Record<string, unknown>,
 ): boolean {
+  const src = unwrapKaitenCardPayload(kaitenCard) ?? kaitenCard;
   let changed = false;
-  if ("asap" in kaitenCard) {
-    const asap = kaitenCard.asap === true;
+  if ("asap" in src) {
+    const asap = src.asap === true;
     if (card.urgent !== asap) {
       card.urgent = asap;
       changed = true;
     }
   }
-  if ("due_date" in kaitenCard) {
-    const raw = kaitenCard.due_date;
+  const due = dueRawFromCard(src);
+  if (due.found) {
+    const raw = due.value;
     const empty = raw == null || raw === false || String(raw).trim() === "";
     const ymd = empty ? null : ymdFromKaitenDueDate(raw);
     if (!empty && ymd == null) {

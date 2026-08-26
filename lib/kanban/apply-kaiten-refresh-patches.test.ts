@@ -15,6 +15,16 @@ describe("slimKaitenHeadForPatch", () => {
     });
     expect(slim).toEqual({ asap: true, due_date: "2026-09-03" });
   });
+
+  it("нормализует срок из data.due_date (кириллица в title не нужна)", () => {
+    const slim = slimKaitenHeadForPatch({
+      data: {
+        due_date: { date: "2026-09-08T00:00:00.000+03:00" },
+        description: "описание",
+      },
+    });
+    expect(slim).toEqual({ due_date: "2026-09-08" });
+  });
 });
 
 describe("applyKaitenRefreshPatchesToState", () => {
