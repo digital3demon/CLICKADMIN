@@ -308,8 +308,13 @@ export async function runKanbanMembersBackfillBatch(
         members,
         directory,
       );
+      const fullHead =
+        head.card && typeof head.card === "object"
+          ? (head.card as Record<string, unknown>)
+          : null;
       fetched = {
-        headCard: slimKaitenHeadForPatch(head.card) ?? head.card ?? null,
+        headCard: fullHead,
+        patchHead: slimKaitenHeadForPatch(fullHead),
         assignees: mapped.assignees,
         participants: mapped.participants,
         fingerprint,
