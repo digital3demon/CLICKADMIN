@@ -13,6 +13,11 @@ import {
   orderCompositionSubtotalAfterDiscountsRub,
 } from "@/lib/format-order-construction";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
+import { prostheticsFromDb } from "@/lib/order-prosthetics";
+import {
+  ourLineSaleRub,
+  ourLinesSaleTotalRub,
+} from "@/lib/inventory/our-lines-sale-total";
 
 function moneyRu(n: number): string {
   return new Intl.NumberFormat("ru-RU", {
@@ -114,9 +119,27 @@ export async function GET(_req: Request, ctx: Ctx) {
       compLines,
       order.compositionDiscountPercent,
     );
-    const total = Math.round(orderSub * urgentMult * 100) / 100;
+    const ourLines = prostheticsFromDb(order.prosthetics).ourLines;
+    const ourItemIds = Array.from(
+      new Set(ourLines.map((l) => l.inventoryItemId.trim()).filter(Boolean)),
+    );
+    const invItems = ourItemIds.length
+      ? await pricingPrisma.inventoryItem.findMany({
+          where: { id: { in: ourItemIds } },
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            saleUnitPriceRub: true,
+          },
+        })
+      : [];
+    const invById = new Map(invItems.map((x) => [x.id, x]));
+    const prostheticsOurRub = ourLinesSaleTotalRub(ourLines, invItems);
+    const total =
+      Math.round((orderSub * urgentMult + prostheticsOurRub) * 100) / 100;
     let linesWithoutPrice = 0;
-    const rowsHtml = constructions
+    const constructionRowsHtml = constructions
       .map((line, i) => {
         const desc = formatConstructionDescription(line);
         const sum = lineAllocatedTotalRub(
@@ -138,6 +161,29 @@ export async function GET(_req: Request, ctx: Ctx) {
   <td style="padding:8px;border:1px solid #ccc;text-align:right">${line.unitPrice != null ? moneyRu(sum) : "—"}</td>
 </tr>`;
       })
+      .join("\n");
+
+    const prostRowsHtml = ourLines
+      .map((line, i) => {
+        const item = invById.get(line.inventoryItemId);
+        const sku = item?.sku?.trim();
+        const name = item?.name?.trim() || "Позиция склада";
+        const desc = sku ? `${sku} · ${name}` : name;
+        const sale = item?.saleUnitPriceRub;
+        const sum = ourLineSaleRub(line, invItems);
+        if (sum == null) linesWithoutPrice += 1;
+        return `<tr>
+  <td style="padding:8px;border:1px solid #ccc">${constructions.length + i + 1}</td>
+  <td style="padding:8px;border:1px solid #ccc">${escapeHtml(desc)} (протетика)</td>
+  <td style="padding:8px;border:1px solid #ccc;text-align:right">${line.quantity}</td>
+  <td style="padding:8px;border:1px solid #ccc;text-align:right">${sale != null && Number.isFinite(sale) ? moneyRu(sale) : "—"}</td>
+  <td style="padding:8px;border:1px solid #ccc;text-align:right">${sum != null ? moneyRu(sum) : "—"}</td>
+</tr>`;
+      })
+      .join("\n");
+
+    const rowsHtml = [constructionRowsHtml, prostRowsHtml]
+      .filter(Boolean)
       .join("\n");
 
     const clinicLegalFullName = cleanLegalFullName(clinic?.legalFullName);
@@ -181,7 +227,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     </tbody>
   </table>
   <p style="margin-top:20px;font-size:1.1rem"><strong>Итого:</strong> ${moneyRu(total)}</p>
-  ${urgentMult !== 1 ? `<p class="muted">К сумме работ применён коэффициент срочности ×${urgentMult}.</p>` : ""}
+  ${urgentMult !== 1 ? `<p class="muted">К сумме работ (без протетики) применён коэффициент срочности ×${urgentMult}.</p>` : ""}
   ${linesWithoutPrice > 0 ? `<p class="muted">Позиций без цены: ${linesWithoutPrice} (в сумму не включены).</p>` : ""}
   <p class="muted">Документ сформирован в CRM. При необходимости распечатайте страницу (Ctrl+P) в PDF.</p>
 </body>

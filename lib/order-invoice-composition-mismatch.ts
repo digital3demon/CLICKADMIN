@@ -13,6 +13,8 @@ export type InvoiceCompositionCompareInput = {
   urgentCoefficient: number | null;
   compositionDiscountPercent?: number | null;
   constructions: Line[];
+  /** Реализация «наше со склада»; скидка/срочность не применяются. */
+  prostheticsOurRub?: number | null;
   /** Если совпадает с текущей парой сумм — расхождение подтверждено и не светится. */
   invoiceMismatchAckFingerprint?: string | null;
 };
@@ -29,7 +31,12 @@ function compositionRubForInvoiceCompare(
     })),
     o.compositionDiscountPercent,
   );
-  return Math.round(sub * mult * 100) / 100;
+  const constructions = Math.round(sub * mult * 100) / 100;
+  const prost =
+    o.prostheticsOurRub != null && Number.isFinite(o.prostheticsOurRub)
+      ? Math.max(0, Math.round(o.prostheticsOurRub * 100) / 100)
+      : 0;
+  return Math.round((constructions + prost) * 100) / 100;
 }
 
 /** Канон в БД: целые рубли счёта и состава через двоеточие. */

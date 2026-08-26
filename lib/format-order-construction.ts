@@ -165,17 +165,39 @@ export function lineAllocatedTotalRub(
   return Math.round((my / sumSub) * orderSub * m * 100) / 100;
 }
 
-/** К оплате после срочности и вычета учтённого депозита (≥ 0). */
-export function orderPayableAfterDepositRub(
+/**
+ * Итого работы: состав после скидок × срочность + протетика «наше»
+ * (скидка и срочность на протетику не распространяются).
+ */
+export function orderWorkTotalWithProstheticsRub(
   compositionSubtotalAfterDiscounts: number,
   urgentMultiplier: number,
-  depositAppliedRub: number | null | undefined,
+  prostheticsOurRub?: number | null,
 ): number {
   const m =
     Number.isFinite(urgentMultiplier) && urgentMultiplier > 0
       ? urgentMultiplier
       : 1;
-  const before = Math.round(compositionSubtotalAfterDiscounts * m);
+  const constructions = Math.round(compositionSubtotalAfterDiscounts * m);
+  const prost =
+    prostheticsOurRub != null && Number.isFinite(prostheticsOurRub)
+      ? Math.max(0, Math.round(prostheticsOurRub))
+      : 0;
+  return constructions + prost;
+}
+
+/** К оплате после срочности и вычета учтённого депозита (≥ 0). */
+export function orderPayableAfterDepositRub(
+  compositionSubtotalAfterDiscounts: number,
+  urgentMultiplier: number,
+  depositAppliedRub: number | null | undefined,
+  prostheticsOurRub?: number | null,
+): number {
+  const before = orderWorkTotalWithProstheticsRub(
+    compositionSubtotalAfterDiscounts,
+    urgentMultiplier,
+    prostheticsOurRub,
+  );
   const applied =
     depositAppliedRub != null && Number.isFinite(depositAppliedRub)
       ? Math.max(0, Math.round(depositAppliedRub))

@@ -10,6 +10,7 @@ import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconcilia
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
 import { orderWhereReconciliationPeriod } from "@/lib/clinic-reconciliation-period";
 import { loadOrderSentAtByIds } from "@/lib/clinic-finance";
+import { prostheticWorkTotalRub } from "@/lib/inventory/sale-unit-price";
 import {
   aggregateReconciliationSummaryWithoutDiscount,
   defaultReconciliationLabLegalName,
@@ -200,7 +201,7 @@ export async function buildClinicReconciliationPdfPayload(
             orderId: true,
             quantity: true,
             totalCostRub: true,
-            item: { select: { id: true, name: true } },
+            item: { select: { id: true, name: true, saleUnitPriceRub: true } },
           },
         });
 
@@ -213,10 +214,11 @@ export async function buildClinicReconciliationPdfPayload(
     if (!oid) continue;
     const name = m.item.name.trim() || "Позиция склада";
     const qty = m.quantity;
-    const cost =
-      m.totalCostRub != null && Number.isFinite(m.totalCostRub)
-        ? m.totalCostRub
-        : 0;
+    const cost = prostheticWorkTotalRub({
+      quantity: qty,
+      saleUnitPriceRub: m.item.saleUnitPriceRub,
+      fallbackTotalRub: m.totalCostRub,
+    });
     const list = prostheticByOrder.get(oid) ?? [];
     const existing = list.find((x) => x.itemId === m.item.id);
     if (existing) {

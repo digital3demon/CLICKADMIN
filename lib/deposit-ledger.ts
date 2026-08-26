@@ -12,6 +12,10 @@ import type {
 import {
   orderCompositionSubtotalAfterDiscountsRub,
 } from "@/lib/format-order-construction";
+import {
+  collectProstheticsOurItemIds,
+  prostheticsOurSaleTotalFromJson,
+} from "@/lib/inventory/our-lines-sale-total";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 
 /** Юрлицо / имя клиники «Частное лицо» — депозит врача, не клиники. */
@@ -71,8 +75,22 @@ export function payableAfterDepositRub(
 }
 
 /**
- * Сумма к оплате до депозита: состав после % скидок × срочность.
+ * Сумма к оплате до депозита: состав после % скидок × срочность
+ * + протетика «наше» без скидки и срочности.
  */
+async function prostheticsOurSaleTotalForDb(
+  db: PrismaClient,
+  prosthetics: unknown,
+): Promise<number> {
+  const ids = collectProstheticsOurItemIds([prosthetics]);
+  if (ids.length === 0) return 0;
+  const items = await db.inventoryItem.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, saleUnitPriceRub: true },
+  });
+  return prostheticsOurSaleTotalFromJson(prosthetics, items);
+}
+
 export function orderPayableBeforeDepositRub(opts: {
   lines: Array<{
     quantity: number;
@@ -81,6 +99,7 @@ export function orderPayableBeforeDepositRub(opts: {
   }>;
   compositionDiscountPercent: number | null | undefined;
   urgentMultiplier: number;
+  prostheticsOurRub?: number | null;
 }): number {
   const sub = orderCompositionSubtotalAfterDiscountsRub(
     opts.lines,
@@ -90,7 +109,12 @@ export function orderPayableBeforeDepositRub(opts: {
     Number.isFinite(opts.urgentMultiplier) && opts.urgentMultiplier > 0
       ? opts.urgentMultiplier
       : 1;
-  return clampNonNegIntRub(Math.round(sub * m));
+  const constructions = Math.round(sub * m);
+  const prost =
+    opts.prostheticsOurRub != null && Number.isFinite(opts.prostheticsOurRub)
+      ? Math.max(0, Math.round(opts.prostheticsOurRub))
+      : 0;
+  return clampNonNegIntRub(constructions + prost);
 }
 
 /**
@@ -272,6 +296,7 @@ export async function applyDepositToOrder(
           lineDiscountPercent: true,
         },
       },
+      prosthetics: true,
     },
   });
   if (!order) throw new Error("Наряд не найден");
@@ -300,6 +325,7 @@ export async function applyDepositToOrder(
           lineDiscountPercent: true,
         },
       },
+      prosthetics: true,
     },
   });
   if (!refreshed) throw new Error("Наряд не найден");
@@ -326,10 +352,15 @@ export async function applyDepositToOrder(
       ? refreshed.urgentCoefficient
       : 1;
 
+  const prostheticsOurRub = await prostheticsOurSaleTotalForDb(
+    db,
+    refreshed.prosthetics,
+  );
   const payableBefore = orderPayableBeforeDepositRub({
     lines: refreshed.constructions,
     compositionDiscountPercent: refreshed.compositionDiscountPercent,
     urgentMultiplier: urgentMult,
+    prostheticsOurRub,
   });
 
   let balance = 0;

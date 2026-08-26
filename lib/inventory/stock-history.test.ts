@@ -40,6 +40,21 @@ describe("formatStockHistoryDescription", () => {
     expect(r.description).toMatch(/^Списано/);
   });
 
+  it("коррекция стоимости без списания, кириллица в названии", () => {
+    const r = formatStockHistoryDescription({
+      kind: "COST_CORRECTION",
+      quantity: 1,
+      unit: "шт",
+      itemLabel: "01127 · Dentium H 2.0",
+      warehouseName: "Протетика",
+      note: "закупка 120",
+    });
+    expect(r.kindLabel).toBe("Коррекция стоимости");
+    expect(r.description).toBe(
+      "Коррекция стоимости «01127 · Dentium H 2.0» на складе «Протетика». закупка 120",
+    );
+  });
+
   it("appends note", () => {
     const r = formatStockHistoryDescription({
       kind: "MANUAL_ISSUE",

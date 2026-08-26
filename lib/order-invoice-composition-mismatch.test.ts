@@ -65,6 +65,19 @@ describe("orderInvoiceCompositionMismatch", () => {
     ).toBe(true);
   });
 
+  it("скидка наряда не уменьшает протетику в составе", () => {
+    expect(
+      orderInvoiceCompositionMismatch({
+        invoiceParsedTotalRub: 1800,
+        isUrgent: true,
+        urgentCoefficient: 2,
+        compositionDiscountPercent: 50,
+        constructions: [{ quantity: 1, unitPrice: 1000, lineDiscountPercent: 0 }],
+        prostheticsOurRub: 800,
+      }),
+    ).toBe(false);
+  });
+
   it("после подтверждения новая сумма снова светится", () => {
     const o = {
       invoiceParsedTotalRub: 87_950,

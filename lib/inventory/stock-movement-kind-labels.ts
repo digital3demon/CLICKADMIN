@@ -6,6 +6,7 @@ export const STOCK_MOVEMENT_KIND_LABELS = {
   ADJUSTMENT_MINUS: "Корректировка −",
   DEFECT_WRITE_OFF: "Брак",
   RETURN_IN: "Возврат на склад",
+  COST_CORRECTION: "Коррекция стоимости",
 } as const;
 
 export type StockMovementKindKey = keyof typeof STOCK_MOVEMENT_KIND_LABELS;

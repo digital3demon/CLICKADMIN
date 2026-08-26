@@ -33,6 +33,8 @@ type InvItem = {
   manufacturer: string | null;
   /** Справочная цена из конфигурации → Склад (подставляется в приход, можно править). */
   referenceUnitPriceRub: number | null;
+  /** Цена реализации (сверка: стоимость работы). */
+  saleUnitPriceRub: number | null;
   warehouse: { id: string; name: string; warehouseType: string | null };
 };
 
@@ -50,6 +52,7 @@ type BalanceRow = {
     warehouseId?: string;
     manufacturer?: string | null;
     unitsPerSupply?: number | null;
+    saleUnitPriceRub?: number | null;
   };
   warehouse: { id: string; name: string };
 };
@@ -149,7 +152,11 @@ export function InventoryWarehouseClient() {
 
   const [kind, setKind] =
     useState<keyof typeof STOCK_MOVEMENT_KIND_LABELS>("PURCHASE_RECEIPT");
+  const isCostCorrection = kind === "COST_CORRECTION";
   const [itemId, setItemId] = useState("");
+  const [itemIds, setItemIds] = useState<string[]>([]);
+  const [purchaseCorrectionRub, setPurchaseCorrectionRub] = useState("0");
+  const [saleCorrectionRub, setSaleCorrectionRub] = useState("0");
   const [warehouseId, setWarehouseId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitCostRub, setUnitCostRub] = useState("");
@@ -213,6 +220,33 @@ export function InventoryWarehouseClient() {
       setLoadError("Не удалось загрузить данные склада. Проверьте БД и Prisma.");
     }
   }, []);
+
+  const saveSaleUnitPrice = useCallback(
+    async (itemId: string, raw: string, current: number | null | undefined) => {
+      const t = raw.trim().replace(",", ".");
+      if (t === "") {
+        if (current == null) return;
+        const res = await fetch(`/api/inventory/items/${itemId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ saleUnitPriceRub: null }),
+        });
+        if (!res.ok) return;
+        await refresh();
+        return;
+      }
+      const n = Number.parseFloat(t);
+      if (!Number.isFinite(n) || n === current) return;
+      const res = await fetch(`/api/inventory/items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saleUnitPriceRub: n }),
+      });
+      if (!res.ok) return;
+      await refresh();
+    },
+    [refresh],
+  );
 
   useEffect(() => {
     void refresh();
@@ -333,6 +367,12 @@ export function InventoryWarehouseClient() {
   }, [filteredItemsForArticle]);
 
   useEffect(() => {
+    if (kind === "COST_CORRECTION") {
+      setItemIds((prev) =>
+        prev.filter((id) => filteredItemsForArticle.some((x) => x.id === id)),
+      );
+      return;
+    }
     if (!filteredItemsForArticle.length) {
       setItemId("");
       return;
@@ -340,7 +380,7 @@ export function InventoryWarehouseClient() {
     if (!filteredItemsForArticle.some((x) => x.id === itemId)) {
       setItemId(filteredItemsForArticle[0]!.id);
     }
-  }, [filteredItemsForArticle, itemId]);
+  }, [filteredItemsForArticle, itemId, kind]);
 
   const selectedItem = useMemo(
     () => items.find((x) => x.id === itemId) ?? null,
@@ -468,6 +508,38 @@ export function InventoryWarehouseClient() {
     setFormError(null);
     setBusy(true);
     try {
+      if (isCostCorrection) {
+        if (itemIds.length === 0) {
+          setFormError("Выберите хотя бы одну позицию");
+          return;
+        }
+        const res = await fetch("/api/inventory/movements", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "COST_CORRECTION",
+            warehouseId,
+            itemIds,
+            purchaseUnitRub: purchaseCorrectionRub.trim()
+              ? Number(purchaseCorrectionRub.replace(",", "."))
+              : 0,
+            saleUnitRub: saleCorrectionRub.trim()
+              ? Number(saleCorrectionRub.replace(",", "."))
+              : 0,
+            note: note.trim() || null,
+          }),
+        });
+        const data = (await res.json()) as { error?: string; updated?: number };
+        if (!res.ok) {
+          setFormError(data.error ?? "Ошибка");
+          return;
+        }
+        setNote("");
+        setPurchaseCorrectionRub("0");
+        setSaleCorrectionRub("0");
+        await refresh();
+        return;
+      }
       let q = Number(quantity.replace(",", "."));
       if (!Number.isFinite(q) || q <= 0) {
         setFormError("Укажите положительное количество");
@@ -634,9 +706,15 @@ export function InventoryWarehouseClient() {
             <select
               className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-2 text-sm text-[var(--app-text)]"
               value={kind}
-              onChange={(e) =>
-                setKind(e.target.value as keyof typeof STOCK_MOVEMENT_KIND_LABELS)
-              }
+              onChange={(e) => {
+                const next = e.target.value as keyof typeof STOCK_MOVEMENT_KIND_LABELS;
+                setKind(next);
+                if (next === "COST_CORRECTION") {
+                  setItemIds((prev) =>
+                    prev.length ? prev : itemId ? [itemId] : [],
+                  );
+                }
+              }}
             >
               {MOVEMENT_KIND_OPTIONS.map(([k, lab]) => (
                 <option key={k} value={k}>
@@ -689,23 +767,73 @@ export function InventoryWarehouseClient() {
           </div>
           <div className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)] sm:col-span-2 lg:col-span-1">
             <span id="inv-lbl-article">Артикул / позиция</span>
-            <PrefixSearchCombobox
-              aria-labelledby="inv-lbl-article"
-              className={invComboboxClass}
-              options={articleComboboxOptions}
-              value={itemId}
-              onChange={setItemId}
-              disabled={!warehouseId || articleComboboxOptions.length === 0}
-              placeholder={
-                !warehouseId
-                  ? "Сначала выберите склад"
-                  : articleComboboxOptions.length === 0
-                    ? "Нет позиций по фильтрам"
-                    : "Артикул или название…"
-              }
-              emptyOptionLabel="Выбрать позицию"
-            />
+            {isCostCorrection ? (
+              <PrefixSearchCombobox
+                aria-labelledby="inv-lbl-article"
+                className={invComboboxClass}
+                options={articleComboboxOptions}
+                values={itemIds}
+                onValuesChange={setItemIds}
+                disabled={!warehouseId || articleComboboxOptions.length === 0}
+                placeholder={
+                  !warehouseId
+                    ? "Сначала выберите склад"
+                    : articleComboboxOptions.length === 0
+                      ? "Нет позиций по фильтрам"
+                      : "Несколько артикулов…"
+                }
+                emptyOptionLabel="Снять выбранные"
+              />
+            ) : (
+              <PrefixSearchCombobox
+                aria-labelledby="inv-lbl-article"
+                className={invComboboxClass}
+                options={articleComboboxOptions}
+                value={itemId}
+                onChange={setItemId}
+                disabled={!warehouseId || articleComboboxOptions.length === 0}
+                placeholder={
+                  !warehouseId
+                    ? "Сначала выберите склад"
+                    : articleComboboxOptions.length === 0
+                      ? "Нет позиций по фильтрам"
+                      : "Артикул или название…"
+                }
+                emptyOptionLabel="Выбрать позицию"
+              />
+            )}
           </div>
+          {isCostCorrection ? (
+            <>
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
+                <span>Закупка за ед., ₽</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-2 text-sm"
+                  value={purchaseCorrectionRub}
+                  onChange={(e) => setPurchaseCorrectionRub(e.target.value)}
+                  placeholder="0 — не менять"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
+                <span>Реализация за ед., ₽</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-2 text-sm"
+                  value={saleCorrectionRub}
+                  onChange={(e) => setSaleCorrectionRub(e.target.value)}
+                  placeholder="0 — не менять"
+                />
+              </label>
+              <p className="sm:col-span-2 xl:col-span-4 text-[11px] leading-snug text-[var(--text-muted)]">
+                0 или пусто — это поле не меняется. Можно выбрать несколько
+                артикулов: одна закупка и/или реализация применяется ко всем.
+                Закупка обновляет справочную цену и среднюю на остатке.
+              </p>
+            </>
+          ) : (
           <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-1">
             <span className="text-xs font-medium text-[var(--text-secondary)]">
               Количество
@@ -758,6 +886,7 @@ export function InventoryWarehouseClient() {
               </p>
             ) : null}
           </div>
+          )}
           {kind === "PURCHASE_RECEIPT" ? (
             <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
               <span>Цена закупки за ед., ₽</span>
@@ -804,10 +933,14 @@ export function InventoryWarehouseClient() {
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3 xl:col-span-4">
             <button
               type="submit"
-              disabled={busy || !itemId || !warehouseId}
+              disabled={
+                busy ||
+                !warehouseId ||
+                (isCostCorrection ? itemIds.length === 0 : !itemId)
+              }
               className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
             >
-              Записать движение
+              {isCostCorrection ? "Записать коррекцию" : "Записать движение"}
             </button>
             {formError ? (
               <span className="text-sm text-red-600">{formError}</span>
@@ -869,13 +1002,14 @@ export function InventoryWarehouseClient() {
           </div>
         </div>
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-[var(--card-border)] text-left text-xs uppercase tracking-wide text-[var(--text-muted)]">
                 <th className="py-2 pr-3 font-medium">Склад</th>
                 <th className="py-2 pr-3 font-medium">Позиция</th>
                 <th className="py-2 pr-3 font-medium">Остаток</th>
-                <th className="py-2 font-medium">Средняя закуп., ₽</th>
+                <th className="py-2 pr-3 font-medium">Средняя закуп., ₽</th>
+                <th className="py-2 font-medium">Реализация, ₽</th>
               </tr>
             </thead>
             <tbody>
@@ -892,8 +1026,28 @@ export function InventoryWarehouseClient() {
                   <td className="py-2 pr-3 tabular-nums">
                     {formatNum(r.quantityOnHand)}
                   </td>
-                  <td className="py-2 tabular-nums text-[var(--text-body)]">
+                  <td className="py-2 pr-3 tabular-nums text-[var(--text-body)]">
                     {formatMoney(r.averageUnitCostRub)}
+                  </td>
+                  <td className="py-2">
+                    <input
+                      className="w-24 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 text-xs tabular-nums"
+                      defaultValue={
+                        r.item.saleUnitPriceRub != null
+                          ? String(r.item.saleUnitPriceRub)
+                          : ""
+                      }
+                      key={`${r.item.id}-${r.item.saleUnitPriceRub ?? "empty"}`}
+                      disabled={busy}
+                      title="Цена реализации за ед. — в сверке как стоимость работы"
+                      onBlur={(e) => {
+                        void saveSaleUnitPrice(
+                          r.item.id,
+                          e.target.value,
+                          r.item.saleUnitPriceRub ?? null,
+                        );
+                      }}
+                    />
                   </td>
                 </tr>
               ))}
@@ -1028,7 +1182,9 @@ export function InventoryWarehouseClient() {
                         "—"
                       )}
                     </td>
-                    <td className="py-2 pr-2 tabular-nums">{formatNum(m.quantity)}</td>
+                    <td className="py-2 pr-2 tabular-nums">
+                      {m.kind === "COST_CORRECTION" ? "—" : formatNum(m.quantity)}
+                    </td>
                     <td className="py-2 pr-2 tabular-nums">
                       {formatMoney(m.totalCostRub)}
                     </td>

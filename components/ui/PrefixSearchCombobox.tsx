@@ -23,8 +23,11 @@ type Props = {
   id?: string;
   "aria-labelledby"?: string;
   options: PrefixComboboxOption[];
-  value: string;
-  onChange: (value: string) => void;
+  value?: string;
+  onChange?: (value: string) => void;
+  /** Несколько значений: клик по строке добавляет/снимает, список не закрывается. */
+  values?: string[];
+  onValuesChange?: (values: string[]) => void;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -43,8 +46,10 @@ export function PrefixSearchCombobox({
   id,
   "aria-labelledby": ariaLabelledBy,
   options,
-  value,
+  value = "",
   onChange,
+  values,
+  onValuesChange,
   placeholder = "Начните вводить название или ООО…",
   disabled,
   className = "",
@@ -75,10 +80,23 @@ export function PrefixSearchCombobox({
     [options, emptyOptionLabel],
   );
 
+  const isMulti = typeof onValuesChange === "function";
+  const selectedSet = useMemo(
+    () => new Set(isMulti ? (values ?? []) : value ? [value] : []),
+    [isMulti, values, value],
+  );
+
   const valueLabel = useMemo(() => {
-    const o = options.find((x) => x.value === value);
-    return o?.label ?? "";
-  }, [options, value]);
+    if (!isMulti) {
+      return options.find((x) => x.value === value)?.label ?? "";
+    }
+    const labels = (values ?? [])
+      .map((id) => options.find((x) => x.value === id)?.label)
+      .filter((x): x is string => Boolean(x));
+    if (labels.length === 0) return "";
+    if (labels.length === 1) return labels[0]!;
+    return `${labels.length} поз.: ${labels.join(", ")}`;
+  }, [isMulti, options, value, values]);
 
   const filtered = useMemo(() => {
     return withEmpty.filter((o) => comboboxOptionMatchesPrefixQuery(o, searchQuery));
@@ -115,10 +133,23 @@ export function PrefixSearchCombobox({
 
   const selectValue = useCallback(
     (v: string) => {
-      onChange(v);
+      if (isMulti && onValuesChange) {
+        if (v === "") {
+          onValuesChange([]);
+          close();
+          return;
+        }
+        const cur = values ?? [];
+        onValuesChange(
+          cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v],
+        );
+        setSearchQuery("");
+        return;
+      }
+      onChange?.(v);
       close();
     },
-    [onChange, close],
+    [close, isMulti, onChange, onValuesChange, values],
   );
 
   useEffect(() => {
@@ -273,7 +304,9 @@ export function PrefixSearchCombobox({
                 id={`${listboxId}-opt-${i}`}
                 data-idx={i}
                 role="option"
-                aria-selected={i === highlight}
+                aria-selected={
+                  o.value ? selectedSet.has(o.value) : selectedSet.size === 0
+                }
                 className={`cursor-pointer px-2.5 py-1.5 ${
                   i === highlight ? "bg-[var(--accent-selection-bg)] text-[var(--app-text)]" : "text-[var(--text-strong)]"
                 }`}
@@ -287,7 +320,9 @@ export function PrefixSearchCombobox({
                   selectValue(o.value);
                 }}
               >
-                {o.label}
+                {isMulti && o.value
+                  ? `${selectedSet.has(o.value) ? "✓ " : ""}${o.label}`
+                  : o.label}
               </li>
             ))
           )}

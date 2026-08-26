@@ -8,6 +8,10 @@ import {
   type PrefixComboboxOption,
 } from "@/components/ui/PrefixSearchCombobox";
 import { comboboxSearchPrefixesFromText } from "@/lib/prefix-search-match";
+import {
+  ourLineSaleRub,
+  ourLinesSaleTotalRub,
+} from "@/lib/inventory/our-lines-sale-total";
 
 type InvItem = {
   id: string;
@@ -18,6 +22,7 @@ type InvItem = {
   warehouseId: string;
   quantityOnHand?: number;
   manufacturer?: string | null;
+  saleUnitPriceRub?: number | null;
 };
 
 type WarehouseRow = {
@@ -28,7 +33,19 @@ type WarehouseRow = {
 };
 
 const rowInputClass =
-  "w-full rounded border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1 text-xs text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]";
+  "w-full rounded border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-0.5 text-xs leading-tight text-[var(--app-text)] outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]";
+const rowCardClass =
+  "flex flex-wrap items-end gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-1";
+const rowLabelClass =
+  "block text-[9px] font-medium uppercase leading-none text-[var(--text-muted)]";
+
+function moneyRu(n: number): string {
+  return new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "RUB",
+    maximumFractionDigits: 2,
+  }).format(n);
+}
 
 function itemLabel(it: InvItem): string {
   const sku = it.sku?.trim();
@@ -44,12 +61,15 @@ export function OrderProstheticsBlock({
   onChange,
   idPrefix = "prosthetics",
   hideBlockTitle = false,
+  onOurSaleTotalChange,
 }: {
   value: OrderProstheticsV1;
   onChange: (next: OrderProstheticsV1) => void;
   idPrefix?: string;
   /** На экране наряда заголовок колонки уже задан снаружи — дубли не показываем. */
   hideBlockTitle?: boolean;
+  /** Итог «наше» по цене реализации (без скидки). */
+  onOurSaleTotalChange?: (rub: number) => void;
 }) {
   const [items, setItems] = useState<InvItem[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
@@ -172,6 +192,15 @@ export function OrderProstheticsBlock({
     setOurLines(value.ourLines.filter((_, i) => i !== index));
   };
 
+  const ourSaleTotalRub = useMemo(
+    () => ourLinesSaleTotalRub(value.ourLines, items),
+    [items, value.ourLines],
+  );
+
+  useEffect(() => {
+    onOurSaleTotalChange?.(ourSaleTotalRub);
+  }, [onOurSaleTotalChange, ourSaleTotalRub]);
+
   const itemOptionsForWarehouse = useCallback(
     (warehouseId: string): PrefixComboboxOption[] => {
       const wh = warehouseId.trim();
@@ -204,19 +233,19 @@ export function OrderProstheticsBlock({
           Предоставлено клиентом
         </h4>
         {value.clientProvided.length === 0 ? null : (
-          <ul className="space-y-2">
+          <ul className="space-y-1">
             {value.clientProvided.map((row, i) => (
               <li
                 key={`${idPrefix}-c-${i}`}
-                className="flex flex-wrap items-end gap-2 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-2"
+                className={rowCardClass}
               >
                 <label className="min-w-[160px] flex-1">
-                  <span className="text-[10px] font-medium uppercase text-[var(--text-muted)]">
+                  <span className={rowLabelClass}>
                     Что
                   </span>
                   <input
                     type="text"
-                    className={`${rowInputClass} mt-0.5`}
+                    className={`${rowInputClass} mt-px`}
                     value={row.description}
                     onChange={(e) =>
                       patchClientRow(i, { description: e.target.value })
@@ -225,13 +254,13 @@ export function OrderProstheticsBlock({
                   />
                 </label>
                 <label className="w-24">
-                  <span className="text-[10px] font-medium uppercase text-[var(--text-muted)]">
+                  <span className={rowLabelClass}>
                     Кол-во
                   </span>
                   <input
                     type="number"
                     min={1}
-                    className={`${rowInputClass} mt-0.5 tabular-nums`}
+                    className={`${rowInputClass} mt-px tabular-nums`}
                     value={row.quantity}
                     onChange={(e) =>
                       patchClientRow(i, {
@@ -245,7 +274,7 @@ export function OrderProstheticsBlock({
                 </label>
                 <button
                   type="button"
-                  className="mb-0.5 text-xs text-[var(--text-muted)] underline hover:text-[var(--text-strong)]"
+                  className="mb-px text-xs text-[var(--text-muted)] underline hover:text-[var(--text-strong)]"
                   onClick={() => removeClientRow(i)}
                 >
                   Удалить
@@ -264,9 +293,16 @@ export function OrderProstheticsBlock({
       </div>
 
       <div className="space-y-3 border-t border-[var(--card-border)] pt-4">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">
-          Наше (со склада)
-        </h4>
+        <div className="flex items-baseline justify-between gap-3">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">
+            Наше (со склада)
+          </h4>
+          {value.ourLines.length > 0 ? (
+            <span className="shrink-0 text-xs font-semibold tabular-nums text-[var(--text-strong)]">
+              {moneyRu(ourSaleTotalRub)}
+            </span>
+          ) : null}
+        </div>
         {loadError ? (
           <p className="text-xs text-amber-800">{loadError}</p>
         ) : null}
@@ -282,7 +318,7 @@ export function OrderProstheticsBlock({
           </p>
         ) : null}
         {value.ourLines.length === 0 ? null : (
-          <ul className="space-y-2">
+          <ul className="space-y-1">
             {value.ourLines.map((row, i) => {
               const whId = (
                 row.warehouseId ||
@@ -290,19 +326,20 @@ export function OrderProstheticsBlock({
                 ""
               ).trim();
               const posOpts = itemOptionsForWarehouse(whId);
+              const lineSum = ourLineSaleRub(row, items);
               return (
                 <li
                   key={`${idPrefix}-o-${i}`}
-                  className="flex flex-wrap items-end gap-2 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-2"
+                  className={rowCardClass}
                 >
                   <div className="min-w-[140px] flex-1">
                     <span
-                      className="text-[10px] font-medium uppercase text-[var(--text-muted)]"
+                      className={rowLabelClass}
                       id={`${idPrefix}-wh-lbl-${i}`}
                     >
                       Склад
                     </span>
-                    <div className="mt-0.5">
+                    <div className="mt-px">
                       <PrefixSearchCombobox
                         aria-labelledby={`${idPrefix}-wh-lbl-${i}`}
                         options={warehouseOptions}
@@ -316,12 +353,12 @@ export function OrderProstheticsBlock({
                   </div>
                   <div className="min-w-[200px] flex-[2]">
                     <span
-                      className="text-[10px] font-medium uppercase text-[var(--text-muted)]"
+                      className={rowLabelClass}
                       id={`${idPrefix}-pos-lbl-${i}`}
                     >
                       Позиция склада
                     </span>
-                    <div className="mt-0.5">
+                    <div className="mt-px">
                       <PrefixSearchCombobox
                         aria-labelledby={`${idPrefix}-pos-lbl-${i}`}
                         options={posOpts}
@@ -341,13 +378,13 @@ export function OrderProstheticsBlock({
                     </div>
                   </div>
                   <label className="w-24">
-                    <span className="text-[10px] font-medium uppercase text-[var(--text-muted)]">
+                    <span className={rowLabelClass}>
                       Кол-во
                     </span>
                     <input
                       type="number"
                       min={1}
-                      className={`${rowInputClass} mt-0.5 tabular-nums`}
+                      className={`${rowInputClass} mt-px tabular-nums`}
                       value={row.quantity}
                       onChange={(e) =>
                         patchOurRow(i, {
@@ -361,11 +398,14 @@ export function OrderProstheticsBlock({
                   </label>
                   <button
                     type="button"
-                    className="mb-0.5 text-xs text-[var(--text-muted)] underline hover:text-[var(--text-strong)]"
+                    className="mb-px text-xs text-[var(--text-muted)] underline hover:text-[var(--text-strong)]"
                     onClick={() => removeOurRow(i)}
                   >
                     Удалить
                   </button>
+                  <span className="mb-px min-w-[4.5rem] text-right text-xs font-semibold tabular-nums text-[var(--text-strong)]">
+                    {lineSum == null ? "—" : moneyRu(lineSum)}
+                  </span>
                 </li>
               );
             })}

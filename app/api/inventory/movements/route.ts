@@ -3,7 +3,10 @@ import type { StockMovementKind } from "@prisma/client";
 import { getOrdersPrismaClient } from "@/lib/prisma-orders";
 import { getPricingPrismaClient } from "@/lib/prisma-pricing";
 import { getPrisma } from "@/lib/get-prisma";
-import { applyStockMovement } from "@/lib/inventory/apply-stock-movement";
+import {
+  applyCostCorrection,
+  applyStockMovement,
+} from "@/lib/inventory/apply-stock-movement";
 import { isStockMovementKind } from "@/lib/inventory/stock-movement-kind-labels";
 import { ensureDefaultWarehouse } from "@/lib/inventory/ensure-default-warehouse";
 import { loadOrderRefsByIds } from "@/lib/inventory/order-lookup";
@@ -66,10 +69,16 @@ export async function GET(req: Request) {
 type PostBody = {
   kind?: string;
   itemId?: string;
+  /** Коррекция стоимости: несколько позиций сразу */
+  itemIds?: string[];
   warehouseId?: string;
   quantity?: number;
   /** Закупка: цена за ед., руб. */
   unitCostRub?: number | null;
+  /** Коррекция: закупка (0 / пусто — не менять) */
+  purchaseUnitRub?: number | null;
+  /** Коррекция: реализация (0 / пусто — не менять) */
+  saleUnitRub?: number | null;
   orderId?: string | null;
   /** Альтернатива orderId: номер наряда YYMM-NNN */
   orderNumber?: string | null;
@@ -92,9 +101,48 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Неизвестный вид движения" }, { status: 400 });
     }
 
-    const itemId = body.itemId?.trim() ?? "";
     const warehouseId = body.warehouseId?.trim() ?? "";
-    if (!itemId || !warehouseId) {
+    if (!warehouseId) {
+      return NextResponse.json({ error: "Укажите склад" }, { status: 400 });
+    }
+
+    if (kindRaw === "COST_CORRECTION") {
+      const itemIds = [
+        ...new Set(
+          [
+            ...(Array.isArray(body.itemIds) ? body.itemIds : []),
+            body.itemId ?? "",
+          ]
+            .map((x) => String(x).trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (itemIds.length === 0) {
+        return NextResponse.json(
+          { error: "Выберите хотя бы одну позицию" },
+          { status: 400 },
+        );
+      }
+      const result = await pricingPrisma.$transaction((tx) =>
+        applyCostCorrection(tx, {
+          itemIds,
+          warehouseId,
+          purchaseUnitRub: body.purchaseUnitRub,
+          saleUnitRub: body.saleUnitRub,
+          note: body.note,
+          actorLabel: body.actorLabel?.trim() || undefined,
+        }),
+      );
+      return NextResponse.json({
+        ok: true,
+        kind: "COST_CORRECTION",
+        updated: result.updated,
+        movementIds: result.movementIds,
+      });
+    }
+
+    const itemId = body.itemId?.trim() ?? "";
+    if (!itemId) {
       return NextResponse.json(
         { error: "Укажите позицию и склад" },
         { status: 400 },

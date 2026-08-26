@@ -29,6 +29,7 @@ export async function GET() {
         manufacturer: it.manufacturer,
         unitsPerSupply: it.unitsPerSupply,
         referenceUnitPriceRub: it.referenceUnitPriceRub,
+        saleUnitPriceRub: it.saleUnitPriceRub,
         notes: it.notes,
         isActive: it.isActive,
         quantityOnHand: b?.quantityOnHand ?? 0,
@@ -53,6 +54,7 @@ type PostBody = {
   manufacturer?: string | null;
   unitsPerSupply?: number | null;
   referenceUnitPriceRub?: number | null;
+  saleUnitPriceRub?: number | null;
   notes?: string | null;
 };
 
@@ -109,6 +111,10 @@ export async function POST(req: Request) {
       body.referenceUnitPriceRub != null && Number.isFinite(body.referenceUnitPriceRub)
         ? body.referenceUnitPriceRub
         : null;
+    const salePrice =
+      body.saleUnitPriceRub != null && Number.isFinite(body.saleUnitPriceRub)
+        ? body.saleUnitPriceRub
+        : null;
 
     const row = await prisma.inventoryItem.create({
       data: {
@@ -119,6 +125,7 @@ export async function POST(req: Request) {
         manufacturer: body.manufacturer?.trim() || null,
         unitsPerSupply,
         referenceUnitPriceRub: refPrice,
+        saleUnitPriceRub: salePrice,
         notes: body.notes?.trim() || null,
         isActive: true,
       },
@@ -131,6 +138,7 @@ export async function POST(req: Request) {
         manufacturer: true,
         unitsPerSupply: true,
         referenceUnitPriceRub: true,
+        saleUnitPriceRub: true,
         notes: true,
         isActive: true,
       },

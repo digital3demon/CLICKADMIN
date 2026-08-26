@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "StockMovementKind" ADD VALUE IF NOT EXISTS 'COST_CORRECTION';

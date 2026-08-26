@@ -75,6 +75,9 @@ export function formatStockHistoryDescription(opts: {
     case "DEFECT_WRITE_OFF":
       core = `Брак: списано ${qty} «${item}» со склада «${wh}»`;
       break;
+    case "COST_CORRECTION":
+      core = `Коррекция стоимости «${item}» на складе «${wh}»`;
+      break;
     default:
       core = `${kindLabel}: ${qty} «${item}» (склад «${wh}»)`;
   }

@@ -1905,6 +1905,8 @@ enum StockMovementKind {
   DEFECT_WRITE_OFF
   /// Возврат на склад (от клиента / отмена списания)
   RETURN_IN
+  /// Смена закупки и/или реализации без изменения остатка (0 = не трогать)
+  COST_CORRECTION
 }
 
 /// Склад (логистическая единица учёта)
@@ -1939,6 +1941,8 @@ model InventoryItem {
   unitsPerSupply        Float?
   /// Справочная цена за единицу учёта, ₽ (фактическая средняя — в остатке)
   referenceUnitPriceRub Float?
+  /// Цена реализации за ед., ₽ (сверка: стоимость работы). Закупка — отдельно.
+  saleUnitPriceRub Float?
   notes                 String?
   isActive              Boolean   @default(true)
   sortOrder             Int       @default(0)

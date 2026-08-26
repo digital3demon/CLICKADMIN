@@ -1261,6 +1261,11 @@ export function OrderEditForm({
   useEffect(() => {
     setCompositionDiscountPercent(initial.compositionDiscountPercent ?? 0);
   }, [initial.id, initial.compositionDiscountPercent]);
+
+  useEffect(() => {
+    setProsthetics(initial.prosthetics);
+    setProstheticsOurSaleRub(0);
+  }, [initial.id, initial.prosthetics]);
   const [financeCalculated, setFinanceCalculated] = useState(
     initial.financeCalculated === true,
   );
@@ -1435,6 +1440,7 @@ export function OrderEditForm({
   const [prosthetics, setProsthetics] = useState<OrderProstheticsV1>(
     () => initial.prosthetics,
   );
+  const [prostheticsOurSaleRub, setProstheticsOurSaleRub] = useState(0);
   const [orderNumberDraft, setOrderNumberDraft] = useState(
     () => initial.orderNumber,
   );
@@ -1932,12 +1938,14 @@ export function OrderEditForm({
       sub,
       urgentPriceMult,
       depositAppliedRub,
+      prostheticsOurSaleRub,
     );
   }, [
     draftLines,
     compositionDiscountPercent,
     urgentPriceMult,
     depositAppliedRub,
+    prostheticsOurSaleRub,
   ]);
 
   const documentFlowCompositionRows = useMemo(() => {
@@ -1978,6 +1986,7 @@ export function OrderEditForm({
       urgentCoefficient: u.urgentCoefficient,
       compositionDiscountPercent,
       invoiceMismatchAckFingerprint: mismatchAckFingerprint,
+      prostheticsOurRub: prostheticsOurSaleRub,
       constructions: payload.map((row) => ({
         quantity: typeof row.quantity === "number" ? row.quantity : 1,
         unitPrice:
@@ -1999,6 +2008,7 @@ export function OrderEditForm({
     urgentSelection,
     invoiceParsedTotalRub,
     mismatchAckFingerprint,
+    prostheticsOurSaleRub,
   ]);
 
   const ackInvoiceMismatch = useCallback(async () => {
@@ -2013,6 +2023,7 @@ export function OrderEditForm({
       isUrgent: u.isUrgent,
       urgentCoefficient: u.urgentCoefficient,
       compositionDiscountPercent,
+      prostheticsOurRub: prostheticsOurSaleRub,
       constructions: payload.map((row) => ({
         quantity: typeof row.quantity === "number" ? row.quantity : 1,
         unitPrice:
@@ -2055,6 +2066,7 @@ export function OrderEditForm({
     compositionDiscountPercent,
     urgentSelection,
     invoiceParsedTotalRub,
+    prostheticsOurSaleRub,
     initial.id,
     router,
   ]);
@@ -3625,6 +3637,7 @@ export function OrderEditForm({
               value={prosthetics}
               onChange={setProsthetics}
               hideBlockTitle
+              onOurSaleTotalChange={setProstheticsOurSaleRub}
             />
           </div>
         </div>

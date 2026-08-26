@@ -75,8 +75,20 @@ describe("deposit apply math", () => {
     expect(before).toBe(4000);
   });
 
+  it("протетика «наше» без скидки и срочности", () => {
+    const before = orderPayableBeforeDepositRub({
+      lines: [{ quantity: 1, unitPrice: 1000, lineDiscountPercent: 0 }],
+      compositionDiscountPercent: 50,
+      urgentMultiplier: 2,
+      prostheticsOurRub: 800,
+    });
+    // работы 1000 × 0.5 × 2 = 1000 + протетика 800
+    expect(before).toBe(1800);
+  });
+
   it("orderPayableAfterDepositRub согласован с format-order-construction", () => {
     expect(orderPayableAfterDepositRub(7000, 1, 2000)).toBe(5000);
     expect(orderPayableAfterDepositRub(7000, 1, 10_000)).toBe(0);
+    expect(orderPayableAfterDepositRub(1000, 2, 0, 800)).toBe(2800);
   });
 });

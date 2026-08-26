@@ -9,6 +9,7 @@ type PatchBody = {
   manufacturer?: string | null;
   unitsPerSupply?: number | null;
   referenceUnitPriceRub?: number | null;
+  saleUnitPriceRub?: number | null;
   notes?: string | null;
   isActive?: boolean;
 };
@@ -81,6 +82,20 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
       }
     }
 
+    let saleUnitPriceRub: number | null | undefined = undefined;
+    if (body.saleUnitPriceRub !== undefined) {
+      if (body.saleUnitPriceRub == null) {
+        saleUnitPriceRub = null;
+      } else if (!Number.isFinite(body.saleUnitPriceRub)) {
+        return NextResponse.json(
+          { error: "Некорректная цена реализации" },
+          { status: 400 },
+        );
+      } else {
+        saleUnitPriceRub = body.saleUnitPriceRub;
+      }
+    }
+
     const row = await prisma.inventoryItem.update({
       where: { id: id.trim() },
       data: {
@@ -92,6 +107,7 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
           : {}),
         ...(unitsPerSupply !== undefined ? { unitsPerSupply } : {}),
         ...(referenceUnitPriceRub !== undefined ? { referenceUnitPriceRub } : {}),
+        ...(saleUnitPriceRub !== undefined ? { saleUnitPriceRub } : {}),
         ...(body.notes !== undefined ? { notes: body.notes?.trim() || null } : {}),
         ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
       },
@@ -104,6 +120,7 @@ export async function PATCH(req: Request, ctx: RouteCtx) {
         manufacturer: true,
         unitsPerSupply: true,
         referenceUnitPriceRub: true,
+        saleUnitPriceRub: true,
         notes: true,
         isActive: true,
       },

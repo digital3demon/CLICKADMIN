@@ -23,6 +23,7 @@ type InvItem = {
   manufacturer: string | null;
   unitsPerSupply: number | null;
   referenceUnitPriceRub: number | null;
+  saleUnitPriceRub: number | null;
   notes: string | null;
   isActive: boolean;
   quantityOnHand: number;
@@ -58,6 +59,7 @@ export function DirectoryWarehouseSettingsClient() {
   const [itUnit, setItUnit] = useState("шт");
   const [itUnitsPerSupply, setItUnitsPerSupply] = useState("");
   const [itReferencePrice, setItReferencePrice] = useState("");
+  const [itSalePrice, setItSalePrice] = useState("");
   const [itNotes, setItNotes] = useState("");
   const [itError, setItError] = useState<string | null>(null);
 
@@ -180,6 +182,14 @@ export function DirectoryWarehouseSettingsClient() {
         setBusy(false);
         return;
       }
+      const saleRaw = itSalePrice.trim().replace(",", ".");
+      const sale =
+        saleRaw === "" ? null : Number.parseFloat(saleRaw);
+      if (saleRaw !== "" && !Number.isFinite(sale!)) {
+        setItError("Реализация: некорректное число");
+        setBusy(false);
+        return;
+      }
       const res = await fetch("/api/inventory/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,6 +201,7 @@ export function DirectoryWarehouseSettingsClient() {
           unit: itUnit.trim() || "шт",
           unitsPerSupply: supply,
           referenceUnitPriceRub: price,
+          saleUnitPriceRub: sale,
           notes: itNotes.trim() || null,
         }),
       });
@@ -205,6 +216,7 @@ export function DirectoryWarehouseSettingsClient() {
       setItUnit("шт");
       setItUnitsPerSupply("");
       setItReferencePrice("");
+      setItSalePrice("");
       setItNotes("");
       showBanner("Позиция добавлена", true);
       await refresh();
@@ -561,12 +573,21 @@ export function DirectoryWarehouseSettingsClient() {
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
-            Цена за ед., ₽ (справочно)
+            Цена закупки за ед., ₽
             <input
               className="rounded-md border border-[var(--input-border)] px-2 py-2 text-sm"
               value={itReferencePrice}
               onChange={(e) => setItReferencePrice(e.target.value)}
               placeholder="Опционально"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
+            Реализация за ед., ₽
+            <input
+              className="rounded-md border border-[var(--input-border)] px-2 py-2 text-sm"
+              value={itSalePrice}
+              onChange={(e) => setItSalePrice(e.target.value)}
+              placeholder="В сверку как работа"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-secondary)] sm:col-span-2 xl:col-span-4">
@@ -601,7 +622,8 @@ export function DirectoryWarehouseSettingsClient() {
                 <th className="py-2 pr-2 font-medium">Наименование</th>
                 <th className="py-2 pr-2 font-medium">Ед.</th>
                 <th className="py-2 pr-2 font-medium">Поставка</th>
-                <th className="py-2 pr-2 font-medium">Цена/ед. ₽</th>
+                <th className="py-2 pr-2 font-medium">Закуп. ₽</th>
+                <th className="py-2 pr-2 font-medium">Реализация ₽</th>
                 <th className="py-2 pr-2 font-medium">Остаток</th>
                 <th className="py-2 pr-2 font-medium">Сред. закуп. ₽</th>
                 <th className="py-2 pr-2 font-medium">Примечание</th>
@@ -716,6 +738,32 @@ export function DirectoryWarehouseSettingsClient() {
                           return;
                         }
                         void patchItem(it.id, { referenceUnitPriceRub: n });
+                      }}
+                    />
+                  </td>
+                  <td className="py-2 pr-2">
+                    <input
+                      className="w-24 rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 text-xs tabular-nums"
+                      defaultValue={
+                        it.saleUnitPriceRub != null
+                          ? String(it.saleUnitPriceRub)
+                          : ""
+                      }
+                      disabled={busy}
+                      title="В сверке — стоимость работы"
+                      onBlur={(e) => {
+                        const raw = e.target.value.trim().replace(",", ".");
+                        if (raw === "") {
+                          if (it.saleUnitPriceRub != null) {
+                            void patchItem(it.id, { saleUnitPriceRub: null });
+                          }
+                          return;
+                        }
+                        const n = Number.parseFloat(raw);
+                        if (!Number.isFinite(n) || n === it.saleUnitPriceRub) {
+                          return;
+                        }
+                        void patchItem(it.id, { saleUnitPriceRub: n });
                       }}
                     />
                   </td>
