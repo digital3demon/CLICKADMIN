@@ -40,8 +40,12 @@ import {
 import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
 import type { KanbanAppState } from "@/lib/kanban/types";
 
-/** Малый пакет: длинный запрос режет прокси (~5 мин) пустым телом. */
+/** Полный проход: одна запись снимка в конце, без промежуточных дёрганий доски. */
 export const KANBAN_MEMBERS_BACKFILL_BATCH_SIZE = 8;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 export type KanbanMembersBackfillCountResult = {
   total: number;
@@ -113,13 +117,18 @@ export async function runKanbanMembersBackfillBatch(
     limit?: number;
     targets?: unknown;
     clientTotal?: number;
+    /** Все карточки в одном запросе, снимок пишем один раз. */
+    all?: boolean;
   },
 ): Promise<KanbanMembersBackfillBatchResult> {
   const tenantId = input.tenantId.trim();
-  const limit = Math.max(
-    1,
-    Math.min(input.limit ?? KANBAN_MEMBERS_BACKFILL_BATCH_SIZE, 40),
-  );
+  const allAtOnce = input.all === true;
+  const limit = allAtOnce
+    ? 10_000
+    : Math.max(
+        1,
+        Math.min(input.limit ?? KANBAN_MEMBERS_BACKFILL_BATCH_SIZE, 40),
+      );
   const empty: KanbanMembersBackfillBatchResult = {
     total: 0,
     processed: 0,
@@ -150,16 +159,18 @@ export async function runKanbanMembersBackfillBatch(
   const work =
     fromClient.length > 0
       ? fromClient
-      : (() => {
-          const after = input.afterOrderId?.trim() || null;
-          const { page } = nextLinkedOrderIdPage(
-            allFromState.map((t) => t.cardId),
-            after,
-            limit,
-          );
-          const byId = new Map(allFromState.map((t) => [t.cardId, t]));
-          return page.map((id) => byId.get(id)!).filter(Boolean);
-        })();
+      : allAtOnce
+        ? allFromState
+        : (() => {
+            const after = input.afterOrderId?.trim() || null;
+            const { page } = nextLinkedOrderIdPage(
+              allFromState.map((t) => t.cardId),
+              after,
+              limit,
+            );
+            const byId = new Map(allFromState.map((t) => [t.cardId, t]));
+            return page.map((id) => byId.get(id)!).filter(Boolean);
+          })();
 
   const clientTotal =
     typeof input.clientTotal === "number" &&
@@ -199,6 +210,7 @@ export async function runKanbanMembersBackfillBatch(
   const cfg = cfg0 ? await withResolvedKaitenBoards(cfg0) : null;
   const directory = await loadKaitenUsersDirectory(db, tenantId, auth);
   const burst = { burst: true as const };
+  const pendingLaneByOrderId = new Map<string, string>();
 
   for (const target of work) {
     lastOrderId = target.cardId;
@@ -242,7 +254,18 @@ export async function runKanbanMembersBackfillBatch(
       continue;
     }
 
-    const head = await kaitenGetCard(auth, kaitenId, burst);
+    let head = await kaitenGetCard(auth, kaitenId, burst);
+    let rateRetries = 0;
+    while (
+      !head.ok &&
+      isKaitenRateLimitedStatus(head.status) &&
+      allAtOnce &&
+      rateRetries < 10
+    ) {
+      rateRetries += 1;
+      await sleepMs(2500);
+      head = await kaitenGetCard(auth, kaitenId, burst);
+    }
     if (!head.ok) {
       if (isKaitenRateLimitedStatus(head.status)) {
         rateLimited = true;
@@ -257,7 +280,17 @@ export async function runKanbanMembersBackfillBatch(
       head.card,
     );
     if (members == null) {
-      const list = await kaitenListCardMembers(auth, kaitenId, burst);
+      let list = await kaitenListCardMembers(auth, kaitenId, burst);
+      while (
+        !list.ok &&
+        isKaitenRateLimitedStatus(list.status) &&
+        allAtOnce &&
+        rateRetries < 10
+      ) {
+        rateRetries += 1;
+        await sleepMs(2500);
+        list = await kaitenListCardMembers(auth, kaitenId, burst);
+      }
       if (!list.ok) {
         if (isKaitenRateLimitedStatus(list.status)) {
           rateLimited = true;
@@ -298,7 +331,17 @@ export async function runKanbanMembersBackfillBatch(
       if (boardId != null) {
         let cols = columnsByBoardId.get(boardId);
         if (!cols) {
-          const colRes = await kaitenListBoardColumns(auth, boardId, burst);
+          let colRes = await kaitenListBoardColumns(auth, boardId, burst);
+          while (
+            !colRes.ok &&
+            isKaitenRateLimitedStatus(colRes.status) &&
+            allAtOnce &&
+            rateRetries < 10
+          ) {
+            rateRetries += 1;
+            await sleepMs(2500);
+            colRes = await kaitenListBoardColumns(auth, boardId, burst);
+          }
           if (!colRes.ok) {
             if (isKaitenRateLimitedStatus(colRes.status)) {
               rateLimited = true;
@@ -337,15 +380,8 @@ export async function runKanbanMembersBackfillBatch(
             inboundLane != null &&
             inboundLane !== order.kaitenTrackLane
           ) {
-            try {
-              await db.order.update({
-                where: { id: order.id },
-                data: { kaitenTrackLane: inboundLane },
-              });
-              positionChanged = true;
-            } catch {
-              /* колонка в снимке уже обновлена */
-            }
+            pendingLaneByOrderId.set(order.id, inboundLane);
+            positionChanged = true;
           }
         }
       }
@@ -356,24 +392,38 @@ export async function runKanbanMembersBackfillBatch(
     processed += 1;
   }
 
-  if (changed > 0) {
-    await corePrisma.tenantClientState.upsert({
-      where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-      create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
-      update: { value: state as never },
-    });
-  }
-
   const finished =
-    !rateLimited &&
-    fromClient.length === 0 &&
-    work.length > 0 &&
-    lastOrderId != null &&
-    nextLinkedOrderIdPage(
-      allFromState.map((t) => t.cardId),
-      lastOrderId,
-      1,
-    ).page.length === 0;
+    allAtOnce
+      ? !rateLimited && processed === work.length
+      : !rateLimited &&
+        fromClient.length === 0 &&
+        work.length > 0 &&
+        lastOrderId != null &&
+        nextLinkedOrderIdPage(
+          allFromState.map((t) => t.cardId),
+          lastOrderId,
+          1,
+        ).page.length === 0;
+
+  if (finished || allAtOnce) {
+    for (const [orderId, lane] of pendingLaneByOrderId) {
+      try {
+        await db.order.update({
+          where: { id: orderId },
+          data: { kaitenTrackLane: lane },
+        });
+      } catch {
+        /* снимок канбана уже обновлён */
+      }
+    }
+    if (changed > 0) {
+      await corePrisma.tenantClientState.upsert({
+        where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
+        create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
+        update: { value: state as never },
+      });
+    }
+  }
 
   return {
     total,

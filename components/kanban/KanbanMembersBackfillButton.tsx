@@ -19,7 +19,7 @@ type BackfillBatchResponse = {
 
 type KanbanMembersBackfillButtonProps = {
   disabled?: boolean;
-  /** Все карточки канбана (колонки + СТОП) — пакеты идут по этому списку. */
+  /** Все карточки канбана (колонки + СТОП). */
   refreshTargets?: KanbanKaitenRefreshTarget[];
   /** Сколько карточек на доске, если targets ещё не передали. */
   linkedOrderCount?: number;
@@ -28,15 +28,14 @@ type KanbanMembersBackfillButtonProps = {
   showToast: (msg: string, err?: boolean) => void;
 };
 
-const BATCH_LIMIT = 8;
-const BATCH_TIMEOUT_MS = 45_000;
+const ALL_TIMEOUT_MS = 240_000;
 
 function backfillFetchSignal(): AbortSignal {
   if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
-    return AbortSignal.timeout(BATCH_TIMEOUT_MS);
+    return AbortSignal.timeout(ALL_TIMEOUT_MS);
   }
   const c = new AbortController();
-  setTimeout(() => c.abort(), BATCH_TIMEOUT_MS);
+  setTimeout(() => c.abort(), ALL_TIMEOUT_MS);
   return c.signal;
 }
 
@@ -44,7 +43,7 @@ async function readBackfillJson(res: Response): Promise<BackfillBatchResponse> {
   const text = await res.text();
   if (!text.trim()) {
     throw new Error(
-      "Сервер оборвал ответ (таймаут). Нажмите обновление ещё раз — пойдёт пакетами.",
+      "Сервер оборвал ответ (таймаут). Нажмите обновление ещё раз.",
     );
   }
   try {
@@ -56,10 +55,10 @@ async function readBackfillJson(res: Response): Promise<BackfillBatchResponse> {
 
 function formatFetchError(err: unknown): string {
   if (err instanceof DOMException && err.name === "AbortError") {
-    return "Пакет слишком долгий. Нажмите обновление ещё раз.";
+    return "Обновление слишком долгое. Нажмите ещё раз.";
   }
   if (err instanceof Error && err.name === "AbortError") {
-    return "Пакет слишком долгий. Нажмите обновление ещё раз.";
+    return "Обновление слишком долгое. Нажмите ещё раз.";
   }
   if (err instanceof Error && /Unexpected end of JSON/i.test(err.message)) {
     return "Сервер оборвал ответ (таймаут). Нажмите обновление ещё раз.";
@@ -130,136 +129,47 @@ export function KanbanMembersBackfillButton({
     setTotal(totalCount);
     setStatus(
       totalCount > 0
-        ? `Обновление с Kaiten… 0 из ${totalCount}`
+        ? `Обновление всех ${totalCount} карточек с Kaiten…`
         : "Обновление с Kaiten…",
     );
 
     try {
-      let afterOrderId: string | null = null;
-      let queueIndex = 0;
-      let processed = 0;
-      let changedSum = 0;
-      let skippedSum = 0;
-      let noCardSum = 0;
-      let unmappedSum = 0;
-      let finished = false;
-
-      while (!finished && !abortRef.current) {
-        const slice =
-          queue.length > 0
-            ? queue.slice(queueIndex, queueIndex + BATCH_LIMIT)
-            : [];
-        if (queue.length > 0 && slice.length === 0) {
-          finished = true;
-          break;
-        }
-        const batchRes = await fetch("/api/kanban/members-backfill", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          signal: backfillFetchSignal(),
-          body: JSON.stringify({
-            action: "batch",
-            afterOrderId,
-            limit: BATCH_LIMIT,
-            total: totalCount,
-            ...(slice.length > 0 ? { targets: slice } : {}),
-          }),
-        });
-        const batch = await readBackfillJson(batchRes);
-        if (!batchRes.ok) {
-          throw new Error(batch.error || "Ошибка пакетного обновления");
-        }
-        if (typeof batch.total === "number" && batch.total > totalCount) {
-          totalCount = batch.total;
-          setTotal(batch.total);
-        }
-        if (totalCount === 0 && (batch.processed ?? 0) === 0 && batch.finished) {
-          setStatus("Нет карточек канбана для обновления");
-          showToast("Нет карточек канбана для обновления");
-          return;
-        }
-
-        const batchProcessed = batch.processed ?? 0;
-        processed += batchProcessed;
-        changedSum += batch.changed ?? 0;
-        skippedSum += batch.skipped ?? 0;
-        noCardSum += batch.noCard ?? 0;
-        unmappedSum += batch.unmapped ?? 0;
-        if (queue.length > 0) {
-          if (batch.rateLimited && batchProcessed === 0) {
-            /* тот же пакет после паузы */
-          } else if (batchProcessed > 0) {
-            queueIndex += batchProcessed;
-          } else {
-            queueIndex += slice.length;
-          }
-          finished = queueIndex >= queue.length && !batch.rateLimited;
-        } else {
-          const nextAfter =
-            typeof batch.afterOrderId === "string" ? batch.afterOrderId : null;
-          if (
-            !batch.finished &&
-            !batch.rateLimited &&
-            nextAfter &&
-            nextAfter === afterOrderId
-          ) {
-            throw new Error("Пакет не сдвинулся. Повторите обновление.");
-          }
-          afterOrderId = nextAfter ?? afterOrderId;
-          finished = Boolean(batch.finished);
-        }
-        const shownTotal = Math.max(totalCount, processed);
-        setDone(Math.min(processed, shownTotal));
-        setStatus(
-          formatProgressLine({
-            processed: Math.min(processed, shownTotal),
-            changed: changedSum,
-            skipped: skippedSum,
-            noCard: noCardSum,
-            unmapped: unmappedSum,
-            totalCount: shownTotal,
-          }),
-        );
-
-        if (batch.rateLimited) {
-          setStatus(
-            formatProgressLine({
-              processed: Math.min(processed, shownTotal),
-              changed: changedSum,
-              skipped: skippedSum,
-              noCard: noCardSum,
-              unmapped: unmappedSum,
-              totalCount: shownTotal,
-              prefix: "Лимит Kaiten, пауза",
-            }),
-          );
-          await new Promise((r) => setTimeout(r, 2500));
-        }
-      }
-
+      const batchRes = await fetch("/api/kanban/members-backfill", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        signal: backfillFetchSignal(),
+        body: JSON.stringify({
+          action: "batch",
+          all: true,
+          total: totalCount,
+          ...(queue.length > 0 ? { targets: queue } : {}),
+        }),
+      });
       if (abortRef.current) {
-        setStatus(
-          formatProgressLine({
-            processed: Math.min(processed, Math.max(totalCount, processed)),
-            changed: changedSum,
-            skipped: skippedSum,
-            noCard: noCardSum,
-            unmapped: unmappedSum,
-            totalCount: Math.max(totalCount, processed),
-            prefix: "Остановлено",
-          }),
-        );
+        setStatus("Остановлено");
         return;
       }
-
+      const batch = await readBackfillJson(batchRes);
+      if (!batchRes.ok) {
+        throw new Error(batch.error || "Ошибка обновления");
+      }
+      const processed = batch.processed ?? 0;
+      const shownTotal = Math.max(totalCount, processed, batch.total ?? 0);
+      setTotal(shownTotal);
+      setDone(Math.min(processed, shownTotal));
+      if (shownTotal === 0 && processed === 0) {
+        setStatus("Нет карточек канбана для обновления");
+        showToast("Нет карточек канбана для обновления");
+        return;
+      }
       const summary = formatProgressLine({
-        processed: Math.min(processed, Math.max(totalCount, processed)),
-        changed: changedSum,
-        skipped: skippedSum,
-        noCard: noCardSum,
-        unmapped: unmappedSum,
-        totalCount: Math.max(totalCount, processed),
+        processed: Math.min(processed, shownTotal),
+        changed: batch.changed ?? 0,
+        skipped: batch.skipped ?? 0,
+        noCard: batch.noCard ?? 0,
+        unmapped: batch.unmapped ?? 0,
+        totalCount: shownTotal,
         prefix: "Готово",
       });
       setStatus(summary);
@@ -284,7 +194,12 @@ export function KanbanMembersBackfillButton({
     showToast,
   ]);
 
-  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const pct =
+    running && done === 0
+      ? 100
+      : total > 0
+        ? Math.min(100, Math.round((done / total) * 100))
+        : 0;
   const tip =
     "Обновить с Kaiten все карточки канбана: колонку, сроки, срочность, участников (наряды CRM не меняет)";
 
@@ -322,7 +237,9 @@ export function KanbanMembersBackfillButton({
             aria-label="Прогресс обновления с Kaiten"
           >
             <div
-              className="h-full rounded-full bg-[var(--kanban-accent)] transition-[width] duration-300"
+              className={`h-full rounded-full bg-[var(--kanban-accent)] transition-[width] duration-300 ${
+                running && done === 0 ? "animate-pulse" : ""
+              }`}
               style={{ width: `${pct}%` }}
             />
           </div>

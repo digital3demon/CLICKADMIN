@@ -12,8 +12,8 @@ import {
 } from "@/lib/kanban/kaiten-members-backfill";
 
 export const dynamic = "force-dynamic";
-/** Не держать пакет дольше прокси — клиент шлёт следующие сам. */
-export const maxDuration = 60;
+/** Полный проход по доске; снимок пишется один раз в конце. */
+export const maxDuration = 300;
 
 type Body = {
   action?: unknown;
@@ -21,6 +21,7 @@ type Body = {
   limit?: unknown;
   targets?: unknown;
   total?: unknown;
+  all?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -92,6 +93,7 @@ export async function POST(req: Request) {
     limit,
     targets: body.targets,
     clientTotal,
+    all: body.all === true,
   });
 
   return NextResponse.json(result);
