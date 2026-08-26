@@ -73,6 +73,35 @@ describe("collectKanbanKaitenRefreshTargets", () => {
     expect(t.find((x) => x.cardId === "c-1")?.kaitenCardId).toBe(11);
     expect(t.find((x) => x.cardId === "c-local")?.kaitenCardId).toBeNull();
   });
+
+  it("kaitenCardId: null не становится 0 (Number(null))", () => {
+    const state = {
+      activeBoardId: "ortho",
+      boards: [
+        {
+          id: "ortho",
+          title: "Ортопедия",
+          columns: [
+            {
+              id: "c",
+              cards: [
+                {
+                  id: "kaiten-order-ord-а",
+                  title: "2608-12 Крупышева",
+                  linkedOrderId: "ord-а",
+                  kaitenCardId: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const t = collectKanbanKaitenRefreshTargets(state);
+    expect(t).toHaveLength(1);
+    expect(t[0]?.kaitenCardId).toBeNull();
+    expect(t[0]?.linkedOrderId).toBe("ord-а");
+  });
 });
 
 describe("nextLinkedOrderIdPage", () => {

@@ -53,6 +53,7 @@ import {
 } from "@/lib/kanban/pending-column-moves";
 import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban-card";
+import { applyKaitenRefreshPatchesToState } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
 import {
@@ -2847,7 +2848,28 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     kanbanStateSaveTimerRef.current = null;
                   }
                 }}
-                onComplete={reloadKanbanStateFromTenant}
+                onComplete={async (patches) => {
+                  if (patches.length > 0) {
+                    setAppState((prev) => {
+                      if (!prev) return prev;
+                      const { state } = applyKaitenRefreshPatchesToState(
+                        prev,
+                        patches,
+                      );
+                      saveKanbanState(state, false);
+                      if (!isDemo) {
+                        void writeClientState(
+                          "tenant",
+                          "kanbanAppStateV3",
+                          kanbanStateForPersistence(state, false),
+                        );
+                      }
+                      return state;
+                    });
+                    return;
+                  }
+                  await reloadKanbanStateFromTenant();
+                }}
                 showToast={showToast}
               />
             ) : null}

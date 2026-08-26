@@ -23,9 +23,12 @@ export type KanbanKaitenRefreshTarget = {
   linkedOrderId: string | null;
 };
 
-function numericKaitenCardId(card: KanbanCard): number | null {
-  const n = Number(card.kaitenCardId);
-  return Number.isFinite(n) ? n : null;
+/** Number(null) === 0 — не считать это id карточки Kaiten. */
+export function positiveKaitenCardId(raw: unknown): number | null {
+  if (raw == null || raw === false || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
 }
 
 function pushRefreshTarget(
@@ -40,7 +43,7 @@ function pushRefreshTarget(
   const linkedOrderId = String(card.linkedOrderId || "").trim() || null;
   out.push({
     cardId,
-    kaitenCardId: numericKaitenCardId(card),
+    kaitenCardId: positiveKaitenCardId(card.kaitenCardId),
     linkedOrderId,
   });
 }

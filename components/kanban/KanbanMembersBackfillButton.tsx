@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import type { KaitenRefreshCardPatch } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import type { KanbanKaitenRefreshTarget } from "@/lib/kanban/kanban-linked-order-ids";
 import { IconRefresh } from "./kanban-icons";
 
@@ -14,6 +15,7 @@ type BackfillBatchResponse = {
   rateLimited?: boolean;
   finished?: boolean;
   afterOrderId?: string | null;
+  patches?: KaitenRefreshCardPatch[];
   error?: string;
 };
 
@@ -26,7 +28,7 @@ type KanbanMembersBackfillButtonProps = {
   /** Сначала записать живой снимок в tenant — иначе сервер не найдёт cardId. */
   onBeforeRefresh?: () => void | Promise<void>;
   onRunningChange?: (running: boolean) => void;
-  onComplete: () => void | Promise<void>;
+  onComplete: (patches: KaitenRefreshCardPatch[]) => void | Promise<void>;
   showToast: (msg: string, err?: boolean) => void;
 };
 
@@ -181,7 +183,7 @@ export function KanbanMembersBackfillButton({
         prefix: "Готово",
       });
       setStatus(summary);
-      await onComplete();
+      await onComplete(Array.isArray(batch.patches) ? batch.patches : []);
       showToast(summary);
     } catch (err) {
       const msg = formatFetchError(err);

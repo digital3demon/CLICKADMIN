@@ -20,6 +20,8 @@ type GetResponse = { found: boolean; value: unknown };
 type WriteSlot = {
   skipUntil: number;
   inFlight: boolean;
+  /** Текущая запись + очередь — await, чтобы refresh не читал старый снимок. */
+  run: Promise<boolean> | null;
   queued: unknown | undefined;
   hasQueued: boolean;
   lastOkFingerprint: string;
@@ -45,6 +47,7 @@ function getSlot(sk: string): WriteSlot {
     s = {
       skipUntil: 0,
       inFlight: false,
+      run: null,
       queued: undefined,
       hasQueued: false,
       lastOkFingerprint: "",
@@ -113,58 +116,85 @@ async function flushWrite(
     return false;
   }
 
-  if (slot.inFlight) {
+  const putOnce = async (body: unknown): Promise<boolean> => {
+    const bodyFp = fingerprintPayload(scope, key, body);
+    const sizedBody = clientStatePayloadTooLarge(scope, key, body);
+    if (sizedBody.tooLarge) {
+      slot.skipUntil = Date.now() + COOLDOWN_HARD_MS;
+      warnOnce(
+        slot,
+        `[client-state] skip PUT ${scope}/${key}: payload > ${CLIENT_STATE_MAX_JSON_BYTES} bytes (cooldown ${COOLDOWN_HARD_MS / 1000}s)`,
+      );
+      return false;
+    }
+    if (bodyFp === slot.lastOkFingerprint) return true;
+    try {
+      const res = await fetch("/api/client-state", {
+        method: "PUT",
+        credentials: "include",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope, key, value: body }),
+      });
+      if (res.ok) {
+        slot.lastOkFingerprint = bodyFp;
+        slot.skipUntil = 0;
+        return true;
+      }
+      if (res.status === 413) {
+        slot.skipUntil = Date.now() + COOLDOWN_HARD_MS;
+        slot.hasQueued = false;
+        slot.queued = undefined;
+        warnOnce(
+          slot,
+          `[client-state] PUT ${scope}/${key} → HTTP 413 (cooldown ${COOLDOWN_HARD_MS / 1000}s, no retry spam)`,
+        );
+        return false;
+      }
+      if (res.status === 400 || res.status === 500) {
+        slot.skipUntil = Date.now() + COOLDOWN_TRANSIENT_MS;
+        warnOnce(
+          slot,
+          `[client-state] PUT ${scope}/${key} → HTTP ${res.status} (retry in ${COOLDOWN_TRANSIENT_MS / 1000}s)`,
+        );
+        return false;
+      }
+      slot.skipUntil = Date.now() + COOLDOWN_NETWORK_MS;
+      return false;
+    } catch {
+      slot.skipUntil = Date.now() + COOLDOWN_NETWORK_MS;
+      return false;
+    }
+  };
+
+  if (slot.run) {
     slot.queued = value;
     slot.hasQueued = true;
-    return false;
+    await slot.run;
+    if (Date.now() < slot.skipUntil) return false;
+    if (fingerprintPayload(scope, key, value) === slot.lastOkFingerprint) return true;
+    return flushWrite(scope, key, value);
   }
 
   slot.inFlight = true;
-  try {
-    const res = await fetch("/api/client-state", {
-      method: "PUT",
-      credentials: "include",
-      keepalive: true,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope, key, value }),
-    });
-    if (res.ok) {
-      slot.lastOkFingerprint = fp;
-      slot.skipUntil = 0;
-      return true;
+  slot.run = (async () => {
+    try {
+      let current: unknown = value;
+      let lastOk = false;
+      while (true) {
+        lastOk = await putOnce(current);
+        if (!slot.hasQueued || Date.now() < slot.skipUntil) break;
+        current = slot.queued;
+        slot.hasQueued = false;
+        slot.queued = undefined;
+      }
+      return lastOk;
+    } finally {
+      slot.inFlight = false;
+      slot.run = null;
     }
-    if (res.status === 413) {
-      slot.skipUntil = Date.now() + COOLDOWN_HARD_MS;
-      slot.hasQueued = false;
-      slot.queued = undefined;
-      warnOnce(
-        slot,
-        `[client-state] PUT ${scope}/${key} → HTTP 413 (cooldown ${COOLDOWN_HARD_MS / 1000}s, no retry spam)`,
-      );
-      return false;
-    }
-    if (res.status === 400 || res.status === 500) {
-      slot.skipUntil = Date.now() + COOLDOWN_TRANSIENT_MS;
-      warnOnce(
-        slot,
-        `[client-state] PUT ${scope}/${key} → HTTP ${res.status} (retry in ${COOLDOWN_TRANSIENT_MS / 1000}s)`,
-      );
-      return false;
-    }
-    slot.skipUntil = Date.now() + COOLDOWN_NETWORK_MS;
-    return false;
-  } catch {
-    slot.skipUntil = Date.now() + COOLDOWN_NETWORK_MS;
-    return false;
-  } finally {
-    slot.inFlight = false;
-    if (slot.hasQueued && Date.now() >= slot.skipUntil) {
-      const next = slot.queued;
-      slot.hasQueued = false;
-      slot.queued = undefined;
-      void flushWrite(scope, key, next);
-    }
-  }
+  })();
+  return slot.run;
 }
 
 export async function writeClientState(

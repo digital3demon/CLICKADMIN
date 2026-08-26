@@ -8,9 +8,11 @@ import {
   applyInboundMembersToKanbanCard,
   mapKaitenCardMembersToCrm,
 } from "@/lib/kanban/kaiten-members-inbound";
+import type { KaitenRefreshCardPatch } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import {
   collectKanbanKaitenRefreshTargets,
   nextLinkedOrderIdPage,
+  positiveKaitenCardId,
   type KanbanKaitenRefreshTarget,
 } from "@/lib/kanban/kanban-linked-order-ids";
 import {
@@ -61,6 +63,8 @@ export type KanbanMembersBackfillBatchResult = {
   rateLimited: boolean;
   finished: boolean;
   afterOrderId: string | null;
+  /** Для живой доски: снимок tenant мог не содержать те же cardId. */
+  patches: KaitenRefreshCardPatch[];
 };
 
 async function loadTenantKanbanState(
@@ -97,10 +101,9 @@ function parseRefreshTargets(raw: unknown): KanbanKaitenRefreshTarget[] {
     const cardId = String(r.cardId ?? "").trim();
     if (!cardId || seen.has(cardId)) continue;
     seen.add(cardId);
-    const kid = Number(r.kaitenCardId);
     out.push({
       cardId,
-      kaitenCardId: Number.isFinite(kid) ? kid : null,
+      kaitenCardId: positiveKaitenCardId(r.kaitenCardId),
       linkedOrderId: String(r.linkedOrderId ?? "").trim() || null,
     });
   }
@@ -138,6 +141,7 @@ export async function runKanbanMembersBackfillBatch(
     rateLimited: false,
     finished: true,
     afterOrderId: null,
+    patches: [],
   };
 
   if (!tenantId) return empty;
@@ -210,7 +214,15 @@ export async function runKanbanMembersBackfillBatch(
   const directory = await loadKaitenUsersDirectory(db, tenantId, auth);
   const burst = { burst: true as const };
   const pendingLaneByOrderId = new Map<string, KaitenTrackLane>();
-  const appliedKaitenIds = new Set<number>();
+  const patches: KaitenRefreshCardPatch[] = [];
+  type FetchedKaiten = {
+    headCard: Record<string, unknown> | null;
+    assignees: string[];
+    participants: string[];
+    fingerprint: string;
+    unmappedLabels: string[];
+  };
+  const fetchedByKaitenId = new Map<number, FetchedKaiten>();
 
   for (const target of work) {
     lastOrderId = target.cardId;
@@ -218,94 +230,103 @@ export async function runKanbanMembersBackfillBatch(
       ? orderById.get(target.linkedOrderId)
       : undefined;
     const kaitenId =
-      target.kaitenCardId != null && Number.isFinite(target.kaitenCardId)
-        ? target.kaitenCardId
-        : order?.kaitenCardId != null && Number.isFinite(order.kaitenCardId)
-          ? order.kaitenCardId
-          : null;
+      positiveKaitenCardId(target.kaitenCardId) ??
+      positiveKaitenCardId(order?.kaitenCardId);
 
     const hits = findKanbanCardsForKaitenRefresh(state, {
       cardId: target.cardId,
       linkedOrderId: target.linkedOrderId,
       kaitenCardId: kaitenId,
     });
-    if (hits.length === 0) {
-      noCard += 1;
-      skipped += 1;
-      processed += 1;
-      continue;
-    }
     if (kaitenId == null) {
-      skipped += 1;
-      processed += 1;
-      continue;
-    }
-    if (appliedKaitenIds.has(kaitenId)) {
-      skipped += 1;
-      processed += 1;
-      continue;
-    }
-    appliedKaitenIds.add(kaitenId);
-
-    let head = await kaitenGetCard(auth, kaitenId, burst);
-    let rateRetries = 0;
-    while (
-      !head.ok &&
-      isKaitenRateLimitedStatus(head.status) &&
-      allAtOnce &&
-      rateRetries < 10
-    ) {
-      rateRetries += 1;
-      await sleepMs(2500);
-      head = await kaitenGetCard(auth, kaitenId, burst);
-    }
-    if (!head.ok) {
-      if (isKaitenRateLimitedStatus(head.status)) {
-        rateLimited = true;
-        break;
-      }
+      if (hits.length === 0) noCard += 1;
       skipped += 1;
       processed += 1;
       continue;
     }
 
-    let members: KaitenCardMemberRow[] | null = kaitenMembersFromCardJson(
-      head.card,
-    );
-    if (members == null) {
-      let list = await kaitenListCardMembers(auth, kaitenId, burst);
+    let fetched = fetchedByKaitenId.get(kaitenId);
+    if (!fetched) {
+      let head = await kaitenGetCard(auth, kaitenId, burst);
+      let rateRetries = 0;
       while (
-        !list.ok &&
-        isKaitenRateLimitedStatus(list.status) &&
+        !head.ok &&
+        isKaitenRateLimitedStatus(head.status) &&
         allAtOnce &&
         rateRetries < 10
       ) {
         rateRetries += 1;
         await sleepMs(2500);
-        list = await kaitenListCardMembers(auth, kaitenId, burst);
+        head = await kaitenGetCard(auth, kaitenId, burst);
       }
-      if (!list.ok) {
-        if (isKaitenRateLimitedStatus(list.status)) {
+      if (!head.ok) {
+        if (isKaitenRateLimitedStatus(head.status)) {
           rateLimited = true;
           break;
         }
-        members = [];
-      } else {
-        members = list.members;
+        skipped += 1;
+        processed += 1;
+        continue;
+      }
+
+      let members: KaitenCardMemberRow[] | null = kaitenMembersFromCardJson(
+        head.card,
+      );
+      if (members == null) {
+        let list = await kaitenListCardMembers(auth, kaitenId, burst);
+        while (
+          !list.ok &&
+          isKaitenRateLimitedStatus(list.status) &&
+          allAtOnce &&
+          rateRetries < 10
+        ) {
+          rateRetries += 1;
+          await sleepMs(2500);
+          list = await kaitenListCardMembers(auth, kaitenId, burst);
+        }
+        if (!list.ok) {
+          if (isKaitenRateLimitedStatus(list.status)) {
+            rateLimited = true;
+            break;
+          }
+          members = [];
+        } else {
+          members = list.members;
+        }
+      }
+
+      const fingerprint = kaitenMembersFingerprint(members);
+      const mapped = await mapKaitenCardMembersToCrm(
+        db,
+        tenantId,
+        auth,
+        members,
+        directory,
+      );
+      fetched = {
+        headCard: head.card ?? null,
+        assignees: mapped.assignees,
+        participants: mapped.participants,
+        fingerprint,
+        unmappedLabels: mapped.unmappedLabels,
+      };
+      fetchedByKaitenId.set(kaitenId, fetched);
+      if (mapped.unmappedLabels.length > 0) {
+        unmapped += 1;
       }
     }
 
-    const fingerprint = kaitenMembersFingerprint(members);
-    const mapped = await mapKaitenCardMembersToCrm(
-      db,
-      tenantId,
-      auth,
-      members,
-      directory,
-    );
-    if (mapped.unmappedLabels.length > 0) {
-      unmapped += 1;
-    }
+    patches.push({
+      cardId: target.cardId,
+      linkedOrderId: target.linkedOrderId,
+      kaitenCardId: kaitenId,
+      assignees: fetched.assignees,
+      participants: fetched.participants,
+      fingerprint: fetched.fingerprint,
+      unmappedLabels: fetched.unmappedLabels,
+      kaitenHead: fetched.headCard,
+    });
+
     let membersChanged = false;
     let headChanged = false;
     for (const hit of hits) {
@@ -315,31 +336,32 @@ export async function runKanbanMembersBackfillBatch(
       }
       if (
         applyInboundMembersToKanbanCard(card, {
-          assignees: mapped.assignees,
-          participants: mapped.participants,
-          fingerprint,
-          unmappedLabels: mapped.unmappedLabels,
+          assignees: fetched.assignees,
+          participants: fetched.participants,
+          fingerprint: fetched.fingerprint,
+          unmappedLabels: fetched.unmappedLabels,
           forceApply: true,
         })
       ) {
         membersChanged = true;
       }
       if (
-        head.card &&
-        applyKaitenHeadFieldsToKanbanCard(card, head.card)
+        fetched.headCard &&
+        applyKaitenHeadFieldsToKanbanCard(card, fetched.headCard)
       ) {
         headChanged = true;
       }
     }
 
     let positionChanged = false;
-    if (head.card) {
-      const boardIdRaw = head.card.board_id;
+    if (fetched.headCard && hits.some((h) => h.colLoc)) {
+      const boardIdRaw = fetched.headCard.board_id;
       const boardId = typeof boardIdRaw === "number" ? boardIdRaw : null;
       if (boardId != null) {
         let cols = columnsByBoardId.get(boardId);
         if (!cols) {
           let colRes = await kaitenListBoardColumns(auth, boardId, burst);
+          let rateRetries = 0;
           while (
             !colRes.ok &&
             isKaitenRateLimitedStatus(colRes.status) &&
@@ -361,8 +383,8 @@ export async function runKanbanMembersBackfillBatch(
           }
         }
         if (cols) {
-          const columnTitle = kaitenColumnTitleFromBoard(head.card, cols);
-          const sortOrder = sortOrderFromKaitenCard(head.card);
+          const columnTitle = kaitenColumnTitleFromBoard(fetched.headCard, cols);
+          const sortOrder = sortOrderFromKaitenCard(fetched.headCard);
           const inboundLane =
             cfg != null
               ? trackLaneForBoardId(
@@ -396,8 +418,19 @@ export async function runKanbanMembersBackfillBatch(
       }
     }
 
-    if (membersChanged || headChanged || positionChanged) changed += 1;
-    else skipped += 1;
+    const inboundUseful =
+      fetched.assignees.length > 0 ||
+      fetched.participants.length > 0 ||
+      (fetched.headCard != null &&
+        (fetched.headCard.asap === true ||
+          (fetched.headCard.due_date != null &&
+            fetched.headCard.due_date !== false &&
+            String(fetched.headCard.due_date).trim() !== "")));
+    if (membersChanged || headChanged || positionChanged || inboundUseful) {
+      changed += 1;
+    } else {
+      skipped += 1;
+    }
     processed += 1;
   }
 
@@ -444,5 +477,6 @@ export async function runKanbanMembersBackfillBatch(
     rateLimited,
     finished,
     afterOrderId: lastOrderId,
+    patches,
   };
 }

@@ -1,4 +1,5 @@
 import type { CardComment, KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+import { positiveKaitenCardId } from "@/lib/kanban/kanban-linked-order-ids";
 
 export const KANBAN_CHAT_STATE_KEY = "kanbanAppStateV3";
 
@@ -106,14 +107,8 @@ export type KanbanKaitenRefreshCardHit = {
   colLoc: CardLocation | null;
 };
 
-function positiveKaitenId(raw: unknown): number | null {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return n;
-}
-
 function cardMatchesKaitenRefreshLookup(
-  card: import("./types").KanbanCard,
+  card: KanbanCard,
   target: KanbanKaitenRefreshLookup,
 ): boolean {
   const wantId = String(target.cardId || "").trim();
@@ -122,8 +117,8 @@ function cardMatchesKaitenRefreshLookup(
   const wantOrder = String(target.linkedOrderId || "").trim();
   const haveOrder = String(card.linkedOrderId || "").trim();
   if (wantOrder && haveOrder && wantOrder === haveOrder) return true;
-  const wantKaiten = positiveKaitenId(target.kaitenCardId);
-  const haveKaiten = positiveKaitenId(card.kaitenCardId);
+  const wantKaiten = positiveKaitenCardId(target.kaitenCardId);
+  const haveKaiten = positiveKaitenCardId(card.kaitenCardId);
   if (wantKaiten != null && haveKaiten != null && wantKaiten === haveKaiten) {
     return true;
   }
@@ -140,7 +135,7 @@ export function findKanbanCardsForKaitenRefresh(
 ): KanbanKaitenRefreshCardHit[] {
   const wantId = String(target.cardId || "").trim();
   const wantOrder = String(target.linkedOrderId || "").trim();
-  const wantKaiten = positiveKaitenId(target.kaitenCardId);
+  const wantKaiten = positiveKaitenCardId(target.kaitenCardId);
   if (!wantId && !wantOrder && wantKaiten == null) return [];
 
   const hits: KanbanKaitenRefreshCardHit[] = [];
