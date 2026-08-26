@@ -14,8 +14,10 @@ import {
 } from "@/lib/format-order-construction";
 import { ORDER_CLINIC_PRIVATE } from "@/lib/clients-order-ui";
 
-/** Юрлицо наряда «Частное лицо» — депозит врача, не клиники. */
+/** Юрлицо / имя клиники «Частное лицо» — депозит врача, не клиники. */
 export const ORDER_LEGAL_ENTITY_PRIVATE = "Частное лицо";
+
+const PRIVATE_CLINIC_NAMES = new Set(["частное лицо", "частная практика"]);
 
 export function isOrderClinicAbsent(
   clinicId: string | null | undefined,
@@ -28,6 +30,17 @@ export function isOrderPrivatePersonLegalEntity(
   legalEntity: string | null | undefined,
 ): boolean {
   return String(legalEntity ?? "").trim() === ORDER_LEGAL_ENTITY_PRIVATE;
+}
+
+/** Клиника-заглушка «Частное лицо» или карточка ИП врача (sourceDoctorId). */
+export function isOrderPrivatePersonClinic(clinic?: {
+  name?: string | null;
+  sourceDoctorId?: string | null;
+} | null): boolean {
+  if (!clinic) return false;
+  if (String(clinic.sourceDoctorId ?? "").trim()) return true;
+  const name = String(clinic.name ?? "").trim().toLowerCase();
+  return PRIVATE_CLINIC_NAMES.has(name);
 }
 
 export type DepositDb = PrismaClient | Prisma.TransactionClient;
@@ -81,14 +94,17 @@ export function orderPayableBeforeDepositRub(opts: {
 }
 
 /**
- * Сторона депозита наряда: клиника, если клиника реально выбрана
- * и юрлицо не «Частное лицо». Иначе врач (частная практика / частное лицо).
+ * Сторона депозита наряда: клиника, если это настоящая клиника.
+ * Врач — частная практика, юрлицо «Частное лицо», клиника-заглушка
+ * с тем же именем или карточка ИП врача (sourceDoctorId).
  */
 export function depositPartyForOrder(
   clinicId: string | null | undefined,
   legalEntity?: string | null,
+  clinic?: { name?: string | null; sourceDoctorId?: string | null } | null,
 ): DepositParty {
   if (isOrderPrivatePersonLegalEntity(legalEntity)) return "DOCTOR";
+  if (isOrderPrivatePersonClinic(clinic)) return "DOCTOR";
   return isOrderClinicAbsent(clinicId) ? "DOCTOR" : "CLINIC";
 }
 
@@ -288,7 +304,21 @@ export async function applyDepositToOrder(
   });
   if (!refreshed) throw new Error("Наряд не найден");
 
-  const party = depositPartyForOrder(refreshed.clinicId, refreshed.legalEntity);
+  const clinicRow = refreshed.clinicId
+    ? await db.clinic.findFirst({
+        where: { id: refreshed.clinicId, tenantId: opts.tenantId },
+        select: {
+          name: true,
+          sourceDoctorId: true,
+          depositBalanceRub: true,
+        },
+      })
+    : null;
+  const party = depositPartyForOrder(
+    refreshed.clinicId,
+    refreshed.legalEntity,
+    clinicRow,
+  );
   const urgentMult =
     refreshed.urgentCoefficient != null &&
     Number.isFinite(refreshed.urgentCoefficient) &&
@@ -305,11 +335,7 @@ export async function applyDepositToOrder(
   let balance = 0;
   if (party === "CLINIC") {
     if (!refreshed.clinicId) throw new Error("Нет клиники у наряда");
-    const clinic = await db.clinic.findFirst({
-      where: { id: refreshed.clinicId, tenantId: opts.tenantId },
-      select: { depositBalanceRub: true },
-    });
-    balance = clinic?.depositBalanceRub ?? 0;
+    balance = clinicRow?.depositBalanceRub ?? 0;
   } else {
     const doctor = await db.doctor.findFirst({
       where: { id: refreshed.doctorId, tenantId: opts.tenantId },

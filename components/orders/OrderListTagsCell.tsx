@@ -80,6 +80,7 @@ import {
   formatDocumentCopyOrderLegalText,
   type DocumentCopyPayload,
 } from "@/lib/order-document-copy";
+import { printOrderAttachmentPdf } from "@/lib/print-order-attachment-pdf";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
   paymentValueToHarmonyTone,
@@ -907,50 +908,8 @@ export function OrderListTagsCell({
       setErr(null);
       setBusy(true);
       const printUrl = `/api/orders/${orderId}/attachments/${attId}?inline=1`;
-
-      let printed = false;
       try {
-        printed = await new Promise<boolean>((resolve) => {
-          const iframe = document.createElement("iframe");
-          let settled = false;
-          let fallbackTimer: number | null = null;
-          const settle = (ok: boolean) => {
-            if (settled) return;
-            settled = true;
-            if (fallbackTimer) window.clearTimeout(fallbackTimer);
-            window.setTimeout(() => iframe.remove(), 1_000);
-            resolve(ok);
-          };
-          iframe.style.position = "fixed";
-          iframe.style.right = "0";
-          iframe.style.bottom = "0";
-          iframe.style.width = "1px";
-          iframe.style.height = "1px";
-          iframe.style.opacity = "0";
-          iframe.style.pointerEvents = "none";
-          iframe.onload = () => {
-            const win = iframe.contentWindow;
-            if (!win) {
-              window.open(printUrl, "_blank", "noopener,noreferrer");
-              settle(true);
-              return;
-            }
-            const onAfter = () => settle(true);
-            win.addEventListener("afterprint", onAfter, { once: true });
-            window.addEventListener("afterprint", onAfter, { once: true });
-            fallbackTimer = window.setTimeout(() => settle(false), 180_000);
-            try {
-              win.focus();
-              win.print();
-            } catch {
-              window.open(printUrl, "_blank", "noopener,noreferrer");
-              settle(true);
-            }
-          };
-          iframe.onerror = () => settle(false);
-          iframe.src = printUrl;
-          document.body.appendChild(iframe);
-        });
+        const printed = await printOrderAttachmentPdf(printUrl);
         if (!printed) {
           setErr("Печать счёта не завершена — отметка не поставлена");
           return;
@@ -974,37 +933,7 @@ export function OrderListTagsCell({
       setBusy(true);
       const printUrl = `/api/orders/${orderId}/attachments/${attId}?inline=1`;
       try {
-        const printed = await new Promise<boolean>((resolve) => {
-          const iframe = document.createElement("iframe");
-          let settled = false;
-          const settle = (ok: boolean) => {
-            if (settled) return;
-            settled = true;
-            window.setTimeout(() => iframe.remove(), 1_000);
-            resolve(ok);
-          };
-          iframe.style.cssText =
-            "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none";
-          iframe.onload = () => {
-            const win = iframe.contentWindow;
-            if (!win) {
-              window.open(printUrl, "_blank", "noopener,noreferrer");
-              settle(true);
-              return;
-            }
-            try {
-              win.focus();
-              win.print();
-              settle(true);
-            } catch {
-              window.open(printUrl, "_blank", "noopener,noreferrer");
-              settle(true);
-            }
-          };
-          iframe.onerror = () => settle(false);
-          iframe.src = printUrl;
-          document.body.appendChild(iframe);
-        });
+        const printed = await printOrderAttachmentPdf(printUrl);
         if (!printed) {
           setErr("Печать УПД не завершена — отметка не поставлена");
           return;

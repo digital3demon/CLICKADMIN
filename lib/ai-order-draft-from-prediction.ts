@@ -146,6 +146,8 @@ export function buildVirtualOrderEditInitialFromPrediction(
     depositAppliedRub: null,
     depositAppliedParty: null,
     depositBalanceRub: 0,
+    depositClinicBalanceRub: 0,
+    depositDoctorBalanceRub: 0,
     financeCalculated: false,
     prosthetics: emptyProsthetics(),
     kaitenCardId: null,

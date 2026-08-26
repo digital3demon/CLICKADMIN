@@ -84,7 +84,7 @@ export async function fetchOrderEditInitial(
     order.clinicId
       ? clientsPrisma.clinic.findUnique({
           where: { id: order.clinicId },
-          select: { name: true, depositBalanceRub: true },
+          select: { name: true, sourceDoctorId: true, depositBalanceRub: true },
         })
       : Promise.resolve(null),
     clientsPrisma.doctor.findUnique({
@@ -240,8 +240,13 @@ export async function fetchOrderEditInitial(
     compositionDiscountPercent: order.compositionDiscountPercent ?? 0,
     depositAppliedRub: order.depositAppliedRub ?? null,
     depositAppliedParty: order.depositAppliedParty ?? null,
+    depositClinicName: clinic?.name ?? null,
+    depositClinicSourceDoctorId: clinic?.sourceDoctorId ?? null,
+    depositClinicBalanceRub: clinic?.depositBalanceRub ?? 0,
+    depositDoctorBalanceRub: doctor?.depositBalanceRub ?? 0,
     depositBalanceRub:
-      depositPartyForOrder(order.clinicId, order.legalEntity) === "DOCTOR"
+      depositPartyForOrder(order.clinicId, order.legalEntity, clinic) ===
+      "DOCTOR"
         ? (doctor?.depositBalanceRub ?? 0)
         : (clinic?.depositBalanceRub ?? 0),
     financeCalculated: order.financeCalculated === true,

@@ -795,6 +795,10 @@ export type OrderEditInitial = {
   depositAppliedParty: "CLINIC" | "DOCTOR" | null;
   /** Баланс депозита релевантной стороны (клиника или врач) */
   depositBalanceRub: number;
+  depositClinicName?: string | null;
+  depositClinicSourceDoctorId?: string | null;
+  depositClinicBalanceRub?: number;
+  depositDoctorBalanceRub?: number;
   /** ФинОтдел: состав заказа проверен и просчитан */
   financeCalculated: boolean;
   prosthetics: OrderProstheticsV1;
@@ -1878,15 +1882,27 @@ export function OrderEditForm({
   const [depositAppliedRub, setDepositAppliedRub] = useState(
     () => initial.depositAppliedRub ?? null,
   );
-  const [depositBalanceRub, setDepositBalanceRub] = useState(
-    () => initial.depositBalanceRub ?? 0,
+  const [depositClinicBalanceRub, setDepositClinicBalanceRub] = useState(
+    () => initial.depositClinicBalanceRub ?? 0,
+  );
+  const [depositDoctorBalanceRub, setDepositDoctorBalanceRub] = useState(
+    () => initial.depositDoctorBalanceRub ?? initial.depositBalanceRub ?? 0,
   );
   const [depositBusy, setDepositBusy] = useState(false);
 
   useEffect(() => {
     setDepositAppliedRub(initial.depositAppliedRub ?? null);
-    setDepositBalanceRub(initial.depositBalanceRub ?? 0);
-  }, [initial.id, initial.depositAppliedRub, initial.depositBalanceRub]);
+    setDepositClinicBalanceRub(initial.depositClinicBalanceRub ?? 0);
+    setDepositDoctorBalanceRub(
+      initial.depositDoctorBalanceRub ?? initial.depositBalanceRub ?? 0,
+    );
+  }, [
+    initial.id,
+    initial.depositAppliedRub,
+    initial.depositClinicBalanceRub,
+    initial.depositDoctorBalanceRub,
+    initial.depositBalanceRub,
+  ]);
 
   const financePreviewTotal = useMemo(() => {
     const payload = draftToConstructionPayload(draftLines) as Array<{
@@ -1947,33 +1963,6 @@ export function OrderEditForm({
         return { title, quantity, amountRub };
       });
   }, [draftLines]);
-
-  const financePreviewBeforeDeposit = useMemo(() => {
-    const payload = draftToConstructionPayload(draftLines) as Array<{
-      quantity?: number;
-      unitPrice?: number | null;
-      lineDiscountPercent?: number;
-    }>;
-    const lines = payload.map((row) => ({
-      quantity: typeof row.quantity === "number" ? row.quantity : 1,
-      unitPrice:
-        row.unitPrice != null &&
-        typeof row.unitPrice === "number" &&
-        !Number.isNaN(row.unitPrice)
-          ? row.unitPrice
-          : null,
-      lineDiscountPercent:
-        typeof row.lineDiscountPercent === "number" &&
-        !Number.isNaN(row.lineDiscountPercent)
-          ? row.lineDiscountPercent
-          : 0,
-    }));
-    const sub = orderCompositionSubtotalAfterDiscountsRub(
-      lines,
-      compositionDiscountPercent,
-    );
-    return Math.round(sub * urgentPriceMult);
-  }, [draftLines, compositionDiscountPercent, urgentPriceMult]);
 
   /** Сумма по счёту заполнена и расходится с составом; подтверждённая пара не светится. */
   const invoiceCompositionMismatch = useMemo(() => {
@@ -3383,6 +3372,40 @@ export function OrderEditForm({
     </div>
   );
 
+  const depositClinicMeta = useMemo(() => {
+    if (!clinicId || clinicId === ORDER_CLINIC_PRIVATE) return null;
+    const row = clinics.find((c) => c.id === clinicId);
+    if (row) {
+      return {
+        name: row.name,
+        sourceDoctorId: row.sourceDoctorId ?? null,
+      };
+    }
+    if (clinicId === initial.clinicId) {
+      return {
+        name: initial.depositClinicName ?? null,
+        sourceDoctorId: initial.depositClinicSourceDoctorId ?? null,
+      };
+    }
+    return null;
+  }, [
+    clinicId,
+    clinics,
+    initial.clinicId,
+    initial.depositClinicName,
+    initial.depositClinicSourceDoctorId,
+  ]);
+
+  const depositPartyLive = depositPartyForOrder(
+    clinicId === ORDER_CLINIC_PRIVATE ? null : clinicId,
+    legalEntity === LEGAL_ENTITIES[0] ? null : legalEntity,
+    depositClinicMeta,
+  );
+  const depositBalanceRub =
+    depositPartyLive === "DOCTOR"
+      ? depositDoctorBalanceRub
+      : depositClinicBalanceRub;
+
   const applyDepositOnOrder = useCallback(async () => {
     if (!canEditOrder || previewMode) return;
     setDepositBusy(true);
@@ -3401,7 +3424,13 @@ export function OrderEditForm({
         return;
       }
       setDepositAppliedRub(j.depositAppliedRub ?? 0);
-      if (typeof j.balanceRub === "number") setDepositBalanceRub(j.balanceRub);
+      if (typeof j.balanceRub === "number") {
+        if (depositPartyLive === "DOCTOR") {
+          setDepositDoctorBalanceRub(j.balanceRub);
+        } else {
+          setDepositClinicBalanceRub(j.balanceRub);
+        }
+      }
       toast.success("Депозит учтён в наряде");
       router.refresh();
     } catch {
@@ -3409,7 +3438,7 @@ export function OrderEditForm({
     } finally {
       setDepositBusy(false);
     }
-  }, [canEditOrder, initial.id, previewMode, router]);
+  }, [canEditOrder, depositPartyLive, initial.id, previewMode, router]);
 
   const unapplyDepositOnOrder = useCallback(async () => {
     if (!canEditOrder || previewMode) return;
@@ -3428,7 +3457,13 @@ export function OrderEditForm({
         return;
       }
       setDepositAppliedRub(null);
-      if (typeof j.balanceRub === "number") setDepositBalanceRub(j.balanceRub);
+      if (typeof j.balanceRub === "number") {
+        if (depositPartyLive === "DOCTOR") {
+          setDepositDoctorBalanceRub(j.balanceRub);
+        } else {
+          setDepositClinicBalanceRub(j.balanceRub);
+        }
+      }
       toast.success("Учёт депозита снят");
       router.refresh();
     } catch {
@@ -3436,61 +3471,13 @@ export function OrderEditForm({
     } finally {
       setDepositBusy(false);
     }
-  }, [canEditOrder, initial.id, previewMode, router]);
+  }, [canEditOrder, depositPartyLive, initial.id, previewMode, router]);
 
-  const depositPartyLive = depositPartyForOrder(
-    clinicId === ORDER_CLINIC_PRIVATE ? null : clinicId,
-    legalEntity === LEGAL_ENTITIES[0] ? null : legalEntity,
-  );
-
-  const depositTile =
-    depositBalanceRub > 0 || (depositAppliedRub != null && depositAppliedRub > 0) ? (
-      <div className="flex min-h-[11rem] w-full min-w-0 flex-col gap-2 rounded-lg border border-violet-400/50 bg-violet-500/10 p-3">
-        <div className="text-sm font-bold uppercase tracking-wide text-violet-800 dark:text-violet-200">
-          Депозит
-        </div>
-        <p className="text-xs text-[var(--text-secondary)]">
-          Баланс {depositPartyLive === "DOCTOR" ? "врача" : "клиники"}:{" "}
-          <strong className="tabular-nums text-[var(--text-strong)]">
-            {moneyRu(depositBalanceRub)}
-          </strong>
-          {depositAppliedRub != null && depositAppliedRub > 0 ? (
-            <>
-              {" "}
-              · учтено:{" "}
-              <strong className="tabular-nums">{moneyRu(depositAppliedRub)}</strong>
-            </>
-          ) : null}
-        </p>
-        <p className="text-[11px] text-[var(--text-muted)]">
-          К оплате до учёта: {moneyRu(financePreviewBeforeDeposit)}. Учёт не уходит в
-          минус — остаток остаётся на карточке.
-        </p>
-        <div className="mt-auto flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={depositBusy || !canEditOrder || previewMode}
-            onClick={() => void applyDepositOnOrder()}
-            className="rounded-md bg-violet-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
-          >
-            Учесть в этом заказе
-          </button>
-          <button
-            type="button"
-            disabled={
-              depositBusy ||
-              !canEditOrder ||
-              previewMode ||
-              !(depositAppliedRub != null && depositAppliedRub > 0)
-            }
-            onClick={() => void unapplyDepositOnOrder()}
-            className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-strong)] disabled:opacity-50"
-          >
-            Не учитывать
-          </button>
-        </div>
-      </div>
-    ) : null;
+  const depositApplied = depositAppliedRub != null && depositAppliedRub > 0;
+  const depositRowVisible = depositBalanceRub > 0 || depositApplied;
+  const depositRowAmountRub = depositApplied
+    ? depositAppliedRub
+    : depositBalanceRub;
 
   const oeMidConstructions = (
     <div
@@ -3547,21 +3534,56 @@ export function OrderEditForm({
             </span>
             <span className="mt-0.5 block text-[10px] font-normal leading-tight text-[var(--text-muted)] sm:mt-0 sm:ml-2 sm:inline">
               с учётом срочности
-              {depositAppliedRub != null && depositAppliedRub > 0
-                ? " и депозита"
-                : ""}
+              {depositApplied ? " и депозита" : ""}
             </span>
           </p>
         </div>
       </div>
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto shell-desktop:overflow-y-auto">
         <div className="scrollbar-none -mx-3 overflow-x-auto px-3 shell-desktop:mx-0 shell-desktop:overflow-visible shell-desktop:px-0">
+          {depositRowVisible ? (
+            <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border border-violet-400/45 bg-violet-500/10 px-3 py-2">
+              <div className="min-w-0 text-sm">
+                <span className="font-semibold text-violet-900 dark:text-violet-200">
+                  Депозит
+                </span>
+                <span className="ml-2 tabular-nums text-[var(--text-strong)]">
+                  {moneyRu(depositRowAmountRub)}
+                </span>
+                <span className="ml-1.5 text-[11px] text-[var(--text-muted)]">
+                  {depositApplied
+                    ? "учтено в работе"
+                    : `баланс ${depositPartyLive === "DOCTOR" ? "врача" : "клиники"}`}
+                </span>
+              </div>
+              <label
+                className={`flex items-center gap-1.5 text-xs text-[var(--text-secondary)] ${
+                  depositBusy || !canEditOrder || previewMode
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-[var(--card-border)] bg-[var(--card-bg)]"
+                  checked={depositApplied}
+                  disabled={depositBusy || !canEditOrder || previewMode}
+                  onChange={(e) => {
+                    if (e.target.checked) void applyDepositOnOrder();
+                    else void unapplyDepositOnOrder();
+                  }}
+                />
+                <span className="whitespace-nowrap">
+                  Учесть депозит в этой работе
+                </span>
+              </label>
+            </div>
+          ) : null}
           <OrderConstructionsEditor
             value={draftLines}
             onChange={setDraftLines}
             clinicId={clinicId || null}
             doctorId={doctorId || null}
-            leadingTile={depositTile}
           />
         </div>
       </div>

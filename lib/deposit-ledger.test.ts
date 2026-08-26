@@ -40,6 +40,26 @@ describe("deposit apply math", () => {
       "CLINIC",
     );
     expect(depositPartyForOrder("clinic-1", "ООО")).toBe("CLINIC");
+    expect(
+      depositPartyForOrder("clinic-1", null, { name: "Частное лицо" }),
+    ).toBe("DOCTOR");
+    expect(
+      depositPartyForOrder("clinic-1", "Выбрать из списка", {
+        name: "частное лицо",
+      }),
+    ).toBe("DOCTOR");
+    expect(
+      depositPartyForOrder("clinic-1", null, { name: "Частная практика" }),
+    ).toBe("DOCTOR");
+    expect(
+      depositPartyForOrder("clinic-1", null, {
+        name: "ООО Протетика",
+        sourceDoctorId: "doc-1",
+      }),
+    ).toBe("DOCTOR");
+    expect(
+      depositPartyForOrder("clinic-1", null, { name: "ООО Протетика" }),
+    ).toBe("CLINIC");
   });
 
   it("payable до депозита: состав × срочность", () => {
