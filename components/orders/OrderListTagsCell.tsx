@@ -81,6 +81,12 @@ import {
   type DocumentCopyPayload,
 } from "@/lib/order-document-copy";
 import { printOrderAttachmentPdf } from "@/lib/print-order-attachment-pdf";
+import {
+  WAIT_PAYMENT_NOTE_MAX,
+  WAIT_PAYMENT_TAG_BASE,
+  buildWaitPaymentListTagLabel,
+  isWaitPaymentListTagLabel,
+} from "@/lib/wait-payment-list-tag";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
 import {
   paymentValueToHarmonyTone,
@@ -305,6 +311,12 @@ type MissingTagAction =
       title: string;
       subtitle?: string;
       kind: "deposit";
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      kind: "waitPaymentFlow";
     };
 
 function buildTagRows(
@@ -448,6 +460,10 @@ export function OrderListTagsCell({
     null,
   );
   const [depositAmount, setDepositAmount] = useState("");
+  const [waitPaymentOpen, setWaitPaymentOpen] = useState(false);
+  const [waitPaymentNote, setWaitPaymentNote] = useState("");
+  const [waitPaymentBlock, setWaitPaymentBlock] = useState(false);
+  const [waitPaymentBlockReason, setWaitPaymentBlockReason] = useState("");
   const [localInvoiceAttachmentId, setLocalInvoiceAttachmentId] = useState<
     string | null
   >(invoiceAttachmentId);
@@ -531,9 +547,27 @@ export function OrderListTagsCell({
 
   const closeUrgent = useCallback(() => setUrgentOpen(false), []);
 
+  const closeWaitPayment = useCallback(() => {
+    setWaitPaymentOpen(false);
+    setWaitPaymentNote("");
+    setWaitPaymentBlock(false);
+    setWaitPaymentBlockReason("");
+    setErr(null);
+  }, []);
+
+  const openWaitPayment = useCallback(() => {
+    setWaitPaymentNote("");
+    setWaitPaymentBlock(false);
+    setWaitPaymentBlockReason("");
+    setErr(null);
+    setWaitPaymentOpen(true);
+    setAddOpen(false);
+  }, []);
+
   useOverlayDismiss(addOpen, closeAdd);
   useOverlayDismiss(paymentOpen, closePayment);
   useOverlayDismiss(urgentOpen, closeUrgent);
+  useOverlayDismiss(waitPaymentOpen, closeWaitPayment);
 
   const submitAdd = useCallback(async (labelOverride?: string) => {
     const label = (labelOverride ?? newLabel).trim();
@@ -613,6 +647,63 @@ export function OrderListTagsCell({
       setBusy(false);
     }
   }, [blockReasonDraft, closeAdd, kaitenBlocked, kaitenCardId, newLabel, orderId, router]);
+
+  const submitWaitPayment = useCallback(async () => {
+    const label = buildWaitPaymentListTagLabel(waitPaymentNote);
+    setErr(null);
+    if (waitPaymentBlock && !waitPaymentBlockReason.trim()) {
+      setErr("Укажите причину блокировки карточки");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/list-tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          waitPaymentBlock
+            ? {
+                label,
+                alsoBlock: true,
+                blockReason: waitPaymentBlockReason.trim(),
+              }
+            : { label },
+        ),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        kaitenBlock?: KaitenBlockFromListTagResult;
+      };
+      if (!res.ok) {
+        setErr(data.error ?? "Не удалось добавить отметку");
+        return;
+      }
+      const kb = data.kaitenBlock;
+      if (kb?.kind === "error") {
+        setErr(`Отметка сохранена, но блокировка не прошла: ${kb.message}`);
+        router.refresh();
+        return;
+      }
+      if (kb?.kind === "skipped" && kb.reason === "kaiten_not_configured") {
+        setErr("Отметка сохранена. Kaiten не настроен — блокировка не выполнена.");
+        router.refresh();
+        return;
+      }
+      closeWaitPayment();
+      router.refresh();
+    } catch {
+      setErr("Сеть или сервер недоступны");
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    closeWaitPayment,
+    orderId,
+    router,
+    waitPaymentBlock,
+    waitPaymentBlockReason,
+    waitPaymentNote,
+  ]);
 
   const applyQuickPatch = useCallback(
     async (
@@ -694,8 +785,11 @@ export function OrderListTagsCell({
       filterQuickOrderTagSuggestions(newLabel, {
         kaitenBlocked: kaitenBlocked === true,
         kaitenCanBlock: Boolean(kaitenCardId) && !kaitenBlocked,
+        hasWaitPayment: customTags.some((t) =>
+          isWaitPaymentListTagLabel(t.label),
+        ),
       }),
-    [newLabel, kaitenBlocked, kaitenCardId],
+    [newLabel, kaitenBlocked, kaitenCardId, customTags],
   );
 
   const onQuickSuggestion = useCallback(
@@ -706,6 +800,10 @@ export function OrderListTagsCell({
         setErr(null);
         return;
       }
+      if ("waitPaymentFlow" in s && s.waitPaymentFlow) {
+        openWaitPayment();
+        return;
+      }
       if ("listTagLabel" in s) {
         void submitAdd(s.listTagLabel);
         return;
@@ -714,7 +812,7 @@ export function OrderListTagsCell({
         void applyQuickPatch(s.patch);
       }
     },
-    [applyQuickPatch, submitAdd],
+    [applyQuickPatch, openWaitPayment, submitAdd],
   );
 
   const currentPayment = normalizedPayment(payment);
@@ -763,6 +861,15 @@ export function OrderListTagsCell({
         title: "Заблокировать",
         subtitle: "Нужно указать причину ниже",
         kind: "kaitenBlockFlow",
+      });
+    }
+
+    if (!customTags.some((t) => isWaitPaymentListTagLabel(t.label))) {
+      actions.push({
+        id: "wait-payment",
+        title: WAIT_PAYMENT_TAG_BASE,
+        subtitle: "До 20 символов и выбор: блокировать карточку или нет",
+        kind: "waitPaymentFlow",
       });
     }
 
@@ -882,6 +989,7 @@ export function OrderListTagsCell({
   }, [
     currentPayment,
     clinicId,
+    customTags,
     doctorId,
     invoicePrinted,
     invoicePaperDocs,
@@ -982,11 +1090,22 @@ export function OrderListTagsCell({
         setErr(null);
         return;
       }
+      if (action.kind === "waitPaymentFlow") {
+        openWaitPayment();
+        return;
+      }
       setNewLabel(QUICK_TAG_KAITEN_BLOCK_LABEL);
       setBlockReasonDraft("");
       setErr(null);
     },
-    [applyPaymentPatch, applyQuickPatch, clinicId, paymentPartialRub, submitAdd],
+    [
+      applyPaymentPatch,
+      applyQuickPatch,
+      clinicId,
+      openWaitPayment,
+      paymentPartialRub,
+      submitAdd,
+    ],
   );
 
   const filterListHref = useCallback(
@@ -2069,6 +2188,99 @@ export function OrderListTagsCell({
                 onClick={closePayment}
               >
                 Закрыть
+              </button>
+            </div>
+          </>
+        ),
+        "w-full max-w-md",
+      )}
+
+      {renderTagsOverlay(
+        waitPaymentOpen,
+        WAIT_PAYMENT_TAG_BASE,
+        closeWaitPayment,
+        (
+          <>
+            <p className="text-base font-semibold text-[var(--app-text)]">
+              {WAIT_PAYMENT_TAG_BASE}
+            </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Можно дописать пояснение — не больше {WAIT_PAYMENT_NOTE_MAX}{" "}
+              символов. Блокировка карточки по желанию.
+            </p>
+            <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
+              Дописать
+              <input
+                type="text"
+                value={waitPaymentNote}
+                maxLength={WAIT_PAYMENT_NOTE_MAX}
+                onChange={(e) => setWaitPaymentNote(e.target.value)}
+                className="mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-base text-[var(--app-text)]"
+                placeholder="необязательно"
+                autoFocus
+              />
+              <span className="mt-0.5 block text-[11px] font-normal text-[var(--text-muted)]">
+                {waitPaymentNote.length}/{WAIT_PAYMENT_NOTE_MAX}
+              </span>
+            </label>
+            <p className="mt-3 text-sm font-medium text-[var(--text-body)]">
+              Блокировать карточку
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  !waitPaymentBlock
+                    ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)] text-white"
+                    : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--app-text)]"
+                }`}
+                onClick={() => setWaitPaymentBlock(false)}
+              >
+                Нет
+              </button>
+              <button
+                type="button"
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  waitPaymentBlock
+                    ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)] text-white"
+                    : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--app-text)]"
+                }`}
+                onClick={() => setWaitPaymentBlock(true)}
+              >
+                Да
+              </button>
+            </div>
+            {waitPaymentBlock ? (
+              <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
+                Причина блока
+                <textarea
+                  value={waitPaymentBlockReason}
+                  onChange={(e) => setWaitPaymentBlockReason(e.target.value)}
+                  className="mt-1 min-h-[4.5rem] w-full resize-y rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2 text-base text-[var(--app-text)]"
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Текст уйдёт в Kaiten и в подсказку в CRM"
+                />
+              </label>
+            ) : null}
+            {err ? (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-[var(--card-border)] px-4 py-2 text-base text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+                onClick={closeWaitPayment}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-base font-medium text-white hover:opacity-95 disabled:opacity-50"
+                onClick={() => void submitWaitPayment()}
+              >
+                {busy ? "Сохранение…" : "Добавить"}
               </button>
             </div>
           </>

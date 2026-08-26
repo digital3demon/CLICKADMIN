@@ -4,7 +4,7 @@ import type { SessionClaims } from "@/lib/auth/jwt";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { getSiteOrigin } from "@/lib/site-origin-server";
-import { prostheticsFromDb } from "@/lib/order-prosthetics";
+import { hydrateOrderProstheticsFromStock } from "@/lib/inventory/our-lines-from-sale-issues";
 import {
   getClientsPrisma,
   getOrdersPrisma,
@@ -70,6 +70,11 @@ export async function fetchOrderEditInitial(
   });
 
   if (!order) return null;
+
+  const prostheticsHydrated = await hydrateOrderProstheticsFromStock(
+    ordersPrisma,
+    order,
+  );
 
   const [
     clinic,
@@ -265,7 +270,7 @@ export async function fetchOrderEditInitial(
       bridgeToFdi: c.bridgeToFdi,
       arch: c.arch,
     })),
-    prosthetics: prostheticsFromDb(order.prosthetics),
+    prosthetics: prostheticsHydrated,
     kaitenCardId: order.kaitenCardId,
     kaitenCardTitleLabel: order.kaitenCardTitleLabel,
     kaitenDecideLater: order.kaitenDecideLater,

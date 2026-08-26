@@ -6,6 +6,7 @@ import {
   prostheticsFromDb,
   prostheticsToJson,
 } from "@/lib/order-prosthetics";
+import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getOrdersPrismaClient } from "@/lib/prisma-orders";
 import { getPrisma } from "@/lib/get-prisma";
 
@@ -64,8 +65,9 @@ export async function mirrorStockDeltaToOrderProsthetics(opts: {
   };
 
   try {
-    if (await tryUpdate(getOrdersPrismaClient())) return { ok: true };
+    if (await tryUpdate(await getOrdersPrisma())) return { ok: true };
     if (await tryUpdate(await getPrisma())) return { ok: true };
+    if (await tryUpdate(getOrdersPrismaClient())) return { ok: true };
     return { ok: false, error: "Наряд не найден для зеркалирования протетики" };
   } catch (e) {
     const msg =

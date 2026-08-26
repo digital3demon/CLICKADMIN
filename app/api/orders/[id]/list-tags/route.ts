@@ -30,9 +30,13 @@ export async function POST(
     return NextResponse.json({ error: "Не указан id" }, { status: 400 });
   }
 
-  let body: { label?: unknown; blockReason?: unknown };
+  let body: { label?: unknown; blockReason?: unknown; alsoBlock?: unknown };
   try {
-    body = (await req.json()) as { label?: unknown; blockReason?: unknown };
+    body = (await req.json()) as {
+      label?: unknown;
+      blockReason?: unknown;
+      alsoBlock?: unknown;
+    };
   } catch {
     return NextResponse.json({ error: "Некорректное тело запроса" }, { status: 400 });
   }
@@ -41,6 +45,7 @@ export async function POST(
     typeof body.label === "string" ? body.label.trim() : "";
   const blockReasonRaw =
     typeof body.blockReason === "string" ? body.blockReason.trim() : "";
+  const alsoBlock = body.alsoBlock === true;
 
   try {
     const prisma = await getOrdersPrisma();
@@ -98,10 +103,29 @@ export async function POST(
       );
     }
 
+    if (alsoBlock && !blockReasonRaw) {
+      return NextResponse.json(
+        { error: "Укажите причину блокировки карточки" },
+        { status: 400 },
+      );
+    }
+
     const row = await prisma.orderCustomTag.create({
       data: { orderId: id.trim(), label: label.trim() },
       select: { id: true, label: true },
     });
+
+    if (alsoBlock) {
+      const kaitenBlock = await applyKaitenBlockForOrderIfUnblocked(
+        id.trim(),
+        blockReasonRaw,
+      );
+      return NextResponse.json({
+        tag: row,
+        filterKey: listTagCustomLabel(label),
+        kaitenBlock,
+      });
+    }
 
     return NextResponse.json({
       tag: row,

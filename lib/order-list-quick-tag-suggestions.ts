@@ -31,6 +31,12 @@ export type QuickOrderTagSuggestion =
       subtitle?: string;
       /** Подставить метку и запросить причину перед отправкой. */
       kaitenBlockFlow: true;
+    }
+  | {
+      id: string;
+      title: string;
+      subtitle?: string;
+      waitPaymentFlow: true;
     };
 
 const norm = (s: string) => s.trim().toLocaleLowerCase("ru-RU");
@@ -145,6 +151,8 @@ export type QuickOrderTagSuggestionsOpts = {
   kaitenBlocked?: boolean;
   /** Есть карточка Kaiten и наряд сейчас не в блокировке — показать «Заблокировать». */
   kaitenCanBlock?: boolean;
+  /** Отметка «ждем оплату» уже есть — не предлагать снова. */
+  hasWaitPayment?: boolean;
 };
 
 /**
@@ -193,6 +201,26 @@ export function filterQuickOrderTagSuggestions(
       subtitle:
         "Подставит метку «заблокировать» — укажите причину ниже и нажмите «Добавить»",
       kaitenBlockFlow: true,
+    });
+  }
+
+  if (
+    opts?.hasWaitPayment !== true &&
+    q.length >= 2 &&
+    matchesQuery(q, "ждем оплату", [
+      "ждем оплату",
+      "ждём оплату",
+      "ждем",
+      "ждём",
+      "ожидаем оплату",
+      "wait payment",
+    ])
+  ) {
+    out.push({
+      id: "wait-payment-tag",
+      title: "ждем оплату",
+      subtitle: "Отметка + до 20 символов, по желанию блокировка карточки",
+      waitPaymentFlow: true,
     });
   }
 
