@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/get-prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +25,7 @@ export async function POST(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
   }
 
+  const prisma = await getPrisma();
   const existing = await prisma.tenantApiKey.findFirst({
     where: { id: keyId, tenantId },
     select: { id: true, revokedAt: true },

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/get-prisma";
 import {
   formatTenantApiKeyPrefixForUi,
   generateTenantApiKeyPlaintext,
@@ -31,6 +31,7 @@ export async function GET() {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
 
+  const prisma = await getPrisma();
   const rows = await prisma.tenantApiKey.findMany({
     where: { tenantId },
     orderBy: { createdAt: "desc" },
@@ -92,6 +93,7 @@ export async function POST(req: Request) {
     scopes = [TENANT_API_KEY_SCOPE_SCANNER_INGEST];
   }
 
+  const prisma = await getPrisma();
   const plaintext = generateTenantApiKeyPlaintext();
   const row = await prisma.tenantApiKey.create({
     data: {

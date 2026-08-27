@@ -35,7 +35,7 @@ const DEMO_AUTHOR = "Владелец (демо)";
  * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
  * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
  */
-export const DEMO_SEED_REVISION = 9;
+export const DEMO_SEED_REVISION = 10;
 const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
 /** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
 const DEMO_ORDER_COUNT_MIN = 50;
@@ -129,6 +129,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     await tx.contractorRevision.deleteMany();
     await tx.clinicReconciliationSnapshot.deleteMany();
     await tx.legalEntityReconciliation.deleteMany();
+    await tx.tenantApiKey.deleteMany();
     await tx.stockMovement.deleteMany();
     await tx.stockBalance.deleteMany();
     await tx.inventoryItem.deleteMany();
