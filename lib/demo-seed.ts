@@ -122,6 +122,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     await tx.subscriptionInvoice.deleteMany();
     await tx.contractorRevision.deleteMany();
     await tx.clinicReconciliationSnapshot.deleteMany();
+    await tx.legalEntityReconciliation.deleteMany();
     await tx.stockMovement.deleteMany();
     await tx.stockBalance.deleteMany();
     await tx.inventoryItem.deleteMany();

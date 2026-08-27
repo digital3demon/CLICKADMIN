@@ -99,29 +99,44 @@ type DateRangeUtc = { from: Date; to: Date };
  * Общий payload сверки (PDF + Excel по шаблону).
  */
 export async function buildClinicReconciliationPdfPayload(
-  clinicId: string,
+  clinicId: string | string[],
   range: DateRangeUtc,
   selectedOrderIds?: string[] | null,
 ): Promise<ClinicReconciliationPdfPayload> {
-  const clinic = await (await getPrisma()).clinic.findUnique({
-    where: { id: clinicId },
+  const clinicIds = (Array.isArray(clinicId) ? clinicId : [clinicId])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+  if (clinicIds.length === 0) {
+    throw new Error("Clinic not found");
+  }
+
+  const clinics = await (await getPrisma()).clinic.findMany({
+    where: { id: { in: clinicIds } },
     select: {
+      id: true,
       name: true,
       legalFullName: true,
       inn: true,
     },
   });
-  if (!clinic) {
+  if (clinics.length === 0) {
     throw new Error("Clinic not found");
   }
 
+  const primary =
+    clinics.find((c) => c.inn?.trim()) ?? clinics[0]!;
   const legal =
-    cleanLegalFullName(clinic.legalFullName) || clinic.name.trim() || "—";
-  const inn = clinic.inn?.trim();
+    cleanLegalFullName(primary.legalFullName) || primary.name.trim() || "—";
+  const inn = primary.inn?.trim();
+  const extraNames = clinics
+    .map((c) => c.name.trim())
+    .filter((n) => n && n !== legal);
   const clinicDisplay =
-    clinic.name.trim() && clinic.name.trim() !== legal
-      ? `${legal} (${clinic.name.trim()})`
-      : legal;
+    extraNames.length > 1
+      ? `${legal} (${extraNames.join(", ")})`
+      : extraNames.length === 1 && extraNames[0] !== legal
+        ? `${legal} (${extraNames[0]})`
+        : legal;
   const clinicTitleLine = inn ? `${clinicDisplay} ИНН ${inn}` : clinicDisplay;
 
   const periodFromLabel = formatDateDdMmYyMsk(range.from);
@@ -138,7 +153,7 @@ export async function buildClinicReconciliationPdfPayload(
     where: {
       ...(selectedList.length > 0 ? { orderId: { in: selectedList } } : {}),
       order: {
-        clinicId,
+        clinicId: clinicIds.length === 1 ? clinicIds[0] : { in: clinicIds },
         ...orderWhereReconciliationPeriod(range),
       },
     },

@@ -7,10 +7,9 @@ import { getPrisma } from "@/lib/get-prisma";
 import { reconciliationCronTasksForNow } from "@/lib/reconciliation-schedule-msk";
 
 /**
- * Планировщик: раз в сутки около 17:05 UTC (= 20:05 МСК, Россия без DST).
+ * Раньше создавал xlsx-снимки в 20:05 МСК. Теперь задачи пустые:
+ * сверка копится живьём, файл — в момент скачивания.
  * Authorization: Bearer $CRON_SECRET
- *
- * Для Vercel добавьте в vercel.json crons на этот путь и задайте CRON_SECRET в env.
  */
 export async function GET(req: Request) {
   const auth = req.headers.get("authorization")?.trim();

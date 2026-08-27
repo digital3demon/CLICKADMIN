@@ -1,6 +1,7 @@
 "use client";
 
 import { DepositFinanceBlock } from "@/components/clients/DepositFinanceBlock";
+import { ClinicLegalReconciliationBlock } from "@/components/clients/ClinicLegalReconciliationBlock";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -859,6 +860,13 @@ export function FinancePanel({
             </div>
           )}
         </div>
+
+        {worksWithReconciliation ? (
+          <ClinicLegalReconciliationBlock
+            clinicId={clinicId}
+            canEdit={canEditClients}
+          />
+        ) : null}
 
         {worksWithReconciliation ? (
           <div className="mt-6 border-t border-[var(--card-border)] pt-5">

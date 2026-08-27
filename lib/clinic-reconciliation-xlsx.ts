@@ -3,6 +3,11 @@ import path from "node:path";
 import ExcelJS from "exceljs";
 import { parseDateRangeUTC } from "@/lib/clinic-finance";
 import { buildClinicReconciliationPdfPayload } from "@/lib/clinic-reconciliation-pdf-data";
+import {
+  RECON_COL_W_PT,
+  RECON_EXCEL_NUMFMT_RUB,
+  reconExcelColWidth,
+} from "@/lib/clinic-reconciliation-layout";
 
 type DateRangeUtc = { from: Date; to: Date };
 
@@ -97,9 +102,21 @@ function applyFill(cell: ExcelJS.Cell, fill: ExcelJS.Fill) {
 function setValueCell(
   cell: ExcelJS.Cell,
   value: string | number | null | undefined,
+  asRub?: boolean,
 ) {
   cell.value = value ?? "";
   applyFill(cell, valueFill());
+  if (asRub && typeof value === "number") {
+    cell.numFmt = RECON_EXCEL_NUMFMT_RUB;
+  }
+}
+
+function setHeadCell(cell: ExcelJS.Cell, value: string) {
+  cell.value = value;
+  applyFill(cell, headFill());
+  cell.border = THIN_BORDER;
+  cell.font = { ...(cell.font ?? {}), bold: true, color: { argb: "FFFFFFFF" }, size: 8 };
+  cell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
 }
 
 const THIN_BORDER: ExcelJS.Borders = {
@@ -130,7 +147,14 @@ function applyPalette(sheet: ExcelJS.Worksheet, metaShift: number) {
   const headerRowN = metaRowN + 3;
   const dataFirstN = DATA_FIRST + metaShift;
 
-  for (let r = SUMMARY_FIRST; r < SUMMARY_FIRST + SUMMARY_CAPACITY + metaShift; r++) {
+  for (const c of [6, 7, 8, 9]) {
+    const cell = sheet.getRow(SUMMARY_FIRST).getCell(c);
+    paintCell(cell, headFill(), {
+      alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
+    });
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 8 };
+  }
+  for (let r = SUMMARY_FIRST + 1; r < SUMMARY_FIRST + SUMMARY_CAPACITY + metaShift; r++) {
     for (const c of [6, 7, 8, 9]) {
       paintCell(sheet.getRow(r).getCell(c), valueFill());
     }
@@ -155,9 +179,11 @@ function applyPalette(sheet: ExcelJS.Worksheet, metaShift: number) {
   });
 
   for (let c = 1; c <= 10; c++) {
-    paintCell(sheet.getRow(headerRowN).getCell(c), headFill(), {
+    const cell = sheet.getRow(headerRowN).getCell(c);
+    paintCell(cell, headFill(), {
       alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
     });
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 8 };
   }
 
   for (let r = dataFirstN; r <= sheet.rowCount; r++) {
@@ -194,7 +220,7 @@ function recolorTemplateFills(sheet: ExcelJS.Worksheet) {
  * Выгрузка сверки: заполнение полей значений шаблона (подписи формы — серая шапка).
  */
 export async function buildClinicReconciliationXlsxBuffer(
-  clinicId: string,
+  clinicId: string | string[],
   _clinicName: string,
   range: DateRangeUtc,
   selectedOrderIds?: string[] | null,
@@ -216,16 +242,10 @@ export async function buildClinicReconciliationXlsxBuffer(
 
   recolorTemplateFills(sheet);
 
-  /** Снимок ширин до splice — иначе после вставки строк границы «скачут». */
-  const lockedColWidths: Array<number | undefined> = [];
-  for (let c = 1; c <= 12; c++) {
-    lockedColWidths[c] = sheet.getColumn(c).width;
-  }
-
   const summary = payload.summary;
   let metaShift = 0;
-  if (summary.length > SUMMARY_CAPACITY) {
-    metaShift = summary.length - SUMMARY_CAPACITY;
+  if (summary.length + 1 > SUMMARY_CAPACITY) {
+    metaShift = summary.length + 1 - SUMMARY_CAPACITY;
     sheet.spliceRows(
       SUMMARY_FIRST + SUMMARY_CAPACITY,
       0,
@@ -233,16 +253,22 @@ export async function buildClinicReconciliationXlsxBuffer(
     );
   }
 
+  const headRow = sheet.getRow(SUMMARY_FIRST);
+  setHeadCell(headRow.getCell(6), "НАИМЕНОВАНИЕ ПОЗИЦИИ");
+  setHeadCell(headRow.getCell(7), "КОЛ-ВО ЕДИНИЦ");
+  setHeadCell(headRow.getCell(8), "СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК");
+  setHeadCell(headRow.getCell(9), "СУММА ЕДИНИЦ БЕЗ СКИДОК");
+
   for (let i = 0; i < summary.length; i++) {
-    const row = sheet.getRow(SUMMARY_FIRST + i);
+    const row = sheet.getRow(SUMMARY_FIRST + 1 + i);
     const s = summary[i]!;
     setValueCell(row.getCell(6), s.label);
     setValueCell(row.getCell(7), s.quantity);
-    setValueCell(row.getCell(8), s.unitRub);
-    setValueCell(row.getCell(9), s.totalRub);
+    setValueCell(row.getCell(8), s.unitRub, true);
+    setValueCell(row.getCell(9), s.totalRub, true);
   }
   for (
-    let r = SUMMARY_FIRST + summary.length;
+    let r = SUMMARY_FIRST + 1 + summary.length;
     r < SUMMARY_FIRST + SUMMARY_CAPACITY + metaShift;
     r++
   ) {
@@ -261,16 +287,18 @@ export async function buildClinicReconciliationXlsxBuffer(
   setValueCell(meta.getCell(5), payload.periodToLabel);
   setValueCell(meta.getCell(6), payload.clinicTitleLine);
   setValueCell(meta.getCell(7), payload.yellowRow.totalUnits);
-  setValueCell(meta.getCell(9), payload.yellowRow.baseTotalRub);
-  setValueCell(meta.getCell(10), payload.yellowRow.discountedTotalRub);
+  setValueCell(meta.getCell(9), payload.yellowRow.baseTotalRub, true);
+  setValueCell(meta.getCell(10), payload.yellowRow.discountedTotalRub, true);
 
   setValueCell(
     sheet.getRow(metaRowN + 1).getCell(10),
     payload.yellowRow.discountedTotalRub,
+    true,
   );
   setValueCell(
     sheet.getRow(metaRowN + 2).getCell(10),
     payload.yellowRow.vatRub,
+    true,
   );
 
   const detail = payload.detail;
@@ -309,8 +337,8 @@ export async function buildClinicReconciliationXlsxBuffer(
     }
     setValueCell(row.getCell(6), line.description);
     setValueCell(row.getCell(7), line.quantity);
-    setValueCell(row.getCell(8), line.unitRub == null ? "" : line.unitRub);
-    setValueCell(row.getCell(9), line.lineTotalRub);
+    setValueCell(row.getCell(8), line.unitRub == null ? "" : line.unitRub, true);
+    setValueCell(row.getCell(9), line.lineTotalRub, true);
     setValueCell(
       row.getCell(10),
       line.discountPercent == null
@@ -328,10 +356,19 @@ export async function buildClinicReconciliationXlsxBuffer(
 
   applyPalette(sheet, metaShift);
 
-  for (let c = 1; c <= 12; c++) {
-    const w = lockedColWidths[c];
-    if (w != null) sheet.getColumn(c).width = w;
+  for (let c = 1; c <= 10; c++) {
+    sheet.getColumn(c).width = reconExcelColWidth(RECON_COL_W_PT[c - 1]!);
   }
+  sheet.getColumn(11).width = 3;
+  sheet.getColumn(12).width = 3;
+  sheet.pageSetup = {
+    ...sheet.pageSetup,
+    orientation: "landscape",
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+  };
 
   const buf = await workbook.xlsx.writeBuffer();
   return {

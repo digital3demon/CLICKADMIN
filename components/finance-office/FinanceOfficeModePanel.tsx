@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { financeOfficeListHref } from "@/lib/finance-office-list-query";
-import { moscowTodayYmd } from "@/lib/shipments-date-range";
+import { moscowTodayYmd, moscowTomorrowYmd } from "@/lib/shipments-date-range";
 import type { FinanceOfficeMode } from "@/lib/finance-office-list-filter";
 
 export type { FinanceOfficeMode };
 
 /**
- * Макет как у отгрузок: Актуальное · за период · даты · Показать.
+ * Макет как у отгрузок: Актуальное · за период · сегодня · завтра · даты · Показать.
  * Навигация через Link / GET-форму — без ожидания soft-nav router.push.
  */
 export function FinanceOfficeModePanel({
@@ -29,6 +29,7 @@ export function FinanceOfficeModePanel({
   listSummaryLine?: string | null;
 }) {
   const defaultTo = useMemo(() => moscowTodayYmd(), []);
+  const tomorrowYmd = useMemo(() => moscowTomorrowYmd(), []);
   const [from, setFrom] = useState(() => appliedFrom ?? "");
   const [to, setTo] = useState(() => appliedTo ?? defaultTo);
 
@@ -48,6 +49,25 @@ export function FinanceOfficeModePanel({
 
   const actualActive = mode === "actual";
   const periodActive = mode === "period";
+  const periodHref = (ymd: string) =>
+    financeOfficeListHref({
+      tab: "period",
+      from: ymd,
+      to: ymd,
+      tag: listTag,
+      q: q?.trim() || undefined,
+    });
+  const todayActive =
+    periodActive && appliedFrom === defaultTo && appliedTo === defaultTo;
+  const tomorrowActive =
+    periodActive && appliedFrom === tomorrowYmd && appliedTo === tomorrowYmd;
+  const dayBtn = (active: boolean) =>
+    [
+      "inline-flex h-8 shrink-0 items-center rounded-md px-2 text-[11px] font-semibold transition-colors sm:h-9 sm:px-2.5 sm:text-xs",
+      active
+        ? "bg-[var(--sidebar-blue)] text-white shadow-sm"
+        : "border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-strong)] hover:bg-[var(--surface-hover)]",
+    ].join(" ");
 
   return (
     <div className="no-print flex h-full min-h-[3.25rem] min-w-0 items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3">
@@ -70,6 +90,25 @@ export function FinanceOfficeModePanel({
         <span className="shrink-0 whitespace-nowrap text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-[10px]">
           за период
         </span>
+
+        <Link
+          href={periodHref(defaultTo)}
+          prefetch
+          className={dayBtn(todayActive)}
+          title="Лаб-срок — сегодня (МСК)"
+          aria-current={todayActive ? "page" : undefined}
+        >
+          Сегодня
+        </Link>
+        <Link
+          href={periodHref(tomorrowYmd)}
+          prefetch
+          className={dayBtn(tomorrowActive)}
+          title="Лаб-срок — завтра (МСК)"
+          aria-current={tomorrowActive ? "page" : undefined}
+        >
+          Завтра
+        </Link>
 
         <form
           action="/finance-office"

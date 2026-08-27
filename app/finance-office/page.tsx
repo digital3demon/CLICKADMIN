@@ -11,6 +11,8 @@ import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/Finan
 import { FinanceOfficeModePanel } from "@/components/finance-office/FinanceOfficeModePanel";
 import { CorrectionsHistoryActionCard } from "@/components/orders/CorrectionsHistoryActionCard";
 import { FinanceOfficeDebtsCard } from "@/components/finance-office/FinanceOfficeDebtsCard";
+import { FinanceOfficeReconciliationsCard } from "@/components/finance-office/FinanceOfficeReconciliationsCard";
+import { countOpenHighlightReconciliations } from "@/lib/legal-entity-reconciliation";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -210,7 +212,7 @@ export default async function FinanceOfficePage({
       mode === "actual" ||
       (mode === "period" && Boolean(toRaw)));
   const ordersPrisma = await getOrdersPrisma();
-  const [orders, correctionsPendingCount, debtsCount] = await Promise.all([
+  const [orders, correctionsPendingCount, debtsCount, reconHighlightCount] = await Promise.all([
     shouldFetch && !error
       ? fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
           listTag: rawTagInvalid ? null : rawTag,
@@ -248,6 +250,7 @@ export default async function FinanceOfficePage({
           t?.financeOfficeDebtWorkingDays ?? FINANCE_OFFICE_DEBT_DEFAULT_DAYS,
         ),
       ),
+    countOpenHighlightReconciliations(ordersPrisma, tenantId),
   ]);
   const tagLabel = parsedTag ? humanListTagLabel(parsedTag) : null;
   const listRangeSummary =
@@ -363,7 +366,7 @@ export default async function FinanceOfficePage({
         </p>
       </div>
       {/* Режим · долги · корректировки · выписка */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(11rem,13rem)_minmax(11rem,13rem)_minmax(18rem,24rem)] xl:items-stretch">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(16rem,22rem)] xl:items-stretch">
         <FinanceOfficeModePanel
           mode={mode}
           appliedFrom={fromRaw}
@@ -375,6 +378,10 @@ export default async function FinanceOfficePage({
         <FinanceOfficeDebtsCard
           className="h-full w-full max-w-[13rem] justify-self-stretch"
           initialCount={debtsCount}
+        />
+        <FinanceOfficeReconciliationsCard
+          className="h-full w-full max-w-[13rem] justify-self-stretch"
+          initialHighlightCount={reconHighlightCount}
         />
         <CorrectionsHistoryActionCard
           dense

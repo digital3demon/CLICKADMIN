@@ -164,6 +164,7 @@ model Tenant {
   labTasks                          LabTask[]
   tenantApiKeys                     TenantApiKey[]
   depositLedgerEntries              DepositLedgerEntry[]
+  legalEntityReconciliations        LegalEntityReconciliation[]
 
   @@index([financeOfficeDebtEmailAccountId])
 }
@@ -336,6 +337,39 @@ model ClinicReconciliationSnapshot {
   @@unique([clinicId, slot, periodFromStr, periodToStr])
   @@index([clinicId, createdAt])
   @@index([dismissedAt])
+}
+
+/// Сверка ФинОтдела по ИНН (несколько клиник) или срез одной клиники в карточке.
+model LegalEntityReconciliation {
+  id                String                              @id @default(cuid())
+  tenantId          String
+  tenant            Tenant                              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// inn:7816… или clinic:<id>
+  groupKey          String
+  slot              ReconciliationSnapshotSlot
+  periodFromStr     String
+  periodToStr       String
+  periodLabelRu     String
+  legalEntityLabel  String
+  /// Галочка «сохранить этот период» — только этот экземпляр
+  periodLocked      Boolean                             @default(false)
+  paymentStatus     ReconciliationSnapshotPaymentStatus @default(UNPAID)
+  paidAt            DateTime?
+  downloadedAt      DateTime?
+  invoiceFileName   String?
+  invoiceMimeType   String?
+  invoiceNumber     String?
+  invoiceBytes      Bytes?
+  invoiceUploadedAt DateTime?
+  updFileName       String?
+  updMimeType       String?
+  updBytes          Bytes?
+  updUploadedAt     DateTime?
+  createdAt         DateTime                            @default(now())
+
+  @@unique([tenantId, groupKey, slot, periodFromStr, periodToStr])
+  @@index([tenantId, paymentStatus])
+  @@index([tenantId, groupKey])
 }
 
 /// Связь врач ↔ клиника (M:N). Один врач может работать в нескольких клиниках.

@@ -13,6 +13,7 @@ import { ensureClinicSourceDoctorColumn } from "@/lib/ensure-clinic-source-docto
 import { ensureClinicUsesPaperDocsColumn } from "@/lib/ensure-clinic-uses-paper-docs-column";
 import { ensureOrderAttachmentDiskRelPathColumn } from "@/lib/ensure-order-attachment-disk-column";
 import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
+import { ensureLegalEntityReconciliationTable } from "@/lib/ensure-legal-entity-reconciliation-table";
 import { ensureCorrectionClarifyColumns } from "@/lib/ensure-correction-clarify-columns";
 import { ensureSqlitePragmas } from "@/lib/ensure-sqlite-pragmas";
 import { getDemoPrisma } from "@/lib/prisma-demo";
@@ -39,6 +40,7 @@ async function prepareClient(
   }
   /** SQLite без migrate и демо-Postgres после старого db push. */
   await ensureFinanceOfficeDebtColumns(client);
+  await ensureLegalEntityReconciliationTable(client);
   return client;
 }
 
