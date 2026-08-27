@@ -35,7 +35,7 @@ const DEMO_AUTHOR = "Владелец (демо)";
  * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
  * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
  */
-export const DEMO_SEED_REVISION = 8;
+export const DEMO_SEED_REVISION = 9;
 const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
 /** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
 const DEMO_ORDER_COUNT_MIN = 50;
@@ -1112,8 +1112,8 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     const docF = doctors[5]!;
 
     /**
-     * Входящие «Заказ: …» привязаны к нарядам (EmailSourceOrder) —
-     * в списке почты виден номер наряда (зелёная галочка).
+     * Входящие «Заказ: …» с linkOrderId → EmailSourceOrder (зелёная галочка) и isRead.
+     * Непривязанные непрочитанные — отдельно, без наряда.
      */
     type MailSpec = {
       folderId: string;
@@ -1134,12 +1134,17 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         folderId?: string;
         direction?: EmailDirection;
       },
-    ): MailSpec => ({
-      folderId: inboxId,
-      direction: EmailDirection.INBOUND,
-      to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
-      ...partial,
-    });
+    ): MailSpec => {
+      const base: MailSpec = {
+        folderId: inboxId,
+        direction: EmailDirection.INBOUND,
+        to: [{ name: "Лаборатория", address: DEMO_MAILBOX }],
+        ...partial,
+      };
+      /** Письмо, уже занесённое в наряд, в демо всегда прочитано. */
+      if (base.linkOrderId) base.isRead = true;
+      return base;
+    };
 
     /** Разные наряды для писем (свежие + середина списка). */
     const mailOrders = [
@@ -1162,6 +1167,52 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     const o = (i: number) => mailOrders[i]!;
 
     const mailSpecs: MailSpec[] = [
+      /** Непрочитанные без наряда — очередь «ещё не занесли». */
+      orderMail({
+        isRead: false,
+        fromName: clinicA.name,
+        fromAddress: "reception@impuls-demo.ru",
+        subject: "Заказ: коронки Zr 14, 15",
+        preview: "Пациент Морозов А.В., цвет A2. Скан во вложении.",
+        body: `Клиника: ${clinicA.name}\nВрач: ${docA.fullName}\nПациент: Морозов А.В.\n\nКоронки циркониевые 14, 15.\nЦвет A2.\nСрок 8 рабочих дней.\nСкан во вложении (демо).`,
+        at: hoursAgo(0.4),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicB.name,
+        fromAddress: "lab@dent-profi-demo.ru",
+        subject: "Заказ: виниры E.max 11–21",
+        preview: "Пациент Крылова О.Н., срочно к среде.",
+        body: `Клиника: ${clinicB.name}\nВрач: ${docB.fullName}\nПациент: Крылова О.Н.\n\nВиниры E.max 11, 12, 21.\nЦвет BL3.\nСрок — к среде.`,
+        at: hoursAgo(0.8),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: docC.fullName,
+        fromAddress: "sidorov@demo-clinic.ru",
+        subject: "Заказ (частная практика): каппа ночная",
+        preview: "Пациент Денисов И.Л., верхняя челюсть.",
+        body: `Врач: ${docC.fullName}\nПациент: Денисов И.Л.\n\nКаппа ночная на верх.\nСрок 5 рабочих дней.`,
+        at: hoursAgo(1.2),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicC.name,
+        fromAddress: "ordo@ulybka-demo.ru",
+        subject: "Заказ: мост Zr 35–37",
+        preview: "Пациент Павлова Т.С., цвет A3. Каркас на примерку.",
+        body: `Клиника: ${clinicC.name}\nВрач: ${docD.fullName}\nПациент: Павлова Т.С.\n\nМост циркониевый 35–37, цвет A3.\nСначала каркас на примерку.`,
+        at: hoursAgo(1.6),
+      }),
+      orderMail({
+        isRead: false,
+        fromName: clinicD.name,
+        fromAddress: "info@zhemchug-demo.ru",
+        subject: "Уточнение по сроку / без наряда",
+        preview: "Когда будет готов каркас по прошлой заявке? Номер наряда не указали.",
+        body: `Клиника: ${clinicD.name}\n\nДобрый день!\nПодскажите статус каркаса по последней заявке — номер наряда в письме не указали.\n\nСпасибо.`,
+        at: hoursAgo(2.1),
+      }),
       orderMail({
         isRead: false,
         fromName: clinicA.name,
@@ -1169,7 +1220,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ: коронки Zr 11, 21 · ${o(0).orderNumber}`,
         preview: `Наряд ${o(0).orderNumber}. Пациент Смирнов И.П., цвет A2.`,
         body: `Клиника: ${clinicA.name}\nВрач: ${docA.fullName}\nПациент: Смирнов И.П.\nНаряд: ${o(0).orderNumber}\n\nКоронки циркониевые 11, 21.\nЦвет A2.\nСрок 10 рабочих дней.\nСкан во вложении (демо).`,
-        at: hoursAgo(1),
+        at: hoursAgo(3),
         linkOrderId: o(0).id,
       }),
       orderMail({
@@ -1179,7 +1230,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ: временные коронки 34–36 · ${o(1).orderNumber}`,
         preview: `Наряд ${o(1).orderNumber}. Орлова М.А., срочно к пятнице.`,
         body: `Клиника: ${clinicB.name}\nВрач: ${docB.fullName}\nПациент: Орлова М.А.\nНаряд: ${o(1).orderNumber}\n\nВременные коронки 34, 35, 36.\nСрок — к пятнице.`,
-        at: hoursAgo(2),
+        at: hoursAgo(4),
         linkOrderId: o(1).id,
       }),
       orderMail({
@@ -1189,7 +1240,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ (частная практика): каппа · ${o(2).orderNumber}`,
         preview: `Наряд ${o(2).orderNumber}. Кузнецов Д.В., каппа ночная.`,
         body: `Врач: ${docC.fullName}\nПациент: Кузнецов Д.В.\nНаряд: ${o(2).orderNumber}\n\nКаппа ночная на верхнюю челюсть.\nСрок 5 рабочих дней.`,
-        at: hoursAgo(3),
+        at: hoursAgo(5),
         linkOrderId: o(2).id,
       }),
       orderMail({
@@ -1199,7 +1250,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ: мост Zr 45–47 · ${o(3).orderNumber}`,
         preview: `Наряд ${o(3).orderNumber}. Васильева Е.Н., цвет A3.`,
         body: `Клиника: ${clinicC.name}\nВрач: ${docD.fullName}\nПациент: Васильева Е.Н.\nНаряд: ${o(3).orderNumber}\n\nМост циркониевый 45–47, цвет A3.\nСначала каркас на примерку.`,
-        at: hoursAgo(4),
+        at: hoursAgo(6),
         linkOrderId: o(3).id,
       }),
       orderMail({
@@ -1209,7 +1260,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ: виниры 12–22 · ${o(4).orderNumber}`,
         preview: `Наряд ${o(4).orderNumber}. Николаева С.И., 6 виниров E.max.`,
         body: `Клиника: ${clinicD.name}\nВрач: ${docE.fullName}\nПациент: Николаева С.И.\nНаряд: ${o(4).orderNumber}\n\nВиниры 12, 11, 21, 22 (при необходимости 13, 23).\nМатериал E.max.\nФото улыбки приложили (демо).`,
-        at: hoursAgo(5),
+        at: hoursAgo(7),
         linkOrderId: o(4).id,
       }),
       orderMail({
@@ -1219,7 +1270,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ: абатмент Multi-unit + коронка 36 · ${o(5).orderNumber}`,
         preview: `Наряд ${o(5).orderNumber}. Фролов А.К., Straumann.`,
         body: `Клиника: ${clinicE.name}\nВрач: ${docF.fullName}\nПациент: Фролов А.К.\nНаряд: ${o(5).orderNumber}\n\nАбатмент Multi-unit и коронка Zr на 36.\nПлатформа Straumann.\nСрочно.`,
-        at: hoursAgo(6),
+        at: hoursAgo(8),
         linkOrderId: o(5).id,
       }),
       orderMail({
@@ -1229,7 +1280,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ: вкладка 15 + ретейнер · ${o(6).orderNumber}`,
         preview: `Наряд ${o(6).orderNumber}. Белова К.Т., цвет A1.`,
         body: `Клиника: ${clinicA.name}\nВрач: ${docA.fullName}\nПациент: Белова К.Т.\nНаряд: ${o(6).orderNumber}\n\nВкладка 15, цвет A1.\nРетейнер на верх после фиксации.`,
-        at: hoursAgo(8),
+        at: hoursAgo(10),
         linkOrderId: o(6).id,
       }),
       orderMail({
@@ -1239,7 +1290,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         subject: `Заказ: цирконий 36 одиночная · ${o(7).orderNumber}`,
         preview: `Наряд ${o(7).orderNumber}. Громов П.И., цвет B1.`,
         body: `Клиника: ${clinicB.name}\nВрач: ${docB.fullName}\nПациент: Громов П.И.\nНаряд: ${o(7).orderNumber}\n\nКоронка циркониевая 36, цвет B1.\nСкан приложен (демо).`,
-        at: hoursAgo(10),
+        at: hoursAgo(12),
         linkOrderId: o(7).id,
       }),
       orderMail({
