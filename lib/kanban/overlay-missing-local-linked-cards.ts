@@ -3,7 +3,12 @@
  * F5 без этого оверлея снова теряет наряд (и «МОИ» его не видит).
  */
 import { forEachKanbanCardInState } from "@/lib/kanban/kanban-stage-due";
-import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+import type {
+  KanbanAppState,
+  KanbanArchivedCard,
+  KanbanCard,
+  KanbanStoppedCard,
+} from "@/lib/kanban/types";
 
 function linkedOrderIdsInState(state: KanbanAppState): Set<string> {
   const ids = new Set<string>();
@@ -65,6 +70,24 @@ export function overlayMissingLocalLinkedCardsOntoRemote(
           changed = true;
         }
       }
+    }
+    const remoteBoard = remote.boards.find((b) => b.id === localBoard.id);
+    if (!remoteBoard) continue;
+    for (const row of localBoard.stoppedCards ?? []) {
+      const oid = String(row.card?.linkedOrderId || "").trim();
+      if (!oid || hidden.has(oid) || remoteOids.has(oid)) continue;
+      const copy = structuredClone(row) as KanbanStoppedCard;
+      remoteBoard.stoppedCards = [...(remoteBoard.stoppedCards || []), copy];
+      remoteOids.add(oid);
+      changed = true;
+    }
+    for (const row of localBoard.archivedCards ?? []) {
+      const oid = String(row.card?.linkedOrderId || "").trim();
+      if (!oid || hidden.has(oid) || remoteOids.has(oid)) continue;
+      const copy = structuredClone(row) as KanbanArchivedCard;
+      remoteBoard.archivedCards = [...(remoteBoard.archivedCards || []), copy];
+      remoteOids.add(oid);
+      changed = true;
     }
   }
   return changed;

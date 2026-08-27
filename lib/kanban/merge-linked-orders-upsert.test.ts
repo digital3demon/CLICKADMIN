@@ -252,4 +252,47 @@ describe("removeLinkedOrderCardsFromAppState", () => {
     expect(findCardByLinkedOrderId(pruned, "order-a")).not.toBeNull();
     expect(findCardByLinkedOrderId(pruned, "order-b")).toBeNull();
   });
+
+  it("columnsOnly не снимает карточку из СТОП (goneIds батча)", () => {
+    const withTwo = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [sampleRow("order-a"), sampleRow("наряд-стоп")],
+      { mode: "upsertOnly" },
+    );
+    const board = withTwo.boards[0]!;
+    const card = board.columns.flatMap((c) => c.cards).find((c) => c.linkedOrderId === "наряд-стоп")!;
+    board.stoppedCards = [
+      {
+        id: "stop-1",
+        stoppedAt: "2026-08-27T10:00:00.000Z",
+        sourceColumnId: board.columns[0]!.id,
+        sourceColumnTitle: board.columns[0]!.title,
+        card,
+      },
+    ];
+    board.columns.forEach((c) => {
+      c.cards = c.cards.filter((x) => x.linkedOrderId !== "наряд-стоп");
+    });
+    const pruned = removeLinkedOrderCardsFromAppState(withTwo, ["наряд-стоп"], {
+      columnsOnly: true,
+    });
+    expect(pruned.boards[0]!.stoppedCards?.some((r) => r.card.linkedOrderId === "наряд-стоп")).toBe(
+      true,
+    );
+  });
+
+  it("пустой kaitenTrackLane не переносит карточку с ортодонтии на ортопедию", () => {
+    const onOdon = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [sampleRow("наряд-дорожка", { kaitenTrackLane: "ORTHODONTICS", kaitenCardId: 7 })],
+      { mode: "upsertOnly" },
+    );
+    const kept = mergeKaitenLinkedOrdersIntoAppState(
+      onOdon,
+      [sampleRow("наряд-дорожка", { kaitenTrackLane: null, kaitenCardId: 7 })],
+      { mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(kept, "наряд-дорожка")!;
+    expect(kept.boards[loc.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+  });
 });

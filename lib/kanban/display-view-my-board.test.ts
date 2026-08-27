@@ -160,4 +160,40 @@ describe("buildKanbanDisplayView · Мои", () => {
     const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
     expect(allIds).toContain("stepanov-empty");
   });
+
+  it("без поиска оставляет найденный наряд по sticky oid, даже без людей", () => {
+    const board = orthopedicsMirrorBoard();
+    const prod = board.columns.find((c) => c.title === "Производство")!;
+    prod.cards.push(
+      createCard({
+        id: "stepanov-sticky",
+        title: "2607-299 Степанов А.В.",
+        linkedOrderId: "ord-степанов",
+        assignees: [],
+        participants: [],
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [board],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 5 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+      stickyLinkedOrderIds: ["ord-степанов"],
+    });
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).toContain("stepanov-sticky");
+  });
 });

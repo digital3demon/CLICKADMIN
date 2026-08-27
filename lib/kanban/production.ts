@@ -609,23 +609,45 @@ export function markProductionChildReadyState(board: KanbanBoard, cardId: string
   syncParentProductionChecklistSnapshot(board, cardId);
 }
 
-export function parentCanMoveToAssembly(board: KanbanBoard, parentCardId: string): boolean {
-  const parent = cardById(board, parentCardId);
+function cardByIdInBoards(
+  boards: KanbanBoard[],
+  cardId: string,
+): KanbanCard | null {
+  for (const b of boards) {
+    const c = cardById(b, cardId);
+    if (c) return c;
+  }
+  return null;
+}
+
+export function parentCanMoveToAssembly(
+  board: KanbanBoard,
+  parentCardId: string,
+  allBoards?: KanbanBoard[],
+): boolean {
+  const boards = allBoards?.length ? allBoards : [board];
+  const parent = cardByIdInBoards(boards, parentCardId);
   if (!parent) return false;
   const ids = parent.childCardIds || [];
   if (!ids.length) return false;
-  return ids.every((id) => isProductionChildDone(board, id));
+  return ids.every((id) => boards.some((b) => isProductionChildDone(b, id)));
 }
 
 export function moveParentToAssemblyIfReady(
   board: KanbanBoard,
   parentCardId: string,
   activityActorLabel?: string,
+  allBoards?: KanbanBoard[],
 ): boolean {
-  const settings = normalizeProductionSettings(board);
-  if (!parentCanMoveToAssembly(board, parentCardId)) return false;
-  const parentLoc = findCard(board, parentCardId);
-  const assembly = colByTitle(board, settings.parentDoneColumnTitle);
+  const boards = allBoards?.length ? allBoards : [board];
+  if (!parentCanMoveToAssembly(board, parentCardId, boards)) return false;
+  const parentBoard =
+    boards.find((b) => cardById(b, parentCardId)) ?? board;
+  const settings = normalizeProductionSettings(parentBoard);
+  const parentLoc = findCard(parentBoard, parentCardId);
+  const assembly =
+    colByTitle(parentBoard, settings.parentDoneColumnTitle) ??
+    colByTitle(board, settings.parentDoneColumnTitle);
   if (!parentLoc || !assembly) return false;
   if (parentLoc.col.id === assembly.id) return false;
   parentLoc.col.cards = parentLoc.col.cards.filter((c) => c.id !== parentLoc.card.id);
@@ -634,8 +656,8 @@ export function moveParentToAssemblyIfReady(
   pushActivity(
     parentLoc.card,
     `Перемещена в «${assembly.title}»`,
-    board.users[0]?.id,
-    board,
+    parentBoard.users[0]?.id,
+    parentBoard,
     activityActorLabel,
   );
   return true;

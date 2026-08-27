@@ -1,7 +1,10 @@
 import "server-only";
 
 import type { KaitenTrackLane, PrismaClient } from "@prisma/client";
-import { getPrisma } from "@/lib/get-prisma";
+import {
+  loadKanbanTenantState,
+  saveKanbanStateWithRetry,
+} from "@/lib/kanban/kanban-tenant-state-write.server";
 import { kaitenMembersFingerprint } from "@/lib/kaiten-members-parse";
 import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 import {
@@ -18,11 +21,7 @@ import {
   positiveKaitenCardId,
   type KanbanKaitenRefreshTarget,
 } from "@/lib/kanban/kanban-linked-order-ids";
-import {
-  findKanbanCardsForKaitenRefresh,
-  KANBAN_CHAT_STATE_KEY,
-  parseKanbanAppState,
-} from "@/lib/kanban/chat-sync";
+import { findKanbanCardsForKaitenRefresh } from "@/lib/kanban/chat-sync";
 import {
   kaitenGetCard,
   kaitenListBoardColumns,
@@ -76,12 +75,8 @@ export type KanbanMembersBackfillBatchResult = {
 async function loadTenantKanbanState(
   tenantId: string,
 ): Promise<KanbanAppState | null> {
-  const corePrisma = await getPrisma();
-  const row = await corePrisma.tenantClientState.findUnique({
-    where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-    select: { value: true },
-  });
-  return parseKanbanAppState(row?.value ?? null);
+  const { state } = await loadKanbanTenantState(tenantId);
+  return state;
 }
 
 export async function countKanbanMembersBackfillOrders(
@@ -157,8 +152,8 @@ export async function runKanbanMembersBackfillBatch(
     return empty;
   }
 
-  const corePrisma = await getPrisma();
-  const state = await loadTenantKanbanState(tenantId);
+  const loaded = await loadKanbanTenantState(tenantId);
+  const state = loaded.state;
   if (!state) {
     return { ...empty, total: 0, finished: true };
   }
@@ -475,11 +470,7 @@ export async function runKanbanMembersBackfillBatch(
     }
     if (snapshotDirty) {
       try {
-        await corePrisma.tenantClientState.upsert({
-          where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },
-          create: { tenantId, key: KANBAN_CHAT_STATE_KEY, value: state as never },
-          update: { value: state as never },
-        });
+        await saveKanbanStateWithRetry(tenantId, state, loaded.updatedAt);
       } catch {
         /* клиент всё равно применит patches */
       }

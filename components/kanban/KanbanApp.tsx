@@ -36,6 +36,9 @@ import {
   saveKanbanState,
   stopCardByIdOnBoard,
   isKanbanAggregateBoardId,
+  kanbanAggregateKeepsCard,
+  kanbanAggregateMode,
+  listKanbanAggregateSourceBoards,
   KANBAN_BOARD_DISTRIBUTE_ID,
   KANBAN_BOARD_MY_CARDS_ID,
   KANBAN_BOARD_ORTHODONTICS_ID,
@@ -47,6 +50,7 @@ import {
 import { applyOptimisticKaitenBlocksToLinkedRows } from "@/lib/kanban/optimistic-kaiten-block";
 import {
   applyPendingKanbanColumnMoves,
+  clearPendingKanbanColumnMove,
   listPendingKanbanColumnMoves,
   rememberPendingKanbanColumnMove,
 } from "@/lib/kanban/pending-column-moves";
@@ -130,7 +134,7 @@ import {
   prependMissingLinkedOrderIds,
 } from "@/lib/kanban/kanban-card-heads-cache";
 import {
-  kanbanMembersLookStarved,
+  kanbanMembersNeedHydration,
   shouldSkipSparseKanbanTenantWrite,
 } from "@/lib/kanban/kanban-tenant-write-guard";
 import {
@@ -494,6 +498,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   /** null до монтирования: иначе SSR и первый клиентский кадр расходятся (server state vs default) → #418 и ломается Sortable. */
   const [appState, setAppState] = useState<KanbanAppState | null>(null);
   const [kanbanStateReady, setKanbanStateReady] = useState(isDemo);
+  const kanbanStateReadyRef = useRef(isDemo);
+  kanbanStateReadyRef.current = kanbanStateReady;
   const appStateRef = useRef<KanbanAppState | null>(null);
   appStateRef.current = appState;
   const [cardModalId, setCardModalId] = useState<string | null>(null);
@@ -520,6 +526,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
   const kanbanSessionUserIdRef = useRef<string | null>(null);
   kanbanSessionUserIdRef.current = kanbanSessionUserId;
+  const [stickyLinkedOrderIds, setStickyLinkedOrderIds] = useState<string[]>([]);
+  const sessionMirrorSyncedForUserRef = useRef<string | null>(null);
   const [kanbanSessionRole, setKanbanSessionRole] = useState<UserRole | null>(null);
   const [kanbanCardPerms, setKanbanCardPerms] = useState({
     moveColumns: false,
@@ -591,12 +599,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     [isDemo],
   );
 
-  const recoverStarvedKanbanMembers = useCallback(async () => {
-    if (isDemo) return;
+  const recoverStarvedKanbanMembers = useCallback(async (): Promise<boolean> => {
+    if (isDemo) return true;
     const cur = appStateRef.current;
-    if (!cur || !kanbanMembersLookStarved(cur)) return;
-    const targets = collectKanbanKaitenRefreshTargets(cur);
-    if (targets.length === 0) return;
+    if (!cur || !kanbanMembersNeedHydration(cur)) return true;
+    const targets = collectKanbanKaitenRefreshTargets(cur).filter((t) => {
+      const oid = String(t.linkedOrderId || "").trim();
+      if (!oid) return false;
+      const card = findLinkedOrderIdInState(cur, oid);
+      return card != null && !hasKanbanCardMembers(card);
+    });
+    if (targets.length === 0) return true;
     try {
       const res = await fetch("/api/kanban/members-backfill", {
         method: "POST",
@@ -609,12 +622,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           targets,
         }),
       });
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const batch = (await res.json()) as {
         patches?: Parameters<typeof applyKaitenRefreshPatchesToState>[1];
       };
       const patches = Array.isArray(batch.patches) ? batch.patches : [];
-      if (patches.length === 0) return;
+      if (patches.length === 0) return true;
       setAppState((prev) => {
         if (!prev) return prev;
         const { state } = applyKaitenRefreshPatchesToState(prev, patches);
@@ -628,8 +641,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         }
         return state;
       });
+      return true;
     } catch {
-      /* offline */
+      return false;
     }
   }, [isDemo, canPersistTenantKanban]);
 
@@ -795,7 +809,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           demo: false,
           mode: "upsertOnly",
         });
-        next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? []);
+        next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? [], {
+          columnsOnly: true,
+        });
         next = applyStandaloneRowsFromServer(next, standaloneRows);
         overlayLocalKanbanCardHeadOntoRemote(prev, next);
         const storedMembers = remoteKanban ?? lastTenantKanbanRef.current;
@@ -956,6 +972,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           .slice(0, 12);
         saveKanbanState(merged, false);
         persisted = merged;
+        const foundOids = rows.map((r) => r.id).filter(Boolean);
+        if (foundOids.length > 0) {
+          setStickyLinkedOrderIds((prev) => {
+            const next = new Set(prev);
+            for (const id of foundOids) next.add(id);
+            return [...next];
+          });
+        }
         return merged;
       });
       if (persisted && canPersistTenantKanban(persisted)) {
@@ -1074,7 +1098,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     void (async () => {
       const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = isDemo ? "user" : "tenant";
-      const remoteRead = await readClientStateDetailed<unknown>(scope, key);
+      let remoteRead = await readClientStateDetailed<unknown>(scope, key);
+      if (!isDemo) {
+        for (let attempt = 0; attempt < 3 && !remoteRead.ok && !cancelled; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+          if (cancelled) return;
+          remoteRead = await readClientStateDetailed<unknown>(scope, key);
+        }
+      }
       if (!isDemo) tenantKanbanReadAtRef.current = Date.now();
       if (cancelled) return;
       if (!isDemo && !remoteRead.ok) {
@@ -1248,6 +1279,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     flushKanbanTenantNowRef.current = () => {
       if (isDemo || kanbanPersistPausedRef.current) return;
+      if (!kanbanStateReadyRef.current) return;
+      if (!lastTenantKanbanRef.current) return;
       const cur = appStateRef.current;
       if (!cur || !canPersistTenantKanban(cur)) return;
       if (kanbanStateSaveTimerRef.current) {
@@ -1407,10 +1440,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     if (isDemo || !kanbanStateReady || !appState) return;
     if (membersAutoRecoverRef.current) return;
-    if (!kanbanMembersLookStarved(appState)) return;
+    if (!kanbanMembersNeedHydration(appState)) return;
     membersAutoRecoverRef.current = true;
-    void recoverStarvedKanbanMembers();
+    void recoverStarvedKanbanMembers().then((ok) => {
+      if (ok) return;
+      window.setTimeout(() => {
+        membersAutoRecoverRef.current = false;
+      }, 12_000);
+    });
   }, [appState, isDemo, kanbanStateReady, recoverStarvedKanbanMembers]);
+
+  useEffect(() => {
+    const uid = (kanbanSessionUserId || "").trim();
+    if (!uid || isDemo || !kanbanStateReady) return;
+    if (sessionMirrorSyncedForUserRef.current === uid) return;
+    sessionMirrorSyncedForUserRef.current = uid;
+    void syncKanbanMirrorFromApi();
+  }, [kanbanSessionUserId, isDemo, kanbanStateReady, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
     if (isDemo) return;
@@ -1522,9 +1568,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         ? buildKanbanDisplayView(appState, {
             sessionUserId: kanbanSessionUserId,
             sessionUserRole: kanbanSessionRole,
+            stickyLinkedOrderIds,
           })
         : null,
-    [appState, kanbanSessionUserId, kanbanSessionRole],
+    [appState, kanbanSessionUserId, kanbanSessionRole, stickyLinkedOrderIds],
   );
   const displayBoard = searchView?.displayBoard ?? null;
   const cardHomeBoardId = searchView?.cardHomeBoardId;
@@ -1583,20 +1630,72 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [isDemo, modalCardForBlockPerm, kanbanSessionUserId, kanbanSessionRole, kanbanModuleAccess]);
 
   const archivedCards = useMemo<KanbanArchivedCard[]>(() => {
-    if (!board) return [];
-    return [...(board.archivedCards || [])].sort((a, b) =>
+    if (!board || !appState) return [];
+    const uid = (kanbanSessionUserId || "").trim();
+    const agg = kanbanAggregateMode(appState.activeBoardId);
+    const q = (appState.search || "").trim();
+    const homes = agg
+      ? listKanbanAggregateSourceBoards(appState).filter((b) =>
+          canUserAccessBoard(b, uid || null, kanbanSessionRole),
+        )
+      : [board];
+    const seen = new Set<string>();
+    const rows: KanbanArchivedCard[] = [];
+    for (const home of homes) {
+      for (const row of home.archivedCards || []) {
+        if (!row?.card || seen.has(row.card.id)) continue;
+        if (
+          agg &&
+          uid &&
+          !kanbanAggregateKeepsCard(row.card, uid, agg, {
+            searchActive: Boolean(q),
+            stickyOrderIds: new Set(stickyLinkedOrderIds),
+          })
+        ) {
+          continue;
+        }
+        if (q && !kanbanCardMatchesSearch(row.card, q, home)) continue;
+        seen.add(row.card.id);
+        rows.push(row);
+      }
+    }
+    return rows.sort((a, b) =>
       String(b.archivedAt).localeCompare(String(a.archivedAt)),
     );
-  }, [board]);
+  }, [
+    board,
+    appState,
+    kanbanSessionUserId,
+    kanbanSessionRole,
+    stickyLinkedOrderIds,
+  ]);
   const stoppedCards = useMemo(() => {
     if (!board || !appState) return [];
+    const uid = (kanbanSessionUserId || "").trim();
+    const agg = kanbanAggregateMode(appState.activeBoardId);
     const q = (appState.search || "").trim();
-    const sources = q ? visibleBoards : [board];
+    const homes = agg
+      ? listKanbanAggregateSourceBoards(appState).filter((b) =>
+          canUserAccessBoard(b, uid || null, kanbanSessionRole),
+        )
+      : q
+        ? visibleBoards
+        : [board];
     const seen = new Set<string>();
     const rows: KanbanStoppedCard[] = [];
-    for (const home of sources) {
+    for (const home of homes) {
       for (const row of home.stoppedCards || []) {
-        if (seen.has(row.card.id)) continue;
+        if (!row?.card || seen.has(row.card.id)) continue;
+        if (
+          agg &&
+          uid &&
+          !kanbanAggregateKeepsCard(row.card, uid, agg, {
+            searchActive: Boolean(q),
+            stickyOrderIds: new Set(stickyLinkedOrderIds),
+          })
+        ) {
+          continue;
+        }
         if (q && !kanbanCardMatchesSearch(row.card, q, home)) continue;
         seen.add(row.card.id);
         rows.push(row);
@@ -1605,7 +1704,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     return rows.sort((a, b) =>
       String(b.stoppedAt).localeCompare(String(a.stoppedAt)),
     );
-  }, [board, appState, visibleBoards]);
+  }, [
+    board,
+    appState,
+    visibleBoards,
+    kanbanSessionUserId,
+    kanbanSessionRole,
+    stickyLinkedOrderIds,
+  ]);
 
   const onStopHoverMove = useCallback(
     (event: MouseEvent) => {
@@ -1909,6 +2015,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) {
           optimisticKaitenColumnMovesRef.current.delete(args.orderId);
+          clearPendingKanbanColumnMove(args.orderId);
           showToast(
             data.error ??
               "Не удалось перенести карточку в Kaiten (проверьте название колонки на доске).",
@@ -1917,6 +2024,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           void syncKanbanMirrorFromApi();
           return;
         }
+        clearPendingKanbanColumnMove(args.orderId);
         /* Успех: не дёргаем полный mirror-sync — доска уже в нужном состоянии. */
         optimisticKaitenColumnMovesRef.current.set(args.orderId, {
           columnTitle: args.columnTitle,
@@ -1928,6 +2036,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
       } catch {
         optimisticKaitenColumnMovesRef.current.delete(args.orderId);
+        clearPendingKanbanColumnMove(args.orderId);
         showToast("Сеть: колонка в Kaiten могла не обновиться", true);
         void syncKanbanMirrorFromApi();
       }
@@ -1955,6 +2064,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const view = buildKanbanDisplayView(s, {
           sessionUserId: kanbanSessionUserId,
           sessionUserRole: kanbanSessionRole,
+          stickyLinkedOrderIds,
         });
         const next = structuredClone(s);
         const sid = kanbanSessionUserId?.trim();
@@ -1981,6 +2091,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     [
       kanbanSessionUserId,
       kanbanSessionRole,
+      stickyLinkedOrderIds,
       activityActorLabel,
       isDemo,
       kanbanCardPerms.moveColumns,
@@ -2023,6 +2134,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       s.activeBoardId = nextBoardId;
     });
   }, [appState, kanbanSessionUserId, kanbanSessionRole, patchApp]);
+
+  useEffect(() => {
+    if (!appState || !cardModalId || isDemo) return;
+    const loc = findCardInAppState(appState, cardModalId);
+    if (!loc) return;
+    if (canUserAccessBoard(loc.board, kanbanSessionUserId, kanbanSessionRole)) {
+      return;
+    }
+    setCardModalId(null);
+  }, [appState, cardModalId, isDemo, kanbanSessionUserId, kanbanSessionRole]);
 
   const aggregateView =
     Boolean(appState) && isKanbanAggregateBoardId(appState!.activeBoardId);
@@ -2185,6 +2306,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     });
     if (cardModalId === cardId) setCardModalId(null);
     showToast(`Карточка «${titleSnapshot}» перемещена в СТОП`);
+    if (linkedOrderId) clearPendingKanbanColumnMove(linkedOrderId);
     if (
       !isDemo &&
       linkedOrderId &&
@@ -2240,6 +2362,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       return next;
     });
     showToast("Карточка возвращена из СТОП");
+    if (linkedOrderId && sourceColumnTitle) {
+      rememberPendingKanbanColumnMove({
+        cardId: linkedOrderId,
+        orderId: linkedOrderId,
+        toColumnTitle: sourceColumnTitle,
+      });
+    }
     if (
       !isDemo &&
       linkedOrderId &&
@@ -2260,13 +2389,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           });
           const data = (await res.json().catch(() => ({}))) as { error?: string };
           if (!res.ok) {
+            clearPendingKanbanColumnMove(linkedOrderId);
             showToast(
               data.error ??
                 "В CRM карточка возвращена, но колонку в Kaiten обновить не удалось.",
               true,
             );
+          } else {
+            clearPendingKanbanColumnMove(linkedOrderId);
           }
         } catch {
+          clearPendingKanbanColumnMove(linkedOrderId);
           showToast(
             "В CRM карточка возвращена, но сеть до Kaiten недоступна.",
             true,
@@ -2287,8 +2420,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
 
   const confirmMoveToBoard = () => {
     if (!appState || !moveCardId || !moveTargetBoardId) return;
-    const titleSnapshot =
-      findCardInAppState(appState, moveCardId)?.card.title ?? "карточка";
+    const locBefore = findCardInAppState(appState, moveCardId);
+    const titleSnapshot = locBefore?.card.title ?? "карточка";
+    const linkedOrderId = locBefore?.card.linkedOrderId?.trim() || "";
+    const kaitenCardId = locBefore?.card.kaitenCardId;
+    const targetLane = kaitenLaneForKanbanBoardId(moveTargetBoardId);
+    const tgtBoard = appState.boards.find((b) => b.id === moveTargetBoardId);
+    const targetColTitle = (tgtBoard?.columns[0]?.title || "").trim();
     setAppState((s) => {
       if (!s) return s;
       const next = structuredClone(s);
@@ -2315,6 +2453,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
       }
       tgt.columns[0].cards.push(extracted);
+      if (targetLane) extracted.trackLane = targetLane;
       const now = new Date().toISOString();
       extracted.lastMovedAt = now;
       extracted.updatedAt = now;
@@ -2333,6 +2472,21 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     setMoveTargetBoardId("");
     setCardModalId(id);
     showToast(`Карточка «${titleSnapshot}» перенесена`);
+    if (
+      !isDemo &&
+      linkedOrderId &&
+      typeof kaitenCardId === "number" &&
+      Number.isFinite(kaitenCardId) &&
+      (targetLane || targetColTitle)
+    ) {
+      void syncKaitenMirrorAfterKanbanMove({
+        orderId: linkedOrderId,
+        kaitenCardId,
+        columnTitle: targetColTitle || undefined,
+        kaitenTrackLane: targetLane,
+        sortOrder: 1,
+      });
+    }
   };
 
   const moveCardToNextStage = (cardId: string) => {
@@ -2410,8 +2564,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const movedCard = findCard(b, cardId)?.card;
       if (movedCard?.parentCardId) {
         markProductionChildReadyState(b, cardId);
-        if (parentCanMoveToAssembly(b, movedCard.parentCardId)) {
-          moveParentToAssemblyIfReady(b, movedCard.parentCardId, activityActorLabel);
+        if (parentCanMoveToAssembly(b, movedCard.parentCardId, next.boards)) {
+          moveParentToAssemblyIfReady(
+            b,
+            movedCard.parentCardId,
+            activityActorLabel,
+            next.boards,
+          );
         }
       } else if (movedCard) {
         const enteredTrigger = columnMatchesStage(nextCol.title, settings.triggerColumnTitle);
@@ -2615,8 +2774,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         );
         if (c.parentCardId) {
           markProductionChildReadyState(b, cardId);
-          if (parentCanMoveToAssembly(b, c.parentCardId)) {
-            moveParentToAssemblyIfReady(b, c.parentCardId, activityActorLabel);
+          if (parentCanMoveToAssembly(b, c.parentCardId, next.boards)) {
+            moveParentToAssemblyIfReady(
+              b,
+              c.parentCardId,
+              activityActorLabel,
+              next.boards,
+            );
           }
         } else {
           const enteredTrigger = columnMatchesStage(toCol.title, settings.triggerColumnTitle);

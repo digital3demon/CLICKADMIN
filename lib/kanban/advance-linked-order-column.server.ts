@@ -7,10 +7,13 @@ import {
   type AdvanceLinkedOrderColumnResult,
   type LinkedOrderColumnNeighbor,
 } from "@/lib/kanban/advance-linked-order-column";
-import { findCardByLinkedOrderId, parseKanbanAppState } from "@/lib/kanban/chat-sync";
+import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
+import {
+  loadKanbanTenantState,
+  saveKanbanStateWithRetry,
+} from "@/lib/kanban/kanban-tenant-state-write.server";
 import { pushActivity } from "@/lib/kanban/model";
 import type { KanbanAppState } from "@/lib/kanban/types";
-import { KANBAN_STATE_KEY } from "@/lib/kanban-tenant-state-snippet-for-order";
 import { LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
 
 export type {
@@ -22,51 +25,11 @@ export {
   peekLinkedOrderColumnNeighbor,
 } from "@/lib/kanban/advance-linked-order-column";
 
-async function loadKanbanState(tenantId: string): Promise<{
-  state: KanbanAppState | null;
-  updatedAt: Date | null;
-}> {
-  const prisma = await getPrisma();
-  const row = await prisma.tenantClientState.findUnique({
-    where: { tenantId_key: { tenantId, key: KANBAN_STATE_KEY } },
-    select: { value: true, updatedAt: true },
-  });
-  return {
-    state: parseKanbanAppState(row?.value ?? null),
-    updatedAt: row?.updatedAt ?? null,
-  };
-}
-
-async function saveKanbanStateWithRetry(
-  tenantId: string,
-  nextState: KanbanAppState,
-  baseUpdatedAt: Date | null,
-): Promise<boolean> {
-  const prisma = await getPrisma();
-  if (!baseUpdatedAt) {
-    await prisma.tenantClientState.upsert({
-      where: { tenantId_key: { tenantId, key: KANBAN_STATE_KEY } },
-      create: { tenantId, key: KANBAN_STATE_KEY, value: nextState as never },
-      update: { value: nextState as never },
-    });
-    return true;
-  }
-  const updated = await prisma.tenantClientState.updateMany({
-    where: {
-      tenantId,
-      key: KANBAN_STATE_KEY,
-      updatedAt: baseUpdatedAt,
-    },
-    data: { value: nextState as never },
-  });
-  return updated.count > 0;
-}
-
 export async function getLinkedOrderColumnNeighbor(
   tenantId: string,
   orderId: string,
 ): Promise<LinkedOrderColumnNeighbor | null> {
-  const { state } = await loadKanbanState(tenantId);
+  const { state } = await loadKanbanTenantState(tenantId);
   if (!state) return null;
   return peekLinkedOrderColumnNeighbor(state, orderId);
 }
@@ -85,7 +48,7 @@ export async function advanceLinkedOrderToNextColumn(opts: {
   if (!oid) return { ok: false, error: "Не указан наряд", code: "not_found" };
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const { state, updatedAt } = await loadKanbanState(opts.tenantId);
+    const { state, updatedAt } = await loadKanbanTenantState(opts.tenantId);
     if (!state) {
       return { ok: false, error: "Канбан не найден", code: "not_found" };
     }
@@ -174,7 +137,7 @@ export async function moveLinkedOrderToHandedToAdminsColumn(opts: {
   if (!oid) return { ok: false, error: "Не указан наряд", code: "not_found" };
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const { state, updatedAt } = await loadKanbanState(opts.tenantId);
+    const { state, updatedAt } = await loadKanbanTenantState(opts.tenantId);
     if (!state) {
       return { ok: false, error: "Канбан не найден", code: "not_found" };
     }
@@ -333,11 +296,25 @@ export async function applyWorkSentKanbanSideEffects(opts: {
     );
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
-      console.warn(
-        "[work-sent] kaiten column",
-        oid,
-        data.error ?? res.status,
-      );
+      const err = data.error ?? `Kaiten HTTP ${res.status}`;
+      console.warn("[work-sent] kaiten column", oid, err);
+      try {
+        await prisma.order.update({
+          where: { id: oid },
+          data: { kaitenSyncError: err },
+        });
+      } catch {
+        /* CRM-колонка уже записана */
+      }
+    } else {
+      try {
+        await prisma.order.update({
+          where: { id: oid },
+          data: { kaitenSyncError: null, kaitenSyncedAt: new Date() },
+        });
+      } catch {
+        /* ignore */
+      }
     }
   } catch (e) {
     console.warn("[work-sent] kaiten column network", oid, e);

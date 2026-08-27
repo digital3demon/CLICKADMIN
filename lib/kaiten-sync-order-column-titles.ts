@@ -10,6 +10,7 @@ import {
   type KaitenAuth,
   kaitenGetCard,
   kaitenListBoardColumns,
+  kaitenListCardMembers,
   kaitenListComments,
   kaitenMembersFromCardJson,
   trackLaneForBoardId,
@@ -246,7 +247,17 @@ export async function syncKaitenColumnTitlesForOrderIds(
         ...(dueYmd != null || dueExplicitEmpty ? { stageDue: dueYmd ?? null } : {}),
         ...("asap" in cardObj ? { urgent: cardObj.asap === true } : {}),
       };
-      const rawMembers = kaitenMembersFromCardJson(cardObj);
+      let rawMembers = kaitenMembersFromCardJson(cardObj);
+      if (rawMembers == null || rawMembers.length === 0) {
+        const list = await kaitenListCardMembers(auth, row.kaitenCardId);
+        if (isKaitenRateLimitedStatus(list.status)) {
+          errorCount += 1;
+          rawMembers = rawMembers && rawMembers.length > 0 ? rawMembers : [];
+        }
+        if (list.ok && list.members.length > 0) {
+          rawMembers = list.members;
+        }
+      }
       if (rawMembers && rawMembers.length > 0) {
         try {
           let directory = directoryByTenant.get(row.tenantId);

@@ -1,7 +1,7 @@
 /**
  * Каталог zip-дампов и lock оверлея.
  * Timeweb standalone: cwd = /app/.next/standalone — туда писать нельзя (EACCES).
- * Порядок: CRM_DUMP_DIR → /app/data → родитель standalone → cwd/data → os.tmpdir().
+ * Порядок: CRM_DUMP_DIR → /app/data → родитель standalone → cwd/data (не standalone) → os.tmpdir().
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -13,6 +13,22 @@ export function resetCrmDumpLocalDirCacheForTests(): void {
   cached = null;
 }
 
+export function isNextStandaloneCwd(cwd: string): boolean {
+  const norm = cwd.replace(/\\/g, "/");
+  return norm.includes("/.next/standalone") || norm.endsWith("/.next/standalone");
+}
+
+/** Относительный CRM_DUMP_DIR при standalone — не клеить к cwd (EACCES). */
+export function resolveCrmDumpEnvDir(cwd: string, envDir: string): string {
+  const raw = envDir.trim();
+  if (path.isAbsolute(raw)) return raw;
+  if (isNextStandaloneCwd(cwd)) {
+    const rel = raw.replace(/^[\\/]+/, "").replace(/^data[\\/]/, "");
+    return path.posix.join("/app/data", rel.replace(/\\/g, "/"));
+  }
+  return path.join(cwd, raw);
+}
+
 export function crmDumpDirCandidates(opts: {
   cwd: string;
   envDir?: string;
@@ -21,17 +37,14 @@ export function crmDumpDirCandidates(opts: {
   const out: string[] = [];
   const raw = opts.envDir?.trim();
   if (raw) {
-    out.push(path.isAbsolute(raw) ? raw : path.join(opts.cwd, raw));
+    out.push(resolveCrmDumpEnvDir(opts.cwd, raw));
   }
   out.push("/app/data/crm-dumps");
-  const standaloneMarker = `${path.sep}.next${path.sep}standalone`;
-  if (
-    opts.cwd.includes(standaloneMarker) ||
-    opts.cwd.replace(/\\/g, "/").endsWith("/.next/standalone")
-  ) {
+  if (isNextStandaloneCwd(opts.cwd)) {
     out.push(path.resolve(opts.cwd, "..", "..", "data", "crm-dumps"));
+  } else {
+    out.push(path.join(opts.cwd, "data", "crm-dumps"));
   }
-  out.push(path.join(opts.cwd, "data", "crm-dumps"));
   out.push(path.join(opts.tmpDir, "dental-lab-crm-dumps"));
   return [...new Set(out)];
 }

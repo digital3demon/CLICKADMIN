@@ -1,15 +1,18 @@
 import "server-only";
 
 import { ConstructionCategory, OrderStatus } from "@prisma/client";
-import { getPrisma } from "@/lib/get-prisma";
 import {
   getClientsPrisma,
   getOrdersPrisma,
   getPricingPrisma,
 } from "@/lib/get-domain-prisma";
-import { findCardByLinkedOrderId, parseKanbanAppState } from "@/lib/kanban/chat-sync";
+import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import { bestKaitenDescriptionMirrorForKanban } from "@/lib/kanban/kaiten-description-mirror";
+import {
+  loadKanbanTenantState,
+  saveKanbanStateWithRetry,
+} from "@/lib/kanban/kanban-tenant-state-write.server";
 import {
   defaultAppState,
   mergeKaitenLinkedOrdersIntoAppState,
@@ -19,7 +22,7 @@ import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
 
-export const KANBAN_ENSURE_STATE_KEY = "kanbanAppStateV3" as const;
+export { KANBAN_STATE_KEY as KANBAN_ENSURE_STATE_KEY } from "@/lib/kanban/kanban-tenant-state-write.server";
 
 export type EnsureCrmKanbanLinkedCardResult = {
   ensured: boolean;
@@ -61,46 +64,6 @@ function presenceFromState(
     cardId: card.id || crmKanbanLinkedCardId(orderId),
     columnTitle: (col.title || "").trim() || null,
   };
-}
-
-async function loadKanbanState(tenantId: string): Promise<{
-  state: KanbanAppState | null;
-  updatedAt: Date | null;
-}> {
-  const prisma = await getPrisma();
-  const row = await prisma.tenantClientState.findUnique({
-    where: { tenantId_key: { tenantId, key: KANBAN_ENSURE_STATE_KEY } },
-    select: { value: true, updatedAt: true },
-  });
-  return {
-    state: parseKanbanAppState(row?.value ?? null),
-    updatedAt: row?.updatedAt ?? null,
-  };
-}
-
-async function saveKanbanStateWithRetry(
-  tenantId: string,
-  nextState: KanbanAppState,
-  baseUpdatedAt: Date | null,
-): Promise<boolean> {
-  const prisma = await getPrisma();
-  if (!baseUpdatedAt) {
-    await prisma.tenantClientState.upsert({
-      where: { tenantId_key: { tenantId, key: KANBAN_ENSURE_STATE_KEY } },
-      create: { tenantId, key: KANBAN_ENSURE_STATE_KEY, value: nextState as never },
-      update: { value: nextState as never },
-    });
-    return true;
-  }
-  const updated = await prisma.tenantClientState.updateMany({
-    where: {
-      tenantId,
-      key: KANBAN_ENSURE_STATE_KEY,
-      updatedAt: baseUpdatedAt,
-    },
-    data: { value: nextState as never },
-  });
-  return updated.count > 0;
 }
 
 async function buildLinkedOrderRow(
@@ -283,7 +246,7 @@ export async function ensureCrmKanbanLinkedCardForOrder(
 
     const maxAttempts = 6;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const loaded = await loadKanbanState(tenantId);
+      const loaded = await loadKanbanTenantState(tenantId);
       const base = loaded.state ?? defaultAppState();
       const already = presenceFromState(base, orderId);
       const next = mergeKaitenLinkedOrdersIntoAppState(base, [row], {

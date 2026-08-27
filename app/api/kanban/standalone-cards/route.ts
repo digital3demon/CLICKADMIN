@@ -110,7 +110,15 @@ export async function PUT(req: Request) {
   try {
     await prisma.$transaction(async (tx) => {
       const now = new Date();
+      const keepIds = normalized.map((r) => r.id);
       for (const r of normalized) {
+        const existing = await tx.kanbanStandaloneCard.findUnique({
+          where: { id: r.id },
+          select: { tenantId: true },
+        });
+        if (existing && existing.tenantId !== tenantId) {
+          throw new Error("standalone-tenant-mismatch");
+        }
         await tx.kanbanStandaloneCard.upsert({
           where: { id: r.id },
           create: {
@@ -124,6 +132,7 @@ export async function PUT(req: Request) {
             updatedByUserId: uid,
           },
           update: {
+            tenantId,
             boardId: r.boardId,
             columnId: r.columnId,
             sortIndex: r.sortIndex,
@@ -133,8 +142,20 @@ export async function PUT(req: Request) {
           },
         });
       }
+      await tx.kanbanStandaloneCard.deleteMany({
+        where: {
+          tenantId,
+          ...(keepIds.length > 0 ? { id: { notIn: keepIds } } : {}),
+        },
+      });
     });
   } catch (e) {
+    if (e instanceof Error && e.message === "standalone-tenant-mismatch") {
+      return NextResponse.json(
+        { error: "Карточка принадлежит другой организации" },
+        { status: 409 },
+      );
+    }
     console.error("[kanban/standalone-cards PUT]", e);
     return NextResponse.json({ error: "Не удалось сохранить" }, { status: 500 });
   }

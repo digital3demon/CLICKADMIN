@@ -152,6 +152,12 @@ async function flushWrite(
         body: JSON.stringify({ scope, key, value: body }),
       });
       if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          skipped?: string;
+        };
+        if (data.skipped === "sparse-kanban") {
+          return false;
+        }
         slot.lastOkFingerprint = bodyFp;
         slot.skipUntil = 0;
         return true;

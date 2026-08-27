@@ -43,8 +43,19 @@ export function shouldSkipSparseKanbanTenantWrite(
   const stoMem = countKanbanCardsWithMembers(stored);
   /** Даже 1–3 карточки с людьми (после частичного wipe) нельзя затереть пустым PUT. */
   if (stoMem > 0 && incMem === 0) return true;
+  /** Монотонный heal (людей стало не меньше) — писать, даже если ещё не вся доска. */
+  if (incMem >= stoMem) return false;
   if (stoMem >= 4 && incMem < Math.ceil(stoMem * 0.25)) return true;
   return false;
+}
+
+export function countKanbanLinkedCardsMissingMembers(state: KanbanAppState): number {
+  let n = 0;
+  forEachKanbanCardInState(state, (card) => {
+    if (!String(card.linkedOrderId || "").trim()) return;
+    if (!hasKanbanCardMembers(card)) n += 1;
+  });
+  return n;
 }
 
 /** Доска с нарядами, но почти без людей — надо подтянуть состав с Kaiten. */
@@ -54,4 +65,12 @@ export function kanbanMembersLookStarved(state: KanbanAppState): boolean {
   if (linked < 2) return false;
   if (linked < 8) return mem === 0;
   return mem < Math.ceil(linked * 0.25);
+}
+
+/**
+ * «МОИ» прячет даже одну карточку без людей. Не ждать, пока опустеет четверть доски.
+ */
+export function kanbanMembersNeedHydration(state: KanbanAppState): boolean {
+  if (kanbanMembersLookStarved(state)) return true;
+  return countKanbanLinkedCardsMissingMembers(state) >= 1;
 }

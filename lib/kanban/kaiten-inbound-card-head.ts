@@ -5,18 +5,18 @@
 import "server-only";
 
 import type { PrismaClient } from "@prisma/client";
-import { getPrisma } from "@/lib/get-prisma";
 import { kaitenMembersFingerprint } from "@/lib/kaiten-members-parse";
 import { kaitenMembersSyncEnabled } from "@/lib/kaiten-members-config";
 import {
   applyInboundMembersToKanbanCard,
   mapKaitenCardMembersToCrm,
 } from "@/lib/kanban/kaiten-members-inbound";
+import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
 import {
-  findCardByLinkedOrderId,
-  KANBAN_CHAT_STATE_KEY,
-  parseKanbanAppState,
-} from "@/lib/kanban/chat-sync";
+  loadKanbanTenantState,
+  mutateKanbanTenantState,
+  saveKanbanStateWithRetry,
+} from "@/lib/kanban/kanban-tenant-state-write.server";
 import { applyKaitenHeadFieldsToKanbanCard } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import {
   getKanbanStageDue,
@@ -91,58 +91,45 @@ export async function persistKaitenStageDueToKanbanState(
   }
 
   try {
-    const corePrisma = await getPrisma();
-    const row = await corePrisma.tenantClientState.findUnique({
-      where: { tenantId_key: { tenantId: tid, key: KANBAN_CHAT_STATE_KEY } },
-      select: { value: true },
+    const saved = await mutateKanbanTenantState(tid, (state) => {
+      let changed = false;
+      for (const orderId of keys) {
+        const loc = findCardByLinkedOrderId(state, orderId);
+        if (!loc) continue;
+        const card =
+          state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
+        const patch = byOrderId[orderId]!;
+        const head: Record<string, unknown> = {};
+        if ("stageDue" in patch) {
+          const ymd = patch.stageDue ?? null;
+          head.due_date = ymd && ymd.trim() ? ymd : null;
+        }
+        if (typeof patch.urgent === "boolean") {
+          head.asap = patch.urgent;
+        }
+        if (Object.keys(head).length > 0 && applyKaitenHeadFieldsToKanbanCard(card, head)) {
+          card.updatedAt = new Date().toISOString();
+          changed = true;
+        }
+        const assignees = patch.assignees ?? [];
+        const participants = patch.participants ?? [];
+        if (
+          applyInboundMembersToKanbanCard(card, {
+            assignees,
+            participants,
+            fingerprint:
+              patch.fingerprint ||
+              `crm:${assignees.slice().sort().join(",")}|${participants.slice().sort().join(",")}`,
+            unmappedLabels: [],
+          })
+        ) {
+          card.updatedAt = new Date().toISOString();
+          changed = true;
+        }
+      }
+      return changed;
     });
-    const state = parseKanbanAppState(row?.value ?? null);
-    if (!state) return { changed: false, skipped: true };
-
-    let changed = false;
-    for (const orderId of keys) {
-      const loc = findCardByLinkedOrderId(state, orderId);
-      if (!loc) continue;
-      const card =
-        state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
-      const patch = byOrderId[orderId]!;
-      const head: Record<string, unknown> = {};
-      if ("stageDue" in patch) {
-        const ymd = patch.stageDue ?? null;
-        head.due_date = ymd && ymd.trim() ? ymd : null;
-      }
-      if (typeof patch.urgent === "boolean") {
-        head.asap = patch.urgent;
-      }
-      if (Object.keys(head).length > 0 && applyKaitenHeadFieldsToKanbanCard(card, head)) {
-        card.updatedAt = new Date().toISOString();
-        changed = true;
-      }
-      const assignees = patch.assignees ?? [];
-      const participants = patch.participants ?? [];
-      if (
-        applyInboundMembersToKanbanCard(card, {
-          assignees,
-          participants,
-          fingerprint:
-            patch.fingerprint ||
-            `crm:${assignees.slice().sort().join(",")}|${participants.slice().sort().join(",")}`,
-          unmappedLabels: [],
-        })
-      ) {
-        card.updatedAt = new Date().toISOString();
-        changed = true;
-      }
-    }
-
-    if (!changed) return { changed: false, skipped: false };
-
-    await corePrisma.tenantClientState.upsert({
-      where: { tenantId_key: { tenantId: tid, key: KANBAN_CHAT_STATE_KEY } },
-      create: { tenantId: tid, key: KANBAN_CHAT_STATE_KEY, value: state as never },
-      update: { value: state as never },
-    });
-    return { changed: true, skipped: false };
+    return { changed: saved.changed, skipped: saved.skipped };
   } catch (err) {
     if (isTenantClientStateMissing(err)) {
       return { changed: false, skipped: true };
@@ -178,12 +165,8 @@ export async function syncKaitenCardHeadInboundForOrderIds(
   if (orders.length === 0) return empty;
 
   try {
-    const corePrisma = await getPrisma();
-    const row = await corePrisma.tenantClientState.findUnique({
-      where: { tenantId_key: { tenantId: tid, key: KANBAN_CHAT_STATE_KEY } },
-      select: { value: true },
-    });
-    const state = parseKanbanAppState(row?.value ?? null);
+    const loaded = await loadKanbanTenantState(tid);
+    const state = loaded.state;
     if (!state) return empty;
 
     const membersEnabled = kaitenMembersSyncEnabled();
@@ -254,15 +237,11 @@ export async function syncKaitenCardHeadInboundForOrderIds(
     }
 
     if (changed) {
-      await corePrisma.tenantClientState.upsert({
-        where: { tenantId_key: { tenantId: tid, key: KANBAN_CHAT_STATE_KEY } },
-        create: {
-          tenantId: tid,
-          key: KANBAN_CHAT_STATE_KEY,
-          value: state as never,
-        },
-        update: { value: state as never },
-      });
+      const saved = await saveKanbanStateWithRetry(tid, state, loaded.updatedAt);
+      if (!saved) {
+        const retry = await persistKaitenStageDueToKanbanState(tid, byOrderId);
+        changed = retry.changed || changed;
+      }
     }
 
     return {

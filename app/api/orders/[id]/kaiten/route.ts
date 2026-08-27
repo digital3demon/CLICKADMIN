@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { KaitenTrackLane, Prisma } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getKaitenEnvConfig, listConfiguredKaitenTrackLanes } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
@@ -465,6 +466,8 @@ export async function GET(
       kaitenCardDescriptionMirror: true,
       kaitenCardTitleManual: true,
       kaitenCardDescriptionManual: true,
+      kaitenSyncedAt: true,
+      kaitenColumnTitle: true,
       tenant: { select: { kanbanAdminMentionTag: true } },
     },
   });
@@ -730,20 +733,32 @@ export async function GET(
           ? { kaitenCardSortOrder: kaitenSortOrderFromCard(cardObj) }
           : {};
       const mirrorFields = kaitenMirrorFieldsFromCard(cardObj);
+      const fresh = await ordersPrisma.order.findFirst({
+        where: { id: orderIdTrim },
+        select: { kaitenSyncedAt: true, kaitenTrackLane: true },
+      });
+      const recentlyPatched =
+        fresh?.kaitenSyncedAt != null &&
+        Date.now() - fresh.kaitenSyncedAt.getTime() < 45_000;
       await ordersPrisma.order.update({
         where: { id: orderIdTrim },
         data: {
-          kaitenColumnTitle: columnTitle,
-          ...(trackFromCard != null && trackFromCard !== order.kaitenTrackLane
-            ? { kaitenTrackLane: trackFromCard }
-            : {}),
+          ...(recentlyPatched
+            ? {}
+            : {
+                kaitenColumnTitle: columnTitle,
+                ...(trackFromCard != null &&
+                trackFromCard !== (fresh?.kaitenTrackLane ?? order.kaitenTrackLane)
+                  ? { kaitenTrackLane: trackFromCard }
+                  : {}),
+                ...sortPatch,
+              }),
           ...(mirrorFields.kaitenCardDescriptionMirror !== undefined
             ? { kaitenCardDescriptionMirror: mirrorFields.kaitenCardDescriptionMirror }
             : {}),
           kaitenBlocked: kBlocked,
           kaitenBlockReason: kBlockReason,
           ...blockedAtPatch,
-          ...sortPatch,
           ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
         },
       });
@@ -1148,6 +1163,37 @@ export async function PATCH(
     body = (await req.json()) as PatchBody;
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
+  }
+
+  const moduleAccess = session
+    ? await getEffectiveModuleAccess(tenantId, session.role)
+    : null;
+  const canMove = moduleAccess?.KANBAN_MOVE_COLUMNS === true;
+  const canStop = moduleAccess?.KANBAN_STOP === true || canMove;
+  const canOtherBoard =
+    moduleAccess?.KANBAN_MOVE_TO_OTHER_BOARD === true || canMove;
+  if (body.moveToStop === true && !canStop) {
+    return NextResponse.json({ error: "Нет права СТОП" }, { status: 403 });
+  }
+  if (body.kaitenTrackLane != null && !canOtherBoard) {
+    return NextResponse.json(
+      { error: "Нет права переносить на другую доску" },
+      { status: 403 },
+    );
+  }
+  if (
+    (body.columnTitle != null ||
+      body.columnId != null ||
+      body.sortOrder != null ||
+      body.laneId != null) &&
+    !canMove &&
+    body.moveToStop !== true &&
+    !(body.kaitenTrackLane != null && canOtherBoard)
+  ) {
+    return NextResponse.json(
+      { error: "Нет права перемещать по колонкам" },
+      { status: 403 },
+    );
   }
 
   const order = await ordersPrisma.order.findFirst({

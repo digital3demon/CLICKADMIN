@@ -21,6 +21,7 @@ import {
 } from "@/lib/kanban/kaiten-linked-order";
 import {
   applyKanbanLegacyStageDueClearMigration,
+  forEachKanbanCardInState,
   getKanbanStageDue,
   setKanbanStageDue,
 } from "@/lib/kanban/kanban-stage-due";
@@ -1358,9 +1359,9 @@ export function slimKanbanStateForClientState(
   const descMax =
     level >= 2 ? 60 : level >= 1 ? 80 : PERSIST_DESC_MAX;
   const archiveKeep =
-    level >= 3 ? 0 : level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_ARCHIVE_ROWS_KEEP;
+    level >= 3 ? 15 : level >= 2 ? 20 : level >= 1 ? 24 : PERSIST_ARCHIVE_ROWS_KEEP;
   const stoppedKeep =
-    level >= 3 ? 0 : level >= 2 ? 10 : level >= 1 ? 20 : PERSIST_STOPPED_ROWS_KEEP;
+    level >= 3 ? 15 : level >= 2 ? 20 : level >= 1 ? 24 : PERSIST_STOPPED_ROWS_KEEP;
   const dropSnapshots = level >= 1;
 
   const slimCard = (card: KanbanCard, archiveLike = false) => {
@@ -1921,9 +1922,39 @@ function appendArchivedSearchHits(args: {
  * виртуальные «Мои» / «Ответственный» тоже собирают карточки со всех дорожек.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
+/** «МОИ» / «Ответственный»: участник, поиск по наряду, или только что найденный oid. */
+export function kanbanAggregateKeepsCard(
+  card: KanbanCard,
+  uid: string,
+  mode: KanbanAggregateMode,
+  opts?: { searchActive?: boolean; stickyOrderIds?: ReadonlySet<string> },
+): boolean {
+  if (!uid) return false;
+  const assignees = card.assignees || [];
+  const participants = card.participants || [];
+  const linked = Boolean(card.linkedOrderId?.trim());
+  const oid = String(card.linkedOrderId || "").trim();
+  const searchLinkedHit = Boolean(opts?.searchActive) && linked;
+  const sticky = Boolean(oid && opts?.stickyOrderIds?.has(oid));
+  if (mode === "my") {
+    const inParts = participants.includes(uid);
+    const inAssign = assignees.includes(uid);
+    const ownLocal =
+      !linked &&
+      Boolean(card.createdByUserId?.trim()) &&
+      card.createdByUserId === uid;
+    return inParts || inAssign || ownLocal || searchLinkedHit || sticky;
+  }
+  return assignees.includes(uid) || searchLinkedHit || sticky;
+}
+
 export function buildKanbanDisplayView(
   state: KanbanAppState,
-  opts?: { sessionUserId?: string | null; sessionUserRole?: UserRole | null },
+  opts?: {
+    sessionUserId?: string | null;
+    sessionUserRole?: UserRole | null;
+    stickyLinkedOrderIds?: ReadonlySet<string> | readonly string[];
+  },
 ): {
   displayBoard: KanbanBoard;
   cardHomeBoardId: Map<string, string>;
@@ -1933,6 +1964,9 @@ export function buildKanbanDisplayView(
   const agg = kanbanAggregateMode(state.activeBoardId);
   const sessionUserId = (opts?.sessionUserId ?? "").trim();
   const sessionUserRole = opts?.sessionUserRole ?? null;
+  const stickyLinkedOrderIds = new Set(
+    [...(opts?.stickyLinkedOrderIds ?? [])].map((id) => String(id || "").trim()).filter(Boolean),
+  );
   const accessibleBoards = state.boards.filter((b) =>
     canUserAccessBoard(b, sessionUserId || null, sessionUserRole),
   );
@@ -1969,20 +2003,12 @@ export function buildKanbanDisplayView(
         for (const card of colO.cards) {
           if (seen.has(card.id)) continue;
           if (!uid) continue;
-          const assignees = card.assignees || [];
-          const participants = card.participants || [];
-          const linked = Boolean(card.linkedOrderId?.trim());
-          /** Поиск на «МОИ»: совпадение по тексту даже без людей (шапка ещё не доехала). */
-          const searchLinkedHit = Boolean(q) && linked;
-          if (agg === "my") {
-            const inParts = participants.includes(uid);
-            const inAssign = assignees.includes(uid);
-            const ownLocal =
-              !linked &&
-              Boolean(card.createdByUserId?.trim()) &&
-              card.createdByUserId === uid;
-            if (!inParts && !inAssign && !ownLocal && !searchLinkedHit) continue;
-          } else if (!assignees.includes(uid) && !searchLinkedHit) {
+          if (
+            !kanbanAggregateKeepsCard(card, uid, agg, {
+              searchActive: Boolean(q),
+              stickyOrderIds: stickyLinkedOrderIds,
+            })
+          ) {
             continue;
           }
           if (q && !textMatches(card, home)) continue;
@@ -2003,23 +2029,11 @@ export function buildKanbanDisplayView(
         cardHomeBoardId,
         textMatches,
         passesFilters: passesFiltersWithoutSearchText,
-        extraKeep: (card) => {
-          if (!uid) return false;
-          const assignees = card.assignees || [];
-          const participants = card.participants || [];
-          const linked = Boolean(card.linkedOrderId?.trim());
-          if (Boolean(q) && linked) return true;
-          if (agg === "my") {
-            const inParts = participants.includes(uid);
-            const inAssign = assignees.includes(uid);
-            const ownLocal =
-              !linked &&
-              Boolean(card.createdByUserId?.trim()) &&
-              card.createdByUserId === uid;
-            return inParts || inAssign || ownLocal;
-          }
-          return assignees.includes(uid);
-        },
+        extraKeep: (card) =>
+          kanbanAggregateKeepsCard(card, uid, agg, {
+            searchActive: Boolean(q),
+            stickyOrderIds: stickyLinkedOrderIds,
+          }),
       });
       displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
     }
@@ -2193,24 +2207,28 @@ export function dedupeLinkedOrderCardsOnBoard(board: KanbanBoard): void {
 export function removeLinkedOrderCardsFromAppState(
   state: KanbanAppState,
   orderIds: string[],
+  opts?: { columnsOnly?: boolean },
 ): KanbanAppState {
   const gone = new Set(
     orderIds.map((id) => String(id || "").trim()).filter(Boolean),
   );
   if (gone.size === 0) return state;
   const next = structuredClone(state);
+  const columnsOnly = opts?.columnsOnly === true;
   for (const b of next.boards) {
     for (const col of b.columns) {
       col.cards = col.cards.filter(
         (c) => !c.linkedOrderId || !gone.has(c.linkedOrderId),
       );
     }
-    b.archivedCards = (b.archivedCards || []).filter(
-      (row) => !row.card.linkedOrderId || !gone.has(row.card.linkedOrderId),
-    );
-    b.stoppedCards = (b.stoppedCards || []).filter(
-      (row) => !row.card.linkedOrderId || !gone.has(row.card.linkedOrderId),
-    );
+    if (!columnsOnly) {
+      b.archivedCards = (b.archivedCards || []).filter(
+        (row) => !row.card.linkedOrderId || !gone.has(row.card.linkedOrderId),
+      );
+      b.stoppedCards = (b.stoppedCards || []).filter(
+        (row) => !row.card.linkedOrderId || !gone.has(row.card.linkedOrderId),
+      );
+    }
   }
   if (Array.isArray(next.hiddenLinkedOrderIds) && next.hiddenLinkedOrderIds.length > 0) {
     next.hiddenLinkedOrderIds = next.hiddenLinkedOrderIds.filter((id) => !gone.has(id));
@@ -2219,23 +2237,39 @@ export function removeLinkedOrderCardsFromAppState(
 }
 
 function normalizeKaitenTrackLaneForBoard(raw: string | null | undefined): string {
-  const u = String(raw || "ORTHOPEDICS")
+  const u = String(raw || "")
     .trim()
     .toUpperCase();
   if (u === "ORTHODONTICS") return "ORTHODONTICS";
-  return "ORTHOPEDICS";
+  if (u === "ORTHOPEDICS") return "ORTHOPEDICS";
+  return "";
 }
 
 function resolveBoardForKaitenLane(
   state: KanbanAppState,
   laneRaw: string | null | undefined,
+  keepBoardId?: string | null,
 ): KanbanBoard | null {
   const lane = normalizeKaitenTrackLaneForBoard(laneRaw);
-  const wantId =
-    lane === "ORTHODONTICS"
-      ? KANBAN_BOARD_ORTHODONTICS_ID
-      : KANBAN_BOARD_ORTHOPEDICS_ID;
-  return state.boards.find((b) => b.id === wantId) ?? state.boards[0] ?? null;
+  if (lane === "ORTHODONTICS") {
+    return (
+      state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID) ??
+      state.boards[0] ??
+      null
+    );
+  }
+  if (lane === "ORTHOPEDICS") {
+    return (
+      state.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID) ??
+      state.boards[0] ??
+      null
+    );
+  }
+  if (keepBoardId) {
+    const kept = state.boards.find((b) => b.id === keepBoardId);
+    if (kept) return kept;
+  }
+  return state.boards[0] ?? null;
 }
 
 /**
@@ -2711,21 +2745,18 @@ function snapshotKanbanMembersByOrderId(
   state: KanbanAppState,
 ): Map<string, KanbanMembersSnap> {
   const map = new Map<string, KanbanMembersSnap>();
-  for (const b of state.boards) {
-    for (const col of b.columns || []) {
-      for (const c of col.cards || []) {
-        const oid = String(c.linkedOrderId || "").trim();
-        const stageDue = getKanbanStageDue(c);
-        if (!oid || (!hasKanbanCardMembers(c) && !stageDue)) continue;
-        map.set(oid, {
-          assignees: [...(c.assignees || [])],
-          participants: [...(c.participants || [])],
-          fingerprint: c.kaitenMembersFingerprint ?? null,
-          stageDue,
-        });
-      }
-    }
-  }
+  forEachKanbanCardInState(state, (c) => {
+    const oid = String(c.linkedOrderId || "").trim();
+    const stageDue = getKanbanStageDue(c);
+    if (!oid || (!hasKanbanCardMembers(c) && !stageDue)) return;
+    if (map.has(oid)) return;
+    map.set(oid, {
+      assignees: [...(c.assignees || [])],
+      participants: [...(c.participants || [])],
+      fingerprint: c.kaitenMembersFingerprint ?? null,
+      stageDue,
+    });
+  });
   return map;
 }
 
@@ -2773,10 +2804,14 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   }
 
   for (const row of visibleRows) {
-    const targetBoard = resolveBoardForKaitenLane(next, row.kaitenTrackLane);
+    const reuseFromOtherBoard = findLinkedOrderCardAnywhere(next, row.id);
+    const targetBoard = resolveBoardForKaitenLane(
+      next,
+      row.kaitenTrackLane,
+      reuseFromOtherBoard?.board.id,
+    );
     if (!targetBoard || !targetBoard.columns.length) continue;
     if (isLinkedOrderArchivedOnBoard(targetBoard, row.id)) continue;
-    const reuseFromOtherBoard = findLinkedOrderCardAnywhere(next, row.id);
     const reuseCard = reuseFromOtherBoard?.card ?? null;
     for (const b of next.boards) {
       if (b.id !== targetBoard.id) {
@@ -2804,7 +2839,10 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     const desc = linkedOrderKanbanDescription(row, demo);
     const effType = resolveLinkedOrderCardTypeId(targetBoard, row, demo);
     const fallbackTypeId = effType || (targetBoard.cardTypes?.[0]?.id ?? "");
-    const lane = normalizeKaitenTrackLaneForBoard(row.kaitenTrackLane);
+    const lane =
+      normalizeKaitenTrackLaneForBoard(row.kaitenTrackLane) ||
+      reuseCard?.trackLane ||
+      "";
 
     const targetCol = resolveOrderKanbanColumnFromKaitenMirrorTitle(
       targetBoard,
@@ -2885,6 +2923,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   }
   for (const b of next.boards) {
     sortMirrorLinkedCardsInBoard(b);
+    dedupeLinkedOrderCardsOnBoard(b);
   }
   return next;
 }

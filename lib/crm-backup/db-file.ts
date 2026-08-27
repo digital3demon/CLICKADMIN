@@ -6,6 +6,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import type { CrmBackupEngine } from "@/lib/crm-backup/types";
+import { getCrmDumpLocalDir } from "@/lib/crm-dump/local-dir";
+
+function pgSqlTempPath(prefix: string): string {
+  return path.join(getCrmDumpLocalDir(), `${prefix}-${Date.now()}.sql`);
+}
 
 export function resolveLiveDatabaseUrl(): string {
   return String(process.env.DATABASE_URL || "").trim();
@@ -76,12 +81,7 @@ export function readLiveSqliteParts(): SqliteFileParts {
 export function dumpLivePostgresSql(): Buffer {
   const url = normalizePgUrl(resolveLiveDatabaseUrl());
   const pgDump = resolvePgTool("pg_dump");
-  const tmp = path.join(
-    process.cwd(),
-    "data",
-    "crm-dumps",
-    `_pg-dump-${Date.now()}.sql`,
-  );
+  const tmp = pgSqlTempPath("_pg-dump");
   fs.mkdirSync(path.dirname(tmp), { recursive: true });
   const cmd = spawnSync(
     pgDump,
@@ -141,12 +141,7 @@ export function writeLiveSqliteParts(parts: SqliteFileParts): void {
 export function restoreLivePostgresSql(sql: Buffer): void {
   const url = normalizePgUrl(resolveLiveDatabaseUrl());
   const psql = resolvePgTool("psql");
-  const tmp = path.join(
-    process.cwd(),
-    "data",
-    "crm-dumps",
-    `_pg-restore-${Date.now()}.sql`,
-  );
+  const tmp = pgSqlTempPath("_pg-restore");
   fs.mkdirSync(path.dirname(tmp), { recursive: true });
   fs.writeFileSync(tmp, sql);
   const cmd = spawnSync(psql, ["--dbname", url, "--file", tmp], {

@@ -2,7 +2,6 @@
  * Срок / срочность / ответственные / участники зеркалятся из Kaiten в kanbanAppStateV3.
  * Клиентский PUT не должен затирать более свежий inbound с cron.
  */
-import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
 import {
   forEachKanbanCardInState,
   getKanbanStageDue,
@@ -64,6 +63,20 @@ function copyInboundMembers(from: KanbanCard, to: KanbanCard): boolean {
  * Копирует inbound-поля с `stored` на `incoming`, если cron уже записал
  * другой отпечаток members или более свежий срок.
  */
+function findLinkedCardInState(
+  state: KanbanAppState,
+  orderId: string,
+): KanbanCard | null {
+  const want = String(orderId || "").trim();
+  if (!want) return null;
+  let hit: KanbanCard | null = null;
+  forEachKanbanCardInState(state, (card) => {
+    if (hit) return;
+    if (String(card.linkedOrderId || "").trim() === want) hit = card;
+  });
+  return hit;
+}
+
 export function mergeInboundKaitenMirrorFieldsFromStored(
   incoming: KanbanAppState,
   stored: KanbanAppState,
@@ -72,10 +85,8 @@ export function mergeInboundKaitenMirrorFieldsFromStored(
   forEachKanbanCardInState(incoming, (inc) => {
     const oid = inc.linkedOrderId?.trim() || "";
     if (!oid) return;
-    const loc = findCardByLinkedOrderId(stored, oid);
-    if (!loc) return;
-    const sto =
-      stored.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
+    const sto = findLinkedCardInState(stored, oid);
+    if (!sto) return;
 
     const stoFp = sto.kaitenMembersFingerprint ?? null;
     const incFp = inc.kaitenMembersFingerprint ?? null;

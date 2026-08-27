@@ -443,6 +443,22 @@ describe("kanban parent move after children done", () => {
     expect(board.columns[5]?.cards.some((c) => c.id === parent.id)).toBe(true);
   });
 
+  it("сборка: родитель на ортопедии, дети готовы на доске производства", () => {
+    const ortho = makeBoard();
+    ortho.id = "kanban-board-orthopedics";
+    const prod = makeBoard();
+    prod.id = KANBAN_BOARD_PRODUCTION_ID;
+    const parent = createCard({ id: "p-cross", title: "Родитель", childCardIds: ["ch-a"] });
+    const child = createCard({ id: "ch-a", title: "Ребёнок", parentCardId: "p-cross" });
+    ortho.columns[1]?.cards.push(parent);
+    prod.columns[4]?.cards.push(child);
+    expect(parentCanMoveToAssembly(prod, parent.id)).toBe(false);
+    expect(parentCanMoveToAssembly(prod, parent.id, [ortho, prod])).toBe(true);
+    const moved = moveParentToAssemblyIfReady(prod, parent.id, undefined, [ortho, prod]);
+    expect(moved).toBe(true);
+    expect(ortho.columns[5]?.cards.some((c) => c.id === parent.id)).toBe(true);
+  });
+
   it("moves parent from lane-prefixed production column", () => {
     const board = makeBoard();
     board.columns[1]!.title = "Печать · Производство";

@@ -67,4 +67,29 @@ describe("overlayMissingLocalLinkedCardsOntoRemote", () => {
     expect(remoteProd.cards.filter((c) => c.linkedOrderId === "ord-есть")).toHaveLength(1);
     expect(remoteProd.cards.some((c) => c.linkedOrderId === "ord-скрыт")).toBe(false);
   });
+
+  it("возвращает наряд из локального СТОП, если remote его выкинул", () => {
+    const local = defaultAppState();
+    const ortho = local.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    ortho.stoppedCards = [
+      {
+        id: "stop-степанов",
+        stoppedAt: "2026-08-27T10:00:00.000Z",
+        sourceColumnId: "col",
+        sourceColumnTitle: "Производство",
+        card: createCard({
+          id: "kaiten-order-стоп",
+          title: "2607-299 Степанов СТОП",
+          linkedOrderId: "ord-стоп",
+          participants: ["u-всеволод"],
+        }),
+      },
+    ];
+    const remote = defaultAppState();
+    expect(overlayMissingLocalLinkedCardsOntoRemote(local, remote)).toBe(true);
+    const remoteOrtho = remote.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    expect(
+      (remoteOrtho.stoppedCards || []).some((r) => r.card.linkedOrderId === "ord-стоп"),
+    ).toBe(true);
+  });
 });

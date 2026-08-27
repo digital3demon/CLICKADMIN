@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultAppState, mergeKaitenLinkedOrdersIntoAppState } from "@/lib/kanban/model";
 import {
   kanbanMembersLookStarved,
+  kanbanMembersNeedHydration,
   shouldSkipSparseKanbanTenantWrite,
 } from "./kanban-tenant-write-guard";
 
@@ -106,5 +107,31 @@ describe("shouldSkipSparseKanbanTenantWrite", () => {
       if (i > 0) c.assignees = ["u-юлич"];
     });
     expect(kanbanMembersLookStarved(starved)).toBe(false);
+    expect(kanbanMembersNeedHydration(starved)).toBe(false);
+    starved.boards[0]!.columns[0]!.cards[3]!.assignees = [];
+    expect(kanbanMembersLookStarved(starved)).toBe(false);
+    expect(kanbanMembersNeedHydration(starved)).toBe(true);
+  });
+
+  it("не блокирует PUT, если людей стало не меньше (heal Степанов)", () => {
+    const stored = defaultAppState();
+    const incoming = defaultAppState();
+    for (let i = 0; i < 8; i += 1) {
+      stored.boards[0]!.columns[0]!.cards.push({
+        id: `k-${i}`,
+        title: `наряд ${i} Степанов от 10.02.2026`,
+        assignees: i < 6 ? ["u-всеволод"] : [],
+        participants: [],
+        linkedOrderId: `наряд-${i}`,
+      } as never);
+      incoming.boards[0]!.columns[0]!.cards.push({
+        id: `k-${i}`,
+        title: `наряд ${i} Степанов от 10.02.2026`,
+        assignees: ["u-всеволод"],
+        participants: [],
+        linkedOrderId: `наряд-${i}`,
+      } as never);
+    }
+    expect(shouldSkipSparseKanbanTenantWrite(incoming, stored)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getKaitenRestAuth, kaitenArchiveCard } from "@/lib/kaiten-rest";
+import { pruneLinkedOrdersFromKanbanTenantState } from "@/lib/kanban/kanban-tenant-state-write.server";
 import { archivedOrderNumberPlaceholder } from "@/lib/order-number";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 
@@ -78,6 +79,12 @@ export async function POST(
       kaitenSyncError,
     },
   });
+
+  try {
+    await pruneLinkedOrdersFromKanbanTenantState(tenantId, [orderId]);
+  } catch (e) {
+    console.error("[POST order archive] kanban JSON prune", e);
+  }
 
   return NextResponse.json({ ok: true });
 }
