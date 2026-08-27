@@ -14,6 +14,7 @@ import {
 import { unlinkDemoSqliteFiles } from "@/lib/demo-db-path";
 import { seedDemoDatabase } from "@/lib/demo-seed";
 import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
+import { ensureLegalEntityReconciliationTable } from "@/lib/ensure-legal-entity-reconciliation-table";
 import { resolvePrismaSchemaPath } from "@/lib/prisma-schema-path";
 
 /**
@@ -34,6 +35,7 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
     await runPrismaDbPush(url);
     const demo = getDemoPrisma();
     await ensureFinanceOfficeDebtColumns(demo);
+    await ensureLegalEntityReconciliationTable(demo);
     await seedDemoDatabase(demo);
     return;
   }
@@ -43,6 +45,7 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
     if (ready) {
       const demo = getDemoPrisma();
       await ensureFinanceOfficeDebtColumns(demo);
+      await ensureLegalEntityReconciliationTable(demo);
       await seedDemoDatabase(demo);
       return;
     }
