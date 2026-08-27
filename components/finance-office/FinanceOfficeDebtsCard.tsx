@@ -17,6 +17,7 @@ import {
   resolveListPillClass,
 } from "@/lib/harmony-list-pill";
 import { formatDebtDocumentOpenLabel } from "@/lib/format-invoice-number-ru";
+import { crmCityAddressTextClass } from "@/lib/crm-lab-city";
 
 type DebtRow = {
   orderId: string;
@@ -24,6 +25,7 @@ type DebtRow = {
   patientName: string | null;
   doctorName: string | null;
   clinicName: string | null;
+  clinicAddress?: string | null;
   ourLegalEntity: string | null;
   theirLegalName: string | null;
   theirInn: string | null;
@@ -325,7 +327,14 @@ export function FinanceOfficeDebtsCard({
                             {r.orderNumber}
                           </a>
                         </td>
-                        <td className="px-2 py-1.5">
+                        <td
+                          className={`px-2 py-1.5 ${
+                            r.clinicName
+                              ? crmCityAddressTextClass(r.clinicAddress)
+                              : "text-[var(--text-secondary)]"
+                          }`}
+                          title={r.clinicAddress?.trim() || undefined}
+                        >
                           {r.clinicName || "Частное лицо"}
                         </td>
                         <td className="whitespace-nowrap px-2 py-1.5">

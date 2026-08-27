@@ -22,6 +22,14 @@ import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import type { FinanceOfficeOrderTableRow } from "@/components/finance-office/FinanceOfficeOrdersTable";
 import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { ListRowUnfold } from "@/components/layout/ListRowUnfold";
+import { crmCityAddressTextClass } from "@/lib/crm-lab-city";
+
+function financeOfficeClinicNameClass(address: string | null | undefined): string {
+  const city = crmCityAddressTextClass(address);
+  return city.includes("amber")
+    ? city
+    : "text-[var(--sidebar-blue)]";
+}
 
 function targetInsideInteractive(target: EventTarget | null) {
   if (target == null || !(target instanceof Node)) return false;
@@ -226,7 +234,8 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
         {o.clinic ? (
           <Link
             href={`/clients/${o.clinic.id}`}
-            className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"
+            title={o.clinic.address?.trim() || undefined}
+            className={`block hyphens-auto break-words text-center hover:underline ${financeOfficeClinicNameClass(o.clinic.address)}`}
           >
             {o.clinic.name}
           </Link>
@@ -419,7 +428,14 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
               </div>
             </div>
 
-            <div className="break-words text-xs text-[var(--text-secondary)]">
+            <div
+              className={`break-words text-xs ${
+                o.clinic
+                  ? financeOfficeClinicNameClass(o.clinic.address)
+                  : "text-[var(--text-secondary)]"
+              }`}
+              title={o.clinic?.address?.trim() || undefined}
+            >
               {clinicName}
             </div>
 

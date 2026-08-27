@@ -37,6 +37,7 @@ export type FinanceOfficeDebtRow = {
   patientName: string | null;
   doctorName: string | null;
   clinicName: string | null;
+  clinicAddress: string | null;
   ourLegalEntity: string | null;
   theirLegalName: string | null;
   theirInn: string | null;
@@ -121,6 +122,7 @@ export async function listFinanceOfficeDebts(
       clinic: {
         select: {
           name: true,
+          address: true,
           legalFullName: true,
           inn: true,
           email: true,
@@ -139,6 +141,7 @@ export async function listFinanceOfficeDebts(
       patientName: o.patientName,
       doctorName: o.doctor?.fullName?.trim() || null,
       clinicName: o.clinic?.name ?? null,
+      clinicAddress: o.clinic?.address ?? null,
       ourLegalEntity: o.legalEntity,
       theirLegalName: o.clinic?.legalFullName ?? null,
       theirInn: o.clinic?.inn ?? null,
