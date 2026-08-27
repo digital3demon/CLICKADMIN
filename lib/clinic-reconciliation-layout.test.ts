@@ -11,13 +11,9 @@ describe("clinic-reconciliation-layout", () => {
     expect(RECON_COL_W_PT.reduce((a, b) => a + b, 0)).toBe(809);
   });
 
-  it("сводка на всю ширину: имя 1–6 + кол-во + цена + сумма 9–10", () => {
-    expect(
-      reconColSpan(0, 5) +
-        RECON_COL_W_PT[6]! +
-        RECON_COL_W_PT[7]! +
-        reconColSpan(8, 9),
-    ).toBe(RECON_PAGE_INNER_PT);
+  it("имя сводки = только колонка «Выставлено» (6), не 1–6", () => {
+    expect(RECON_COL_W_PT[5]).toBe(243);
+    expect(reconColSpan(0, 4) + RECON_COL_W_PT[5]!).toBe(reconColSpan(0, 5));
   });
 
   it("последняя колонка оставляет 2pt под вертикальные спины PDF", () => {

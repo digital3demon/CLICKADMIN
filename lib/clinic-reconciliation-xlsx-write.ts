@@ -1,6 +1,6 @@
 /**
  * Лист сверки без шаблона: те же 10 колонок, что PDF.
- * Сводка с левого края (имя = 1–6, сумма = 9–10).
+ * Сводка в колонках F–I (имя = «Выставлено», сумма над «Всего к оплате»).
  */
 import type ExcelJS from "exceljs";
 import type { ClinicReconciliationPdfPayload } from "@/lib/clinic-reconciliation-pdf-data";
@@ -91,23 +91,18 @@ export function writeReconciliationSheet(
 
   const head = sheet.getRow(1);
   head.height = 22;
-  merge(sheet, "A1:F1");
-  merge(sheet, "I1:J1");
-  paint(head.getCell(1), "НАИМЕНОВАНИЕ ПОЗИЦИИ", { head: true });
+  paint(head.getCell(6), "НАИМЕНОВАНИЕ ПОЗИЦИИ", { head: true });
   paint(head.getCell(7), "КОЛ-ВО ЕДИНИЦ", { head: true });
   paint(head.getCell(8), "СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК", { head: true });
   paint(head.getCell(9), "СУММА ЕДИНИЦ БЕЗ СКИДОК", { head: true });
-  frameSpan(head, 1, 6, headFill());
-  frameSpan(head, 9, 10, headFill());
+  frameSpan(head, 6, 9, headFill());
 
   const summary = payload.summary;
   for (let i = 0; i < summary.length; i++) {
     const r = 2 + i;
-    merge(sheet, `A${r}:F${r}`);
-    merge(sheet, `I${r}:J${r}`);
     const row = sheet.getRow(r);
     const s = summary[i]!;
-    paint(row.getCell(1), s.label);
+    paint(row.getCell(6), s.label);
     paint(row.getCell(7), s.quantity, { align: "right" });
     paint(row.getCell(8), s.unitRub, { rub: true, align: "right" });
     paint(row.getCell(9), s.totalRub, { rub: true, align: "right" });
@@ -142,20 +137,16 @@ export function writeReconciliationSheet(
 
   const payR = metaR + 1;
   const vatR = metaR + 2;
-  merge(sheet, `I${payR}:J${payR}`);
-  merge(sheet, `I${vatR}:J${vatR}`);
-  paint(sheet.getRow(payR).getCell(8), "Всего к оплате:", { head: true });
-  paint(sheet.getRow(payR).getCell(9), payload.yellowRow.discountedTotalRub, {
+  paint(sheet.getRow(payR).getCell(9), "Всего к оплате:", { head: true });
+  paint(sheet.getRow(payR).getCell(10), payload.yellowRow.discountedTotalRub, {
     rub: true,
     align: "right",
   });
-  frameSpan(sheet.getRow(payR), 9, 10, valueFill());
-  paint(sheet.getRow(vatR).getCell(8), "В т.ч. Сумма НДС 5%:", { head: true });
-  paint(sheet.getRow(vatR).getCell(9), payload.yellowRow.vatRub, {
+  paint(sheet.getRow(vatR).getCell(9), "В т.ч. Сумма НДС 5%:", { head: true });
+  paint(sheet.getRow(vatR).getCell(10), payload.yellowRow.vatRub, {
     rub: true,
     align: "right",
   });
-  frameSpan(sheet.getRow(vatR), 9, 10, valueFill());
 
   const hdrR = metaR + 3;
   const hdr = sheet.getRow(hdrR);

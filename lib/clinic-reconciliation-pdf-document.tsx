@@ -283,46 +283,109 @@ function DetailHeaderRow({ first }: { first?: boolean }) {
   );
 }
 
+function SummaryInsetRow({
+  first,
+  head,
+  minHeight,
+  name,
+  qty,
+  unit,
+  sum,
+}: {
+  first?: boolean;
+  head?: boolean;
+  minHeight: number;
+  name: string;
+  qty: string;
+  unit: string;
+  sum: string;
+}) {
+  const gap = innerSpan(0, 4);
+  const bg = head ? HEAD_GRAY : ROW_GRAY;
+  return (
+    <View wrap={false} style={{ width: PAGE_INNER }}>
+      {first ? <View style={styles.hLine} /> : null}
+      <View
+        style={[
+          styles.rowInner,
+          { minHeight, backgroundColor: "transparent" },
+        ]}
+      >
+        <View
+          style={{
+            width: gap,
+            minWidth: gap,
+            maxWidth: gap,
+            flexGrow: 0,
+            flexShrink: 0,
+          }}
+        />
+        <View style={styles.vLine} />
+        <PdfCell w={innerCol(5)} bg={bg} align={head ? "center" : "left"} bold={head} size={head ? 5.8 : 6.2}>
+          {name}
+        </PdfCell>
+        <PdfCell w={innerCol(6)} bg={bg} align={head ? "center" : "right"} bold={head} size={head ? 5.8 : 6.2}>
+          {qty}
+        </PdfCell>
+        <PdfCell w={innerCol(7)} bg={bg} align={head ? "center" : "right"} bold={head} size={head ? 5.8 : 6.2}>
+          {unit}
+        </PdfCell>
+        <PdfCell
+          w={innerCol(8)}
+          last
+          bg={bg}
+          align={head ? "center" : "right"}
+          bold={head}
+          size={head ? 5.8 : 6.2}
+        >
+          {sum}
+        </PdfCell>
+        <View style={styles.vLine} />
+        <View
+          style={{
+            width: innerCol(9),
+            minWidth: innerCol(9),
+            maxWidth: innerCol(9),
+          }}
+        />
+      </View>
+      <View
+        style={{
+          marginLeft: gap,
+          width: innerCol(5) + innerCol(6) + innerCol(7) + innerCol(8) + SPINE * 2,
+          height: SPINE,
+          backgroundColor: BORDER,
+        }}
+      />
+    </View>
+  );
+}
+
 function SummaryBlock({
   payload,
 }: {
   payload: ClinicReconciliationPdfPayload;
 }) {
-  const nameW = innerSpan(0, 5);
-  const qtyW = innerCol(6);
-  const unitW = innerCol(7);
-  const sumW = innerSpan(8, 9);
   return (
     <View style={{ width: PAGE_INNER }}>
-      <GridRow bg={HEAD_GRAY} minHeight={18} first>
-        <PdfCell w={nameW} bg={HEAD_GRAY} align="center" bold size={5.8}>
-          НАИМЕНОВАНИЕ ПОЗИЦИИ
-        </PdfCell>
-        <PdfCell w={qtyW} bg={HEAD_GRAY} align="center" bold size={5.8}>
-          КОЛ-ВО ЕДИНИЦ
-        </PdfCell>
-        <PdfCell w={unitW} bg={HEAD_GRAY} align="center" bold size={5.8}>
-          СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК
-        </PdfCell>
-        <PdfCell w={sumW} last bg={HEAD_GRAY} align="center" bold size={5.8}>
-          СУММА ЕДИНИЦ БЕЗ СКИДОК
-        </PdfCell>
-      </GridRow>
+      <SummaryInsetRow
+        first
+        head
+        minHeight={18}
+        name="НАИМЕНОВАНИЕ ПОЗИЦИИ"
+        qty="КОЛ-ВО ЕДИНИЦ"
+        unit="СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК"
+        sum="СУММА ЕДИНИЦ БЕЗ СКИДОК"
+      />
       {payload.summary.map((row, i) => (
-        <GridRow key={`s-${i}`} bg={ROW_GRAY} minHeight={15}>
-          <PdfCell w={nameW} bg={ROW_GRAY} size={6.2}>
-            {row.label}
-          </PdfCell>
-          <PdfCell w={qtyW} bg={ROW_GRAY} align="right" size={6.2}>
-            {String(row.quantity).replace(".", ",")}
-          </PdfCell>
-          <PdfCell w={unitW} bg={ROW_GRAY} align="right" size={6.2}>
-            {formatRubPdf(row.unitRub)}
-          </PdfCell>
-          <PdfCell w={sumW} last bg={ROW_GRAY} align="right" size={6.2}>
-            {formatRubPdf(row.totalRub)}
-          </PdfCell>
-        </GridRow>
+        <SummaryInsetRow
+          key={`s-${i}`}
+          minHeight={15}
+          name={row.label}
+          qty={String(row.quantity).replace(".", ",")}
+          unit={formatRubPdf(row.unitRub)}
+          sum={formatRubPdf(row.totalRub)}
+        />
       ))}
       <GridRow bg={ROW_GRAY} minHeight={20}>
         <PdfCell w={innerSpan(0, 2)} bg={ROW_GRAY} align="center" bold>
@@ -357,9 +420,9 @@ function PayTotalsBlock({
 }: {
   payload: ClinicReconciliationPdfPayload;
 }) {
-  const left = span(0, 6);
-  const labelW = COL_W[7];
-  const valueW = span(8, 9);
+  const left = innerSpan(0, 7);
+  const labelW = innerCol(8);
+  const valueW = innerCol(9);
   const spacer = {
     width: left,
     minWidth: left,
