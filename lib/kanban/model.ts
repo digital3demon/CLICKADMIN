@@ -19,10 +19,20 @@ import {
   resolveLinkedOrderKanbanTitle,
   type KaitenLinkedOrderForKanban,
 } from "@/lib/kanban/kaiten-linked-order";
-import { applyKanbanLegacyStageDueClearMigration, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import {
+  applyKanbanLegacyStageDueClearMigration,
+  getKanbanStageDue,
+  setKanbanStageDue,
+} from "@/lib/kanban/kanban-stage-due";
+import {
+  applyKanbanCardHeadsCache,
+  loadKanbanCardHeadsCache,
+  persistKanbanCardHeadsCache,
+} from "@/lib/kanban/kanban-card-heads-cache";
 import {
   hasKanbanCardMembers,
   overlayLocalKanbanCardHeadOntoRemote,
+  shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
@@ -1461,6 +1471,7 @@ export function mergeKanbanStatePreservingLocalBoards(
 ): KanbanAppState {
   const merged = structuredClone(remoteState);
   overlayLocalKanbanCardHeadOntoRemote(localState, merged);
+  applyKanbanCardHeadsCache(merged, loadKanbanCardHeadsCache());
   // Персональный UI всегда с локальной сессии — remote tenant не должен его затирать.
   merged.search = localState.search ?? "";
   merged.filters = structuredClone(localState.filters);
@@ -1732,6 +1743,7 @@ export function saveKanbanState(state: KanbanAppState, isDemo = false) {
     return;
   }
   memoryStateRawLive = raw;
+  persistKanbanCardHeadsCache(state);
 }
 
 export function getActiveBoard(state: KanbanAppState): KanbanBoard {
@@ -2687,6 +2699,7 @@ type KanbanMembersSnap = {
   assignees: string[];
   participants: string[];
   fingerprint: string | null;
+  stageDue: string;
 };
 
 function snapshotKanbanMembersByOrderId(
@@ -2697,11 +2710,13 @@ function snapshotKanbanMembersByOrderId(
     for (const col of b.columns || []) {
       for (const c of col.cards || []) {
         const oid = String(c.linkedOrderId || "").trim();
-        if (!oid || !hasKanbanCardMembers(c)) continue;
+        const stageDue = getKanbanStageDue(c);
+        if (!oid || (!hasKanbanCardMembers(c) && !stageDue)) continue;
         map.set(oid, {
           assignees: [...(c.assignees || [])],
           participants: [...(c.participants || [])],
           fingerprint: c.kaitenMembersFingerprint ?? null,
+          stageDue,
         });
       }
     }
@@ -2713,10 +2728,15 @@ function restoreKanbanMembersFromSnap(
   card: KanbanCard,
   snap: KanbanMembersSnap | undefined,
 ): void {
-  if (!snap || hasKanbanCardMembers(card)) return;
-  card.assignees = [...snap.assignees];
-  card.participants = [...snap.participants];
-  if (snap.fingerprint) card.kaitenMembersFingerprint = snap.fingerprint;
+  if (!snap) return;
+  if (!hasKanbanCardMembers(card) && hasKanbanCardMembers(snap)) {
+    card.assignees = [...snap.assignees];
+    card.participants = [...snap.participants];
+    if (snap.fingerprint) card.kaitenMembersFingerprint = snap.fingerprint;
+  }
+  if (shouldKeepLocalKanbanStageDue(snap.stageDue, getKanbanStageDue(card))) {
+    setKanbanStageDue(card, snap.stageDue);
+  }
 }
 
 /**

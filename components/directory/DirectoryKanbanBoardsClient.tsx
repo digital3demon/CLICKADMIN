@@ -33,7 +33,13 @@ import { KaitenIntegrationTenantSettings } from "@/components/directory/KaitenIn
 import { OrderArchiveRetentionTenantSettings } from "@/components/directory/OrderArchiveRetentionTenantSettings";
 import { KanbanCrmUsersProvider } from "@/components/kanban/kanban-crm-users-context";
 import { IconBoard, IconPlus } from "@/components/kanban/kanban-icons";
-import { readClientState, writeClientState } from "@/lib/client-state-client";
+import {
+  readClientState,
+  readClientStateDetailed,
+  writeClientState,
+} from "@/lib/client-state-client";
+import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
+import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
 import {
   applyKanbanArchiveSettings,
   extractKanbanArchiveSettings,
@@ -131,12 +137,27 @@ export function DirectoryKanbanBoardsClient({
   });
   const lastCardTypeLanesSigRef = useRef("");
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTenantKanbanRef = useRef<ReturnType<typeof loadKanbanStateForDirectory> | null>(
+    null,
+  );
+  const tenantKanbanWriteAllowedRef = useRef(isDemo);
   const archiveSettingsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardTypeLanesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!kanbanStateReady) return;
     saveKanbanState(appState, isDemo);
+    if (
+      !isDemo &&
+      (!tenantKanbanWriteAllowedRef.current ||
+        (lastTenantKanbanRef.current &&
+          shouldSkipSparseKanbanTenantWrite(
+            appState,
+            lastTenantKanbanRef.current,
+          )))
+    ) {
+      return;
+    }
     const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
     const scope = isDemo ? "user" : "tenant";
     const payload = kanbanStateForPersistence(appState, isDemo);
@@ -160,17 +181,32 @@ export function DirectoryKanbanBoardsClient({
     void (async () => {
       const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = isDemo ? "user" : "tenant";
-      const remote = await readClientState<unknown>(scope, key);
+      const remoteRead = await readClientStateDetailed<unknown>(scope, key);
       if (cancelled) return;
-      if (remote && typeof remote === "object") {
-        const remoteState = remote as ReturnType<typeof loadKanbanStateForDirectory>;
-        const next = applyKanbanCardTypeLanes(
-          mergeKanbanStatePreservingLocalBoards(appState, remoteState),
-          lastCardTypeLanesRef.current,
-        );
-        ensureProductionBoardInState(next);
-        setAppState(next);
-        saveKanbanState(next, isDemo);
+      if (!isDemo && !remoteRead.ok) {
+        tenantKanbanWriteAllowedRef.current = false;
+      } else if (!isDemo && remoteRead.ok && !remoteRead.found) {
+        tenantKanbanWriteAllowedRef.current = true;
+      } else if (remoteRead.ok && remoteRead.found) {
+        const parsed = parseKanbanAppState(remoteRead.value);
+        if (parsed || (isDemo && remoteRead.value && typeof remoteRead.value === "object")) {
+          const remoteState = (
+            parsed ?? remoteRead.value
+          ) as ReturnType<typeof loadKanbanStateForDirectory>;
+          const next = applyKanbanCardTypeLanes(
+            mergeKanbanStatePreservingLocalBoards(appState, remoteState),
+            lastCardTypeLanesRef.current,
+          );
+          ensureProductionBoardInState(next);
+          setAppState(next);
+          saveKanbanState(next, isDemo);
+          if (!isDemo) {
+            lastTenantKanbanRef.current = next;
+            tenantKanbanWriteAllowedRef.current = true;
+          }
+        } else if (!isDemo) {
+          tenantKanbanWriteAllowedRef.current = false;
+        }
       }
       setKanbanStateReady(true);
     })();

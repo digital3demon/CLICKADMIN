@@ -7,6 +7,7 @@ import {
 import { getPrisma } from "@/lib/get-prisma";
 import { KANBAN_CHAT_STATE_KEY, parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
+import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -173,6 +174,12 @@ export async function PUT(req: Request) {
           const stored = parseKanbanAppState(existing?.value ?? null);
           if (stored) {
             mergeInboundKaitenMirrorFieldsFromStored(incoming, stored);
+            if (shouldSkipSparseKanbanTenantWrite(incoming, stored)) {
+              return NextResponse.json({
+                ok: true,
+                skipped: "sparse-kanban",
+              });
+            }
             valueToStore = incoming;
           }
         }

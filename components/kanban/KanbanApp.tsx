@@ -107,7 +107,16 @@ import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
 import { telegramHtmlLink, escapeTelegramHtml } from "@/lib/telegram-html";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
-import { readClientState, writeClientState } from "@/lib/client-state-client";
+import {
+  readClientState,
+  readClientStateDetailed,
+  writeClientState,
+} from "@/lib/client-state-client";
+import {
+  applyKanbanCardHeadsCache,
+  loadKanbanCardHeadsCache,
+} from "@/lib/kanban/kanban-card-heads-cache";
+import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
 import {
   applyKanbanArchiveSettings,
   extractKanbanArchiveSettings,
@@ -500,6 +509,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const titlesSyncLastAtRef = useRef(0);
   const tenantKanbanReadAtRef = useRef(0);
   const lastTenantKanbanRef = useRef<KanbanAppState | null>(null);
+  /** F5: не писать default в tenant, пока GET не подтвердил живой снимок. */
+  const tenantKanbanWriteAllowedRef = useRef(isDemo);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
@@ -520,6 +531,19 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
    * откатывать карточку на старый `kaitenColumnTitle` из снимка.
    */
   const flushKanbanTenantNowRef = useRef<() => void>(() => {});
+
+  const canPersistTenantKanban = useCallback(
+    (state: KanbanAppState) => {
+      if (isDemo) return true;
+      if (!tenantKanbanWriteAllowedRef.current) return false;
+      const stored = lastTenantKanbanRef.current;
+      if (stored && shouldSkipSparseKanbanTenantWrite(state, stored)) {
+        return false;
+      }
+      return true;
+    },
+    [isDemo],
+  );
 
   const optimisticKaitenColumnMovesRef = useRef(
     new Map<
@@ -685,6 +709,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (storedMembers) {
           mergeInboundKaitenMirrorFieldsFromStored(next, storedMembers);
         }
+        applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
         return next;
       });
 
@@ -801,6 +826,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           mode: "upsertOnly",
         });
         overlayLocalKanbanCardHeadOntoRemote(prev, merged);
+        applyKanbanCardHeadsCache(merged, loadKanbanCardHeadsCache());
         return merged;
       });
     } catch {
@@ -872,33 +898,48 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     void (async () => {
       const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = isDemo ? "user" : "tenant";
-      const remote = await readClientState<unknown>(scope, key);
+      const remoteRead = await readClientStateDetailed<unknown>(scope, key);
       if (!isDemo) tenantKanbanReadAtRef.current = Date.now();
       if (cancelled) return;
-      if (remote && typeof remote === "object") {
-        setAppState((prev) => {
-          if (!prev) return prev;
-          const currentCard = cardModalId;
-          const remoteState = isDemo
-            ? normalizeDemoKanbanAppState(remote as KanbanAppState)
-            : (remote as KanbanAppState);
-          const merged = applyKanbanCardTypeLanes(
-            mergeKanbanStatePreservingLocalBoards(prev, remoteState),
-            lastCardTypeLanesRef.current,
-          );
-          const finalState = applyPendingKanbanColumnMoves(
-            isDemo
-              ? merged
-              : applyKanbanLegacyStageDueClearMigration(merged).state,
-            listPendingKanbanColumnMoves(),
-          );
-          if (currentCard && !findCardInAppState(finalState, currentCard)) {
-            setCardModalId(null);
-          }
-          saveKanbanState(finalState, isDemo);
-          if (!isDemo) lastTenantKanbanRef.current = finalState;
-          return finalState;
-        });
+      if (!isDemo && !remoteRead.ok) {
+        tenantKanbanWriteAllowedRef.current = false;
+      } else if (!isDemo && remoteRead.ok && !remoteRead.found) {
+        tenantKanbanWriteAllowedRef.current = true;
+      } else if (remoteRead.ok && remoteRead.found) {
+        const parsed = parseKanbanAppState(remoteRead.value);
+        if (!isDemo && !parsed) {
+          tenantKanbanWriteAllowedRef.current = false;
+        } else if (parsed || (isDemo && remoteRead.value && typeof remoteRead.value === "object")) {
+          setAppState((prev) => {
+            if (!prev) return prev;
+            const currentCard = cardModalId;
+            const remoteState = isDemo
+              ? normalizeDemoKanbanAppState(
+                  (parsed ?? remoteRead.value) as KanbanAppState,
+                )
+              : (parsed as KanbanAppState);
+            const merged = applyKanbanCardTypeLanes(
+              mergeKanbanStatePreservingLocalBoards(prev, remoteState),
+              lastCardTypeLanesRef.current,
+            );
+            const finalState = applyPendingKanbanColumnMoves(
+              isDemo
+                ? merged
+                : applyKanbanLegacyStageDueClearMigration(merged).state,
+              listPendingKanbanColumnMoves(),
+            );
+            applyKanbanCardHeadsCache(finalState, loadKanbanCardHeadsCache());
+            if (currentCard && !findCardInAppState(finalState, currentCard)) {
+              setCardModalId(null);
+            }
+            saveKanbanState(finalState, isDemo);
+            if (!isDemo) {
+              lastTenantKanbanRef.current = finalState;
+              tenantKanbanWriteAllowedRef.current = true;
+            }
+            return finalState;
+          });
+        }
       }
 
       // Персональный UI (фильтры, вид, активная доска) — отдельно на пользователя.
@@ -1009,6 +1050,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     if (!appState || !kanbanStateReady || kanbanPersistPausedRef.current) return;
     saveKanbanState(appState, isDemo);
+    if (!canPersistTenantKanban(appState)) return;
     const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
     const scope = isDemo ? "user" : "tenant";
     const payload = kanbanStateForPersistence(appState, isDemo);
@@ -1025,13 +1067,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         kanbanStateSaveTimerRef.current = null;
       }
     };
-  }, [appState, isDemo, kanbanStateReady]);
+  }, [appState, isDemo, kanbanStateReady, canPersistTenantKanban]);
 
   useEffect(() => {
     flushKanbanTenantNowRef.current = () => {
       if (isDemo || kanbanPersistPausedRef.current) return;
       const cur = appStateRef.current;
-      if (!cur) return;
+      if (!cur || !canPersistTenantKanban(cur)) return;
       if (kanbanStateSaveTimerRef.current) {
         clearTimeout(kanbanStateSaveTimerRef.current);
         kanbanStateSaveTimerRef.current = null;
@@ -1054,7 +1096,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isDemo]);
+  }, [isDemo, canPersistTenantKanban]);
 
   // Персональный UI — отдельный debounce в user client-state.
   useEffect(() => {
@@ -1091,7 +1133,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     return () => {
       if (kanbanPersistPausedRef.current) return;
       const cur = appStateRef.current;
-      if (!cur) return;
+      if (!cur || !canPersistTenantKanban(cur)) return;
       const key = demo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
       const scope = demo ? "user" : "tenant";
       void writeClientState(scope, key, kanbanStateForPersistence(cur, demo));
@@ -2842,6 +2884,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     clearTimeout(kanbanStateSaveTimerRef.current);
                     kanbanStateSaveTimerRef.current = null;
                   }
+                  if (!canPersistTenantKanban(cur)) return;
                   await writeClientState(
                     "tenant",
                     "kanbanAppStateV3",
@@ -2864,7 +2907,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                         patches,
                       );
                       saveKanbanState(state, false);
-                      if (!isDemo) {
+                      if (!isDemo && canPersistTenantKanban(state)) {
                         void writeClientState(
                           "tenant",
                           "kanbanAppStateV3",
@@ -3127,6 +3170,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   syncProductionChecklistSnapshotsAcrossBoards(next.boards);
                   queueMicrotask(() => {
                     if (isDemo || kanbanPersistPausedRef.current) return;
+                    if (!canPersistTenantKanban(next)) return;
                     void writeClientState(
                       "tenant",
                       "kanbanAppStateV3",

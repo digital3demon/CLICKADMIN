@@ -74,22 +74,37 @@ function warnOnce(slot: WriteSlot, message: string): void {
   console.warn(message);
 }
 
-export async function readClientState<T>(
+export type ReadClientStateResult<T> =
+  | { ok: false }
+  | { ok: true; found: false }
+  | { ok: true; found: true; value: T };
+
+export async function readClientStateDetailed<T>(
   scope: ClientStateScope,
   key: string,
-): Promise<T | null> {
+): Promise<ReadClientStateResult<T>> {
   try {
     const q = new URLSearchParams({ scope, key });
     const res = await fetch(`/api/client-state?${q.toString()}`, {
       cache: "no-store",
       credentials: "include",
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { ok: false };
     const j = (await res.json()) as GetResponse;
-    return j.found ? (j.value as T) : null;
+    if (!j.found) return { ok: true, found: false };
+    return { ok: true, found: true, value: j.value as T };
   } catch {
-    return null;
+    return { ok: false };
   }
+}
+
+export async function readClientState<T>(
+  scope: ClientStateScope,
+  key: string,
+): Promise<T | null> {
+  const r = await readClientStateDetailed<T>(scope, key);
+  if (!r.ok || !r.found) return null;
+  return r.value;
 }
 
 async function flushWrite(
