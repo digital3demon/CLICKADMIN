@@ -50,7 +50,11 @@ import {
   listPendingKanbanColumnMoves,
   rememberPendingKanbanColumnMove,
 } from "@/lib/kanban/pending-column-moves";
-import { applyKanbanLegacyStageDueClearMigration, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import {
+  applyKanbanLegacyStageDueClearMigration,
+  forEachKanbanCardInState,
+  setKanbanStageDue,
+} from "@/lib/kanban/kanban-stage-due";
 import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { applyKaitenRefreshPatchesToState } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
@@ -63,7 +67,10 @@ import {
   forgetOptimisticKanbanStageDue,
   rememberOptimisticKanbanStageDue,
 } from "@/lib/kanban/optimistic-kaiten-stage-due";
-import { patchOrderKaitenCard } from "@/lib/kanban/kaiten-linked-kanban-sync";
+import {
+  fetchOrderKaitenCardHeadForKanban,
+  patchOrderKaitenCard,
+} from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
   applyKanbanCardMembersOnBoard,
@@ -117,7 +124,9 @@ import {
 } from "@/lib/client-state-client";
 import {
   applyKanbanCardHeadsCache,
+  collectLinkedOrderIdsFromHeadsCache,
   loadKanbanCardHeadsCache,
+  prependMissingLinkedOrderIds,
 } from "@/lib/kanban/kanban-card-heads-cache";
 import {
   kanbanMembersLookStarved,
@@ -298,6 +307,32 @@ function collectLinkedOrderIdsPreferActiveBoard(state: KanbanAppState): string[]
     }
   }
   return [...active, ...other];
+}
+
+function linkedOrderIdsMissingMembers(state: KanbanAppState): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  forEachKanbanCardInState(state, (card) => {
+    const oid = String(card.linkedOrderId || "").trim();
+    if (!oid || seen.has(oid) || hasKanbanCardMembers(card)) return;
+    seen.add(oid);
+    ids.push(oid);
+  });
+  return ids;
+}
+
+function findLinkedOrderIdInState(
+  state: KanbanAppState,
+  orderId: string,
+): KanbanCard | null {
+  const want = String(orderId || "").trim();
+  if (!want) return null;
+  let hit: KanbanCard | null = null;
+  forEachKanbanCardInState(state, (card) => {
+    if (hit) return;
+    if (String(card.linkedOrderId || "").trim() === want) hit = card;
+  });
+  return hit;
 }
 
 function isKanbanCardDragInProgress(): boolean {
@@ -482,6 +517,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   } | null>(null);
   const [activityActorLabel, setActivityActorLabel] = useState<string | undefined>(undefined);
   const [kanbanSessionUserId, setKanbanSessionUserId] = useState<string | null>(null);
+  const kanbanSessionUserIdRef = useRef<string | null>(null);
+  kanbanSessionUserIdRef.current = kanbanSessionUserId;
   const [kanbanSessionRole, setKanbanSessionRole] = useState<UserRole | null>(null);
   const [kanbanCardPerms, setKanbanCardPerms] = useState({
     moveColumns: false,
@@ -702,7 +739,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         ? []
         : appStateRef.current
           ? takeLinkedOrderIdsBatch(
-              collectAllLinkedOrderIdsOnBoards(appStateRef.current),
+              prependMissingLinkedOrderIds(
+                collectAllLinkedOrderIdsOnBoards(appStateRef.current),
+                collectLinkedOrderIdsFromHeadsCache(loadKanbanCardHeadsCache(), {
+                  sessionUserId: kanbanSessionUserIdRef.current,
+                }),
+              ),
               linkedOrdersIdsOffsetRef,
             )
           : [];
@@ -776,7 +818,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         Date.now() >= titlesSyncBackoffRef.current &&
         Date.now() - titlesSyncLastAtRef.current >= titlesMinGapMs
       ) {
-        const ids = collectLinkedOrderIdsPreferActiveBoard(curForTitles);
+        const ids = prependMissingLinkedOrderIds(
+          collectLinkedOrderIdsPreferActiveBoard(curForTitles),
+          linkedOrderIdsMissingMembers(curForTitles),
+        );
         if (ids.length > 0) {
           let batch: string[];
           if (ids.length <= KAITEN_BOARD_TITLES_SYNC_WINDOW) {
@@ -873,6 +918,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         for (const [id, snap] of incomingAppt) next.set(id, snap);
         return next;
       });
+      const uid = (kanbanSessionUserIdRef.current || "").trim();
+      let needCardHead: string[] = [];
+      let persisted: KanbanAppState | null = null;
       setAppState((prev) => {
         if (!prev) return prev;
         if (isDemo) {
@@ -890,8 +938,68 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
         overlayLocalKanbanCardHeadOntoRemote(prev, merged);
         applyKanbanCardHeadsCache(merged, loadKanbanCardHeadsCache());
+        needCardHead = rows
+          .map((r) => r.id)
+          .filter((oid) => {
+            const card = findLinkedOrderIdInState(merged, oid);
+            if (!card) return false;
+            if (
+              uid &&
+              ((card.assignees || []).includes(uid) ||
+                (card.participants || []).includes(uid))
+            ) {
+              return false;
+            }
+            return true;
+          })
+          .slice(0, 12);
+        saveKanbanState(merged, false);
+        persisted = merged;
         return merged;
       });
+      if (persisted && canPersistTenantKanban(persisted)) {
+        void writeClientState(
+          "tenant",
+          "kanbanAppStateV3",
+          kanbanStateForPersistence(persisted, false),
+        );
+      }
+      if (!isDemo && needCardHead.length > 0) {
+        const byOrder: Record<
+          string,
+          { assignees: string[]; participants: string[] }
+        > = {};
+        await Promise.all(
+          needCardHead.map(async (oid) => {
+            const head = await fetchOrderKaitenCardHeadForKanban(oid);
+            if (!head.ok) return;
+            if (head.assignees.length === 0 && head.participants.length === 0) {
+              return;
+            }
+            byOrder[oid] = {
+              assignees: head.assignees,
+              participants: head.participants,
+            };
+          }),
+        );
+        if (Object.keys(byOrder).length > 0) {
+          setAppState((prev) => {
+            if (!prev) return prev;
+            const next = structuredClone(prev);
+            applyKanbanMembersByOrderId(next, byOrder);
+            applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+            saveKanbanState(next, false);
+            if (canPersistTenantKanban(next)) {
+              void writeClientState(
+                "tenant",
+                "kanbanAppStateV3",
+                kanbanStateForPersistence(next, false),
+              );
+            }
+            return next;
+          });
+        }
+      }
     } catch {
       /* offline */
     } finally {
@@ -909,6 +1017,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     }
   }, [
     isDemo,
+    canPersistTenantKanban,
     applyOptimisticKaitenBlocksToLinkedRows,
     applyOptimisticKaitenMovesToLinkedRows,
   ]);

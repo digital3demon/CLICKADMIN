@@ -123,4 +123,41 @@ describe("buildKanbanDisplayView · Мои", () => {
     expect(allIds).toContain("i-am-assignee");
     expect(allIds).not.toContain("unassigned-linked");
   });
+
+  it("поиск на «МОИ» показывает наряд без людей, если текст совпал", () => {
+    const board = orthopedicsMirrorBoard();
+    const prod = board.columns.find((c) => c.title === "Производство")!;
+    prod.cards.push(
+      createCard({
+        id: "stepanov-empty",
+        title: "2607-299 Степанов А.В. Жевлаков А. ХШ + Нагрузка",
+        linkedOrderId: "ord-степанов",
+        assignees: [],
+        participants: [],
+      }),
+    );
+
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [board],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "степанов",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 5 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+    });
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).toContain("stepanov-empty");
+  });
 });

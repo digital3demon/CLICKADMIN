@@ -4,6 +4,7 @@ import {
   createCard,
   defaultAppState,
   ensureProductionBoardInState,
+  KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_PRODUCTION_ID,
   kanbanStateForPersistence,
   mergeKanbanStatePreservingLocalBoards,
@@ -96,6 +97,26 @@ describe("kanban production routing", () => {
     ];
     const merged = mergeKanbanStatePreservingLocalBoards(local, remote);
     expect(merged.boards[0]!.cardTypes[0]!.defaultTrackLane).toBe("ORTHOPEDICS");
+  });
+
+  it("keeps a local linked card that remote snapshot dropped (поиск Степанов)", () => {
+    const local = defaultAppState();
+    const ortho = local.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(ortho).toBeTruthy();
+    const prod = ortho!.columns.find((c) => c.title === "Производство")!;
+    prod.cards.push(
+      createCard({
+        id: "kaiten-order-степанов",
+        title: "2607-299 Степанов",
+        linkedOrderId: "ord-степанов",
+        participants: ["u-всеволод"],
+      }),
+    );
+    const remote = defaultAppState();
+    const merged = mergeKanbanStatePreservingLocalBoards(local, remote);
+    const mergedOrtho = merged.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    const mergedProd = mergedOrtho.columns.find((c) => c.title === "Производство")!;
+    expect(mergedProd.cards.some((c) => c.linkedOrderId === "ord-степанов")).toBe(true);
   });
 
   it("does not drop local production cards when remote state has no production board", () => {

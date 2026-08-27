@@ -140,6 +140,52 @@ export function loadKanbanCardHeadsCache(): KanbanCardHeadsCache | null {
   }
 }
 
+/** Наряды из кэша шапки: для «МОИ» — только где есть session user. */
+export function collectLinkedOrderIdsFromHeadsCache(
+  heads: KanbanCardHeadsCache | null,
+  opts?: { sessionUserId?: string | null },
+): string[] {
+  if (!heads) return [];
+  const uid = (opts?.sessionUserId ?? "").trim();
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const [key, row] of Object.entries(heads)) {
+    if (!key.startsWith("oid:")) continue;
+    const oid = key.slice("oid:".length).trim();
+    if (!oid || seen.has(oid)) continue;
+    if (uid) {
+      const inAssign = (row.assignees || []).includes(uid);
+      const inParts = (row.participants || []).includes(uid);
+      if (!inAssign && !inParts) continue;
+    }
+    seen.add(oid);
+    out.push(oid);
+  }
+  return out;
+}
+
+/** Сначала наряды, которых нет на доске (кэш «МОИ»), потом уже лежащие. */
+export function prependMissingLinkedOrderIds(
+  onBoards: readonly string[],
+  extra: readonly string[],
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of extra) {
+    const oid = String(raw || "").trim();
+    if (!oid || seen.has(oid)) continue;
+    seen.add(oid);
+    out.push(oid);
+  }
+  for (const raw of onBoards) {
+    const oid = String(raw || "").trim();
+    if (!oid || seen.has(oid)) continue;
+    seen.add(oid);
+    out.push(oid);
+  }
+  return out;
+}
+
 export function applyKanbanCardHeadsCache(
   state: KanbanAppState,
   heads: KanbanCardHeadsCache | null,

@@ -34,6 +34,7 @@ import {
   overlayLocalKanbanCardHeadOntoRemote,
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
+import { overlayMissingLocalLinkedCardsOntoRemote } from "@/lib/kanban/overlay-missing-local-linked-cards";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
@@ -1471,6 +1472,7 @@ export function mergeKanbanStatePreservingLocalBoards(
 ): KanbanAppState {
   const merged = structuredClone(remoteState);
   overlayLocalKanbanCardHeadOntoRemote(localState, merged);
+  overlayMissingLocalLinkedCardsOntoRemote(localState, merged);
   applyKanbanCardHeadsCache(merged, loadKanbanCardHeadsCache());
   // Персональный UI всегда с локальной сессии — remote tenant не должен его затирать.
   merged.search = localState.search ?? "";
@@ -1970,6 +1972,8 @@ export function buildKanbanDisplayView(
           const assignees = card.assignees || [];
           const participants = card.participants || [];
           const linked = Boolean(card.linkedOrderId?.trim());
+          /** Поиск на «МОИ»: совпадение по тексту даже без людей (шапка ещё не доехала). */
+          const searchLinkedHit = Boolean(q) && linked;
           if (agg === "my") {
             const inParts = participants.includes(uid);
             const inAssign = assignees.includes(uid);
@@ -1977,9 +1981,9 @@ export function buildKanbanDisplayView(
               !linked &&
               Boolean(card.createdByUserId?.trim()) &&
               card.createdByUserId === uid;
-            if (!inParts && !inAssign && !ownLocal) continue;
-          } else {
-            if (!assignees.includes(uid)) continue;
+            if (!inParts && !inAssign && !ownLocal && !searchLinkedHit) continue;
+          } else if (!assignees.includes(uid) && !searchLinkedHit) {
+            continue;
           }
           if (q && !textMatches(card, home)) continue;
           if (!passesFiltersWithoutSearchText(card, home)) continue;
@@ -2004,6 +2008,7 @@ export function buildKanbanDisplayView(
           const assignees = card.assignees || [];
           const participants = card.participants || [];
           const linked = Boolean(card.linkedOrderId?.trim());
+          if (Boolean(q) && linked) return true;
           if (agg === "my") {
             const inParts = participants.includes(uid);
             const inAssign = assignees.includes(uid);

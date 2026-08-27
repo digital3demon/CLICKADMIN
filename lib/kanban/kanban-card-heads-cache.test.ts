@@ -4,7 +4,9 @@ import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-
 import {
   applyKanbanCardHeadsCache,
   collectKanbanCardHeadsCache,
+  collectLinkedOrderIdsFromHeadsCache,
   mergeKanbanCardHeadsCache,
+  prependMissingLinkedOrderIds,
 } from "./kanban-card-heads-cache";
 
 describe("kanban card heads cache", () => {
@@ -71,5 +73,32 @@ describe("kanban card heads cache", () => {
     expect(merged["oid:наряд-юля"]?.participants).toEqual(["u-юлич"]);
     expect(merged["oid:наряд-юля"]?.stageDue).toBe("2026-08-26");
     expect(merged["oid:oid-other"]?.stageDue).toBe("2026-09-01");
+  });
+
+  it("для «МОИ» отдаёт наряды, где пользователь в участниках (кириллица вокруг id)", () => {
+    const heads = {
+      "oid:ord-степанов": {
+        assignees: [],
+        participants: ["u-всеволод", "u-арина"],
+        fingerprint: null,
+        stageDue: "",
+      },
+      "oid:ord-чужой": {
+        assignees: ["u-олег"],
+        participants: [],
+        fingerprint: null,
+        stageDue: "",
+      },
+    };
+    expect(
+      collectLinkedOrderIdsFromHeadsCache(heads, { sessionUserId: "u-всеволод" }),
+    ).toEqual(["ord-степанов"]);
+    expect(collectLinkedOrderIdsFromHeadsCache(heads)).toEqual([
+      "ord-степанов",
+      "ord-чужой",
+    ]);
+    expect(
+      prependMissingLinkedOrderIds(["ord-на-доске"], ["ord-степанов", "ord-на-доске"]),
+    ).toEqual(["ord-степанов", "ord-на-доске"]);
   });
 });
