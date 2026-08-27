@@ -8,16 +8,15 @@ import {
 describe("clinic-reconciliation-layout", () => {
   it("сумма колонок равна ширине страницы", () => {
     expect(reconColSpan(0, 9)).toBe(RECON_PAGE_INNER_PT);
-    expect(RECON_COL_W_PT.reduce((a, b) => a + b, 0)).toBe(810);
+    expect(RECON_COL_W_PT.reduce((a, b) => a + b, 0)).toBe(809);
   });
 
-  it("сводка стоимость/сумма = колонки цена и стоим. детализации", () => {
-    expect(RECON_COL_W_PT[7]).toBe(RECON_COL_W_PT[7]);
-    expect(reconColSpan(5, 8)).toBe(
-      RECON_COL_W_PT[5]! +
+  it("сводка на всю ширину: имя 1–6 + кол-во + цена + сумма 9–10", () => {
+    expect(
+      reconColSpan(0, 5) +
         RECON_COL_W_PT[6]! +
         RECON_COL_W_PT[7]! +
-        RECON_COL_W_PT[8]!,
-    );
+        reconColSpan(8, 9),
+    ).toBe(RECON_PAGE_INNER_PT);
   });
 });

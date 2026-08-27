@@ -29,7 +29,8 @@ const styles = StyleSheet.create({
     fontSize: 7,
     paddingTop: 18,
     paddingBottom: 16,
-    paddingHorizontal: 16,
+    paddingLeft: 14,
+    paddingRight: 18,
     color: "#000",
     backgroundColor: "#fff",
   },
@@ -42,6 +43,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     width: PAGE_INNER,
     alignItems: "stretch",
+    overflow: "visible",
   },
   mainWrap: {
     width: PAGE_INNER,
@@ -52,6 +54,8 @@ function PdfCell({
   w,
   first,
   last,
+  box,
+  top,
   bg,
   align,
   bold,
@@ -61,6 +65,8 @@ function PdfCell({
   w: number;
   first?: boolean;
   last?: boolean;
+  box?: boolean;
+  top?: boolean;
   bg?: string;
   align?: "left" | "right" | "center";
   bold?: boolean;
@@ -78,10 +84,14 @@ function PdfCell({
         flexBasis: w,
         padding: CELL_PAD,
         backgroundColor: bg,
-        borderLeftWidth: first ? 1 : 0,
-        borderLeftColor: BORDER,
+        // Каждая ячейка — замкнутая рамка. Yoga срезает «только правую»
+        // у последней колонки, если опираться на border родителя.
+        borderStyle: "solid",
+        borderColor: BORDER,
+        borderTopWidth: 1,
         borderRightWidth: 1,
-        borderRightColor: BORDER,
+        borderBottomWidth: 1,
+        borderLeftWidth: 1,
         justifyContent: "flex-start",
       }}
     >
@@ -104,11 +114,13 @@ function GridRow({
   bg,
   lastRow,
   minHeight,
+  top,
   children,
 }: {
   bg?: string;
   lastRow?: boolean;
   minHeight?: number;
+  top?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -119,9 +131,6 @@ function GridRow({
         {
           backgroundColor: bg,
           minHeight: minHeight ?? 14,
-          borderTopWidth: 0,
-          borderBottomWidth: 1,
-          borderBottomColor: BORDER,
         },
       ]}
     >
@@ -183,7 +192,7 @@ function DetailRow({
 
 function DetailHeaderRow() {
   return (
-    <GridRow bg={HEAD_GRAY} minHeight={24}>
+    <GridRow bg={HEAD_GRAY} minHeight={24} top>
       <PdfCell w={COL_W[0]} first bg={HEAD_GRAY} align="center" bold size={5.9}>
         Число когда зашла работа
       </PdfCell>
@@ -223,86 +232,81 @@ function SummaryBlock({
 }: {
   payload: ClinicReconciliationPdfPayload;
 }) {
-  const leftGap = span(0, 4);
+  const nameW = span(0, 5);
+  const qtyW = COL_W[6];
+  const unitW = COL_W[7];
+  const sumW = span(8, 9);
   return (
-    <View wrap={false} style={{ width: PAGE_INNER, marginBottom: 8 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          backgroundColor: HEAD_GRAY,
-          minHeight: 18,
-          borderTopWidth: 1,
-          borderTopColor: BORDER,
-          borderBottomWidth: 1,
-          borderBottomColor: BORDER,
-        }}
-      >
-        <View
-          style={{
-            width: leftGap,
-            minWidth: leftGap,
-            maxWidth: leftGap,
-          }}
-        />
-        <PdfCell w={COL_W[5]} first bg={HEAD_GRAY} align="center" bold size={5.8}>
+    <View style={{ width: PAGE_INNER, marginBottom: 0 }}>
+      <GridRow bg={HEAD_GRAY} minHeight={18} top>
+        <PdfCell w={nameW} first bg={HEAD_GRAY} align="center" bold size={5.8}>
           НАИМЕНОВАНИЕ ПОЗИЦИИ
         </PdfCell>
-        <PdfCell w={COL_W[6]} bg={HEAD_GRAY} align="center" bold size={5.8}>
+        <PdfCell w={qtyW} bg={HEAD_GRAY} align="center" bold size={5.8}>
           КОЛ-ВО ЕДИНИЦ
         </PdfCell>
-        <PdfCell w={COL_W[7]} bg={HEAD_GRAY} align="center" bold size={5.8}>
+        <PdfCell w={unitW} bg={HEAD_GRAY} align="center" bold size={5.8}>
           СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК
         </PdfCell>
-        <PdfCell w={COL_W[8]} last bg={HEAD_GRAY} align="center" bold size={5.8}>
+        <PdfCell w={sumW} last bg={HEAD_GRAY} align="center" bold size={5.8}>
           СУММА ЕДИНИЦ БЕЗ СКИДОК
         </PdfCell>
-        <View
-          style={{
-            width: COL_W[9],
-            minWidth: COL_W[9],
-            maxWidth: COL_W[9],
-          }}
-        />
-      </View>
+      </GridRow>
       {payload.summary.map((row, i) => (
-        <View
-          key={`s-${i}`}
-          style={{
-            flexDirection: "row",
-            backgroundColor: ROW_GRAY,
-            minHeight: 15,
-            borderBottomWidth: 1,
-            borderBottomColor: BORDER,
-          }}
-        >
-          <View
-            style={{
-              width: leftGap,
-              minWidth: leftGap,
-              maxWidth: leftGap,
-            }}
-          />
-          <PdfCell w={COL_W[5]} first bg={ROW_GRAY} size={6.2}>
+        <GridRow key={`s-${i}`} bg={ROW_GRAY} minHeight={15}>
+          <PdfCell w={nameW} first bg={ROW_GRAY} size={6.2}>
             {row.label}
           </PdfCell>
-          <PdfCell w={COL_W[6]} bg={ROW_GRAY} align="right" size={6.2}>
+          <PdfCell w={qtyW} bg={ROW_GRAY} align="right" size={6.2}>
             {String(row.quantity).replace(".", ",")}
           </PdfCell>
-          <PdfCell w={COL_W[7]} bg={ROW_GRAY} align="right" size={6.2}>
+          <PdfCell w={unitW} bg={ROW_GRAY} align="right" size={6.2}>
             {formatRubPdf(row.unitRub)}
           </PdfCell>
-          <PdfCell w={COL_W[8]} last bg={ROW_GRAY} align="right" size={6.2}>
+          <PdfCell w={sumW} last bg={ROW_GRAY} align="right" size={6.2}>
             {formatRubPdf(row.totalRub)}
           </PdfCell>
-          <View
-            style={{
-              width: COL_W[9],
-              minWidth: COL_W[9],
-              maxWidth: COL_W[9],
-            }}
-          />
-        </View>
+        </GridRow>
       ))}
+    </View>
+  );
+}
+
+function PayTotalsBlock({
+  payload,
+}: {
+  payload: ClinicReconciliationPdfPayload;
+}) {
+  const left = span(0, 6);
+  const labelW = COL_W[7];
+  const valueW = span(8, 9);
+  const spacer = {
+    width: left,
+    minWidth: left,
+    maxWidth: left,
+    flexGrow: 0,
+    flexShrink: 0,
+  };
+  return (
+    <View wrap={false} style={{ width: PAGE_INNER }}>
+      <View style={{ flexDirection: "row", width: PAGE_INNER }}>
+        <View style={spacer} />
+        <PdfCell w={labelW} first box top bg={HEAD_GRAY} align="center" bold size={6.4}>
+          Всего к оплате:
+        </PdfCell>
+        <PdfCell w={valueW} last box top bg={ROW_GRAY} align="right" bold>
+          {formatRubPdf(payload.yellowRow.discountedTotalRub)}
+        </PdfCell>
+      </View>
+      <View style={{ flexDirection: "row", width: PAGE_INNER }}>
+        <View style={spacer} />
+        <PdfCell w={labelW} first box bg={HEAD_GRAY} align="center" bold size={6.4}>
+          В т.ч. Сумма НДС 5%:
+        </PdfCell>
+        <PdfCell w={valueW} last box bg={ROW_GRAY} align="right" bold>
+          {formatRubPdf(payload.yellowRow.vatRub)}
+        </PdfCell>
+      </View>
     </View>
   );
 }
@@ -330,7 +334,7 @@ export function ClinicReconciliationPdfDocument({
         <SummaryBlock payload={payload} />
 
         <View style={styles.mainWrap}>
-          <GridRow bg={ROW_GRAY} minHeight={20}>
+          <GridRow bg={ROW_GRAY} minHeight={20} top>
             <PdfCell w={span(0, 2)} first bg={ROW_GRAY} align="center" bold>
               {payload.labLegalName}
             </PdfCell>
@@ -355,40 +359,7 @@ export function ClinicReconciliationPdfDocument({
             </PdfCell>
           </GridRow>
 
-          <GridRow minHeight={16}>
-            <View
-              style={{
-                width: span(0, 7),
-                minWidth: span(0, 7),
-                maxWidth: span(0, 7),
-                flexGrow: 0,
-                flexShrink: 0,
-              }}
-            />
-            <PdfCell w={COL_W[8]} first bg={HEAD_GRAY} align="center" bold size={6.4}>
-              Всего к оплате:
-            </PdfCell>
-            <PdfCell w={COL_W[9]} last bg={ROW_GRAY} align="right" bold>
-              {formatRubPdf(payload.yellowRow.discountedTotalRub)}
-            </PdfCell>
-          </GridRow>
-          <GridRow minHeight={16}>
-            <View
-              style={{
-                width: span(0, 7),
-                minWidth: span(0, 7),
-                maxWidth: span(0, 7),
-                flexGrow: 0,
-                flexShrink: 0,
-              }}
-            />
-            <PdfCell w={COL_W[8]} first bg={HEAD_GRAY} align="center" bold size={6.4}>
-              В т.ч.Сумма НДС 5%:
-            </PdfCell>
-            <PdfCell w={COL_W[9]} last bg={ROW_GRAY} align="right" bold>
-              {formatRubPdf(payload.yellowRow.vatRub)}
-            </PdfCell>
-          </GridRow>
+          <PayTotalsBlock payload={payload} />
 
           <DetailHeaderRow />
 
