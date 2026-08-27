@@ -52,6 +52,8 @@ describe("renderClinicReconciliationPdfBuffer", () => {
     expect(text).toMatch(/1001 Сплинт сложный/);
     expect(text).toMatch(/ОП ООО «РЕМИ»/);
     expect(text).toMatch(/Всего к оплате/);
+    expect(text).toMatch(/Дата когда\s+зашла работа/);
+    expect(text).toMatch(/Дата\s+отправки\s+работы/);
     expect(text).toMatch(/Тындик Т\.В\./);
     expect(text).toMatch(/Невский Денис\s+Дмитриевич/);
   }, 30_000);

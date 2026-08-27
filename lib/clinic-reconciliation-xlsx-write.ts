@@ -42,13 +42,34 @@ function paint(
     ? { bold: true, color: { argb: "FFFFFFFF" }, size: 8 }
     : { bold: false, color: { argb: "FF000000" }, size: 9 };
   cell.alignment = {
-    wrapText: true,
+    wrapText: !opts?.rub,
     vertical: "middle",
     horizontal: opts?.align ?? (opts?.head ? "center" : "left"),
   };
   if (opts?.rub && typeof value === "number") {
     cell.numFmt = RECON_EXCEL_NUMFMT_RUB;
   }
+}
+
+/** Рамка на всех ячейках объединения — иначе ExcelJS оставляет «дыры». */
+function frameSpan(
+  row: ExcelJS.Row,
+  from: number,
+  to: number,
+  fill: ExcelJS.Fill,
+) {
+  for (let c = from; c <= to; c++) {
+    const cell = row.getCell(c);
+    cell.border = THIN;
+    cell.fill = fill;
+  }
+}
+
+function excelColWidth(pt: number, col: number): number {
+  const w = reconExcelColWidth(pt);
+  // H–J: «р. 403 020,00» не влезает в pt/7 → Excel рисует #####
+  if (col >= 8) return Math.max(w, 16);
+  return w;
 }
 
 function merge(sheet: ExcelJS.Worksheet, range: string) {
@@ -61,7 +82,7 @@ export function writeReconciliationSheet(
 ): void {
   sheet.name = "Сверка";
   for (let c = 1; c <= 10; c++) {
-    sheet.getColumn(c).width = reconExcelColWidth(RECON_COL_W_PT[c - 1]!);
+    sheet.getColumn(c).width = excelColWidth(RECON_COL_W_PT[c - 1]!, c);
   }
 
   const head = sheet.getRow(1);
@@ -72,6 +93,8 @@ export function writeReconciliationSheet(
   paint(head.getCell(7), "КОЛ-ВО ЕДИНИЦ", { head: true });
   paint(head.getCell(8), "СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК", { head: true });
   paint(head.getCell(9), "СУММА ЕДИНИЦ БЕЗ СКИДОК", { head: true });
+  frameSpan(head, 1, 6, headFill());
+  frameSpan(head, 9, 10, headFill());
 
   const summary = payload.summary;
   for (let i = 0; i < summary.length; i++) {
@@ -91,19 +114,27 @@ export function writeReconciliationSheet(
   meta.height = 20;
   merge(sheet, `A${metaR}:C${metaR}`);
   paint(meta.getCell(1), payload.labLegalName, { align: "center" });
+  frameSpan(meta, 1, 3, valueFill());
   paint(meta.getCell(4), payload.periodFromLabel, { align: "center" });
   paint(meta.getCell(5), payload.periodToLabel, { align: "center" });
   paint(meta.getCell(6), payload.clinicTitleLine, { align: "center" });
-  paint(meta.getCell(7), payload.yellowRow.totalUnits, { align: "center" });
-  paint(meta.getCell(8), "");
+  paint(meta.getCell(7), payload.yellowRow.totalUnits, { align: "right" });
+  paint(meta.getCell(8), "\u00A0");
   paint(meta.getCell(9), payload.yellowRow.baseTotalRub, {
     rub: true,
-    align: "center",
+    align: "right",
   });
   paint(meta.getCell(10), payload.yellowRow.discountedTotalRub, {
     rub: true,
-    align: "center",
+    align: "right",
   });
+  for (let c = 1; c <= 10; c++) {
+    const cell = meta.getCell(c);
+    cell.border = {
+      ...THIN,
+      bottom: { style: "medium", color: { argb: "FF000000" } },
+    };
+  }
 
   const payR = metaR + 1;
   const vatR = metaR + 2;
@@ -114,18 +145,20 @@ export function writeReconciliationSheet(
     rub: true,
     align: "right",
   });
+  frameSpan(sheet.getRow(payR), 9, 10, valueFill());
   paint(sheet.getRow(vatR).getCell(8), "В т.ч. Сумма НДС 5%:", { head: true });
   paint(sheet.getRow(vatR).getCell(9), payload.yellowRow.vatRub, {
     rub: true,
     align: "right",
   });
+  frameSpan(sheet.getRow(vatR), 9, 10, valueFill());
 
   const hdrR = metaR + 3;
   const hdr = sheet.getRow(hdrR);
   hdr.height = 28;
   const headers = [
-    "Число когда зашла работа",
-    "Число отправки работы",
+    "Дата когда зашла работа",
+    "Дата отправки работы",
     "Номер заказ-наряда",
     "Пациент",
     "Врач",
@@ -148,7 +181,9 @@ export function writeReconciliationSheet(
       paint(row.getCell(4), line.patient);
       paint(row.getCell(5), line.doctor);
     } else {
-      for (const c of [1, 2, 3, 4, 5]) paint(row.getCell(c), "");
+      for (const c of [1, 2, 3, 4, 5]) {
+        paint(row.getCell(c), "\u00A0");
+      }
     }
     paint(row.getCell(6), line.description);
     paint(row.getCell(7), line.quantity, { align: "right" });

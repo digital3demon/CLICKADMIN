@@ -4,12 +4,13 @@ import { DepositFinanceBlock } from "@/components/clients/DepositFinanceBlock";
 import { ClinicLegalReconciliationBlock } from "@/components/clients/ClinicLegalReconciliationBlock";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LAB_WORK_STATUS_LABELS,
   LAB_WORK_STATUS_ORDER,
   type LabWorkStatus,
 } from "@/lib/lab-work-status";
+import { groupReconciliationLinesByOrder } from "@/lib/clinic-reconciliation-lines-group";
 import { orderPathById } from "@/lib/order-public-ref";
 
 function moneyRu(n: number): string {
@@ -319,6 +320,10 @@ export function FinancePanel({
   }, [periodLines]);
 
   const visiblePeriodLines = useMemo(() => periodLines, [periodLines]);
+  const periodLineGroups = useMemo(
+    () => groupReconciliationLinesByOrder(visiblePeriodLines),
+    [visiblePeriodLines],
+  );
 
   const visibleOrderIds = useMemo(
     () => Array.from(new Set(visiblePeriodLines.map((r) => r.orderId))),
@@ -713,98 +718,110 @@ export function FinancePanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {visiblePeriodLines.map((row, idx) => {
+                  {periodLineGroups.map((lines) => {
+                    const row = lines[0]!;
+                    const span = lines.length;
                     const busy = actionOrderId === row.orderId;
                     const checked = selectedOrderIds.includes(row.orderId);
                     return (
+                      <Fragment key={row.orderId}>
+                    {lines.map((line, lineIdx) => (
                       <tr
-                        key={`${row.orderId}-${idx}`}
-                        className="border-b border-[var(--border-subtle)] last:border-0"
+                        key={`${row.orderId}-${lineIdx}`}
+                        className={
+                          lineIdx === span - 1
+                            ? "border-b border-[var(--border-subtle)] last:border-0"
+                            : "border-b border-[var(--border-subtle)]/50"
+                        }
                       >
-                        <td className="px-3 py-2 align-top">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedOrderIds((prev) =>
-                                  prev.includes(row.orderId)
-                                    ? prev
-                                    : [...prev, row.orderId],
-                                );
-                              } else {
-                                setSelectedOrderIds((prev) =>
-                                  prev.filter((id) => id !== row.orderId),
-                                );
-                              }
-                            }}
-                            title="Добавить наряд в сверку/выгрузку"
-                          />
-                        </td>
-                        <td className="px-3 py-2 font-medium">
-                          <div className="flex items-center gap-1">
-                            <Link
-                              href={orderPathById(row.orderId)}
-                              className="text-[var(--sidebar-blue)] hover:underline"
-                            >
-                              {row.orderNumber}
-                            </Link>
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-1">
-                            <span className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
-                              {isKnownLabWorkStatus(row.labWorkStatus)
-                                ? LAB_WORK_STATUS_LABELS[row.labWorkStatus]
-                                : row.labWorkStatus}
-                            </span>
-                            {row.attentionRequired ? (
-                              <span
-                                className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-900"
-                                title="Требуется внимание"
-                              >
-                                Внимание
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-[var(--text-body)]">
-                          {row.clinicName}
-                        </td>
-                        <td className="px-3 py-2 text-[var(--text-body)]">
-                          {row.doctorName}
-                        </td>
-                        <td className="px-3 py-2 text-[var(--text-body)]">
-                          {row.patientName || "—"}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
-                          {formatDateOnlyRu(
-                            row.appointmentAt ??
-                              row.workReceivedAt ??
-                              row.orderCreatedAt,
-                          )}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
-                          {formatDateOnlyRu(row.labDueAt)}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
-                          {formatDateOnlyRu(row.approvedAt)}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-[var(--text-secondary)]">
-                          {formatDateOnlyRu(row.sentAt)}
-                        </td>
+                        {lineIdx === 0 ? (
+                          <>
+                            <td className="px-3 py-2 align-top" rowSpan={span}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedOrderIds((prev) =>
+                                      prev.includes(row.orderId)
+                                        ? prev
+                                        : [...prev, row.orderId],
+                                    );
+                                  } else {
+                                    setSelectedOrderIds((prev) =>
+                                      prev.filter((id) => id !== row.orderId),
+                                    );
+                                  }
+                                }}
+                                title="Добавить наряд в сверку/выгрузку"
+                              />
+                            </td>
+                            <td className="px-3 py-2 align-top font-medium" rowSpan={span}>
+                              <div className="flex items-center gap-1">
+                                <Link
+                                  href={orderPathById(row.orderId)}
+                                  className="text-[var(--sidebar-blue)] hover:underline"
+                                >
+                                  {row.orderNumber}
+                                </Link>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                <span className="rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+                                  {isKnownLabWorkStatus(row.labWorkStatus)
+                                    ? LAB_WORK_STATUS_LABELS[row.labWorkStatus]
+                                    : row.labWorkStatus}
+                                </span>
+                                {row.attentionRequired ? (
+                                  <span
+                                    className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-900"
+                                    title="Требуется внимание"
+                                  >
+                                    Внимание
+                                  </span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 align-top text-[var(--text-body)]" rowSpan={span}>
+                              {row.clinicName}
+                            </td>
+                            <td className="px-3 py-2 align-top text-[var(--text-body)]" rowSpan={span}>
+                              {row.doctorName}
+                            </td>
+                            <td className="px-3 py-2 align-top text-[var(--text-body)]" rowSpan={span}>
+                              {row.patientName || "—"}
+                            </td>
+                            <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-[var(--text-secondary)]" rowSpan={span}>
+                              {formatDateOnlyRu(
+                                row.appointmentAt ??
+                                  row.workReceivedAt ??
+                                  row.orderCreatedAt,
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-[var(--text-secondary)]" rowSpan={span}>
+                              {formatDateOnlyRu(row.labDueAt)}
+                            </td>
+                            <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-[var(--text-secondary)]" rowSpan={span}>
+                              {formatDateOnlyRu(row.approvedAt)}
+                            </td>
+                            <td className="px-3 py-2 align-top whitespace-nowrap text-xs text-[var(--text-secondary)]" rowSpan={span}>
+                              {formatDateOnlyRu(row.sentAt)}
+                            </td>
+                          </>
+                        ) : null}
                         <td className="max-w-[280px] px-3 py-2 text-xs text-[var(--text-body)]">
-                          {row.description}
+                          {line.description}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {row.quantity}
+                          {line.quantity}
                         </td>
                         <td className="px-3 py-2 text-right text-xs tabular-nums text-[var(--text-secondary)]">
-                          {row.unitPrice == null ? "—" : moneyRu(row.unitPrice)}
+                          {line.unitPrice == null ? "—" : moneyRu(line.unitPrice)}
                         </td>
                         <td className="px-3 py-2 text-right font-medium tabular-nums">
-                          {moneyRu(row.lineTotal)}
+                          {moneyRu(line.lineTotal)}
                         </td>
-                        {worksWithReconciliation ? (
-                          <td className="px-3 py-2 align-top">
+                        {lineIdx === 0 && worksWithReconciliation ? (
+                          <td className="px-3 py-2 align-top" rowSpan={span}>
                             <div className="flex max-w-[14rem] flex-col gap-1.5 sm:max-w-none sm:flex-row sm:flex-wrap">
                               <button
                                 type="button"
@@ -853,6 +870,8 @@ export function FinancePanel({
                           </td>
                         ) : null}
                       </tr>
+                    ))}
+                      </Fragment>
                     );
                   })}
                 </tbody>

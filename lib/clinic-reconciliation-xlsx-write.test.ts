@@ -33,6 +33,20 @@ const payload: ClinicReconciliationPdfPayload = {
       lineTotalRub: 12000,
       discountPercent: null,
     },
+    {
+      showOrderColumns: false,
+      zashla: "28.07.26",
+      otpr: "21.08.26",
+      orderNumber: "2607-386",
+      patient: "Тындик Т.В.",
+      doctor: "Невский Денис Дмитриевич",
+      description: "5003 Модель неразборная/диагностическая",
+      quantity: 1,
+      unitRub: 1500,
+      baseTotalRub: 1500,
+      lineTotalRub: 1500,
+      discountPercent: null,
+    },
   ],
 };
 
@@ -49,9 +63,22 @@ describe("writeReconciliationSheet", () => {
     expect(s.getRow(2).getCell(1).value).toBe("1001 Сплинт сложный");
     expect(s.getRow(2).getCell(7).value).toBe(1);
     expect(s.getRow(3).getCell(6).value).toBe("ОП ООО «РЕМИ» ИНН 7806419569");
+    expect(s.getRow(3).getCell(8).value).toBe("\u00A0");
+    expect(s.getRow(3).getCell(9).value).toBe(406770);
+    expect(s.getRow(3).getCell(10).value).toBe(403020);
+    expect(s.getRow(3).getCell(9).alignment?.horizontal).toBe("right");
+    expect(s.getRow(6).getCell(1).value).toBe("Дата когда зашла работа");
+    expect(s.getRow(6).getCell(2).value).toBe("Дата отправки работы");
     expect(s.getRow(7).getCell(4).value).toBe("Тындик Т.В.");
     expect(s.getRow(7).getCell(6).value).toBe(
       "2004 Единица цифрового моделирования",
     );
+    expect(s.getRow(8).getCell(6).value).toBe(
+      "5003 Модель неразборная/диагностическая",
+    );
+    expect(s.getRow(8).getCell(1).border?.left?.style).toBe("thin");
+    expect(s.getRow(8).getCell(5).border?.right?.style).toBe("thin");
+    expect(s.getColumn(8).width).toBeGreaterThanOrEqual(16);
+    expect(s.getColumn(10).width).toBeGreaterThanOrEqual(16);
   });
 });

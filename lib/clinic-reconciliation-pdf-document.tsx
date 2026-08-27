@@ -250,10 +250,10 @@ function DetailHeaderRow({ first }: { first?: boolean }) {
   return (
     <GridRow bg={HEAD_GRAY} minHeight={24} first={first}>
       <PdfCell w={innerCol(0)} bg={HEAD_GRAY} align="center" bold size={5.9}>
-        Число когда зашла работа
+        Дата когда зашла работа
       </PdfCell>
       <PdfCell w={innerCol(1)} bg={HEAD_GRAY} align="center" bold size={5.9}>
-        Число отправки работы
+        Дата отправки работы
       </PdfCell>
       <PdfCell w={innerCol(2)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         {`Номер заказ-\nнаряда`}
@@ -337,14 +337,14 @@ function SummaryBlock({
         <PdfCell w={innerCol(5)} bg={ROW_GRAY} align="center" bold>
           {payload.clinicTitleLine}
         </PdfCell>
-        <PdfCell w={innerCol(6)} bg={ROW_GRAY} align="center" bold>
+        <PdfCell w={innerCol(6)} bg={ROW_GRAY} align="right" bold>
           {String(payload.yellowRow.totalUnits).replace(".", ",")}
         </PdfCell>
         <PdfCell w={innerCol(7)} bg={ROW_GRAY} />
-        <PdfCell w={innerCol(8)} bg={ROW_GRAY} align="center" bold>
+        <PdfCell w={innerCol(8)} bg={ROW_GRAY} align="right" bold>
           {formatRubPdf(payload.yellowRow.baseTotalRub)}
         </PdfCell>
-        <PdfCell w={innerCol(9)} last bg={ROW_GRAY} align="center" bold>
+        <PdfCell w={innerCol(9)} last bg={ROW_GRAY} align="right" bold>
           {formatRubPdf(payload.yellowRow.discountedTotalRub)}
         </PdfCell>
       </GridRow>
