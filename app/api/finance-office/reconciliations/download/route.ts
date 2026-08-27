@@ -44,7 +44,7 @@ export async function GET(req: Request) {
 
   try {
     const prisma = await getPrisma();
-    const { bytes, fileName } = await buildLegalEntityReconciliationZip({
+    const { bytes, contentDisposition } = await buildLegalEntityReconciliationZip({
       clinicIds,
       title,
       periodFromStr: from,
@@ -66,7 +66,7 @@ export async function GET(req: Request) {
       headers: {
         "Content-Type": "application/zip",
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Disposition": contentDisposition,
       },
     });
   } catch (e) {

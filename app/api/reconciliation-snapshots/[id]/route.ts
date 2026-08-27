@@ -11,6 +11,11 @@ import {
   buildClinicReconciliationXlsxBuffer,
   parseRangeFromYmdStrings,
 } from "@/lib/clinic-reconciliation-xlsx";
+import {
+  reconciliationAttachmentDisposition,
+  reconciliationFileAsciiStem,
+  reconciliationFileStem,
+} from "@/lib/clinic-reconciliation-filename";
 /** Скачать автосверку (xlsx). Сборка заново — иначе в БД лежит старый жёлто-зелёный файл. */
 export async function GET(
   _req: Request,
@@ -39,10 +44,15 @@ export async function GET(
       return NextResponse.json({ error: "Не найдено" }, { status: 404 });
     }
 
-    const asciiName = `svarka_auto_${row.periodFromStr}_${row.periodToStr}.xlsx`.replace(
-      /[^\w.\-]/g,
-      "_",
-    );
+    const utfName = `${reconciliationFileStem(
+      row.clinic.name,
+      row.periodFromStr,
+      row.periodToStr,
+    )}.xlsx`;
+    const asciiName = `${reconciliationFileAsciiStem(
+      row.periodFromStr,
+      row.periodToStr,
+    )}.xlsx`;
 
     let u8: Uint8Array;
     const range = parseRangeFromYmdStrings(row.periodFromStr, row.periodToStr);
@@ -94,7 +104,7 @@ export async function GET(
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="${asciiName}"`,
+        "Content-Disposition": reconciliationAttachmentDisposition(utfName, asciiName),
       },
     });
   } catch (e) {

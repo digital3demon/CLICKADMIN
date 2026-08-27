@@ -119,20 +119,6 @@ function setHeadCell(cell: ExcelJS.Cell, value: string) {
   cell.alignment = { wrapText: true, vertical: "middle", horizontal: "center" };
 }
 
-function mergeRange(sheet: ExcelJS.Worksheet, range: string) {
-  try {
-    sheet.unMergeCells(range);
-  } catch {
-    /* ещё не объединены */
-  }
-  sheet.mergeCells(range);
-}
-
-function mergeSummaryRow(sheet: ExcelJS.Worksheet, row: number) {
-  mergeRange(sheet, `A${row}:F${row}`);
-  mergeRange(sheet, `I${row}:J${row}`);
-}
-
 const THIN_BORDER: ExcelJS.Borders = {
   top: { style: "thin", color: { argb: "FF000000" } },
   left: { style: "thin", color: { argb: "FF000000" } },
@@ -161,7 +147,7 @@ function applyPalette(sheet: ExcelJS.Worksheet, metaShift: number) {
   const headerRowN = metaRowN + 3;
   const dataFirstN = DATA_FIRST + metaShift;
 
-  for (let c = 1; c <= 10; c++) {
+  for (const c of [6, 7, 8, 9]) {
     const cell = sheet.getRow(SUMMARY_FIRST).getCell(c);
     paintCell(cell, headFill(), {
       alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
@@ -169,7 +155,7 @@ function applyPalette(sheet: ExcelJS.Worksheet, metaShift: number) {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 8 };
   }
   for (let r = SUMMARY_FIRST + 1; r < SUMMARY_FIRST + SUMMARY_CAPACITY + metaShift; r++) {
-    for (let c = 1; c <= 10; c++) {
+    for (const c of [6, 7, 8, 9]) {
       paintCell(sheet.getRow(r).getCell(c), valueFill());
     }
   }
@@ -179,36 +165,18 @@ function applyPalette(sheet: ExcelJS.Worksheet, metaShift: number) {
       alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
     });
   }
-  paintCell(sheet.getRow(metaRowN + 1).getCell(8), headFill(), {
+  paintCell(sheet.getRow(metaRowN + 1).getCell(9), headFill(), {
     alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
   });
-  paintCell(sheet.getRow(metaRowN + 2).getCell(8), headFill(), {
+  paintCell(sheet.getRow(metaRowN + 2).getCell(9), headFill(), {
     alignment: { wrapText: true, vertical: "middle", horizontal: "center" },
   });
-  paintCell(sheet.getRow(metaRowN + 1).getCell(9), valueFill(), {
+  paintCell(sheet.getRow(metaRowN + 1).getCell(10), valueFill(), {
     alignment: { wrapText: true, vertical: "middle", horizontal: "right" },
   });
-  paintCell(sheet.getRow(metaRowN + 2).getCell(9), valueFill(), {
+  paintCell(sheet.getRow(metaRowN + 2).getCell(10), valueFill(), {
     alignment: { wrapText: true, vertical: "middle", horizontal: "right" },
   });
-  for (const offset of [1, 2]) {
-    const row = sheet.getRow(metaRowN + offset);
-    for (let c = 1; c <= 7; c++) {
-      const cell = row.getCell(c);
-      cell.value = "";
-      cell.border = {
-        top: { style: undefined },
-        left: { style: undefined },
-        bottom: { style: undefined },
-        right: { style: undefined },
-        diagonal: { up: false, down: false },
-      };
-      cell.fill = { type: "pattern", pattern: "none" };
-    }
-    paintCell(row.getCell(10), valueFill(), {
-      alignment: { wrapText: true, vertical: "middle", horizontal: "right" },
-    });
-  }
 
   for (let c = 1; c <= 10; c++) {
     const cell = sheet.getRow(headerRowN).getCell(c);
@@ -322,17 +290,13 @@ export async function buildClinicReconciliationXlsxBuffer(
   setValueCell(meta.getCell(9), payload.yellowRow.baseTotalRub, true);
   setValueCell(meta.getCell(10), payload.yellowRow.discountedTotalRub, true);
 
-  mergeRange(sheet, `I${metaRowN + 1}:J${metaRowN + 1}`);
-  mergeRange(sheet, `I${metaRowN + 2}:J${metaRowN + 2}`);
-  setHeadCell(sheet.getRow(metaRowN + 1).getCell(8), "Всего к оплате:");
-  setHeadCell(sheet.getRow(metaRowN + 2).getCell(8), "В т.ч. Сумма НДС 5%:");
   setValueCell(
-    sheet.getRow(metaRowN + 1).getCell(9),
+    sheet.getRow(metaRowN + 1).getCell(10),
     payload.yellowRow.discountedTotalRub,
     true,
   );
   setValueCell(
-    sheet.getRow(metaRowN + 2).getCell(9),
+    sheet.getRow(metaRowN + 2).getCell(10),
     payload.yellowRow.vatRub,
     true,
   );

@@ -5,6 +5,11 @@ import {
   parseDateRangeUTC,
 } from "@/lib/clinic-finance";
 import { getPrisma } from "@/lib/get-prisma";
+import {
+  reconciliationAttachmentDisposition,
+  reconciliationFileAsciiStem,
+  reconciliationFileStem,
+} from "@/lib/clinic-reconciliation-filename";
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -127,15 +132,15 @@ export async function GET(
 
     const buf = await workbook.xlsx.writeBuffer();
 
-    const asciiName = `svarka_vrach_${from}_${to}.xlsx`.replace(/[^\w.\-]/g, "_");
-    const utfName = `Сверка_${doctor.fullName.slice(0, 60)}_${from}_${to}.xlsx`;
+    const utfName = `${reconciliationFileStem(doctor.fullName, from, to)}.xlsx`;
+    const asciiName = `${reconciliationFileAsciiStem(from, to)}.xlsx`;
 
     return new NextResponse(Buffer.from(buf), {
       status: 200,
       headers: {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utfName)}`,
+        "Content-Disposition": reconciliationAttachmentDisposition(utfName, asciiName),
       },
     });
   } catch (e) {

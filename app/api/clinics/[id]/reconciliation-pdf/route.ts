@@ -3,6 +3,10 @@ import {
   buildClinicReconciliationPdfPayload,
   reconciliationPdfFileNameBase,
 } from "@/lib/clinic-reconciliation-pdf-data";
+import {
+  reconciliationAttachmentDisposition,
+  reconciliationFileAsciiStem,
+} from "@/lib/clinic-reconciliation-filename";
 import { parseDateRangeUTC } from "@/lib/clinic-finance";
 import { getPrisma } from "@/lib/get-prisma";
 import { renderClinicReconciliationPdfBuffer } from "@/lib/clinic-reconciliation-pdf-render";
@@ -49,15 +53,15 @@ export async function GET(
     );
     const buffer = await renderClinicReconciliationPdfBuffer(payload);
 
-    const asciiName = `svarka_${from}_${to}.pdf`.replace(/[^\w.\-]/g, "_");
     const utfName = `${reconciliationPdfFileNameBase(clinic.name, from, to)}.pdf`;
+    const asciiName = `${reconciliationFileAsciiStem(from, to)}.pdf`;
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utfName)}`,
+        "Content-Disposition": reconciliationAttachmentDisposition(utfName, asciiName),
       },
     });
   } catch (e) {

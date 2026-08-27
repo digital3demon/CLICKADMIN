@@ -17,6 +17,7 @@ import {
   modeNonEmptyLabel,
   reconciliationVatIncluded5,
 } from "@/lib/clinic-reconciliation-math";
+import { reconciliationFileStem } from "@/lib/clinic-reconciliation-filename";
 
 export type ReconciliationPdfSummaryLine = {
   label: string;
@@ -431,6 +432,5 @@ export function reconciliationPdfFileNameBase(
   fromStr: string,
   toStr: string,
 ): string {
-  const short = clinicName.slice(0, 60).trim() || "clinic";
-  return `Сверка_${short}_${fromStr}_${toStr}`;
+  return reconciliationFileStem(clinicName, fromStr, toStr);
 }

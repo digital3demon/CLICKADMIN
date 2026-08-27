@@ -54,9 +54,9 @@ export async function GET(
     return NextResponse.json({ error: "Клиника не найдена" }, { status: 404 });
   }
   try {
-    const { bytes, fileName } = await buildLegalEntityReconciliationZip({
+    const { bytes, contentDisposition } = await buildLegalEntityReconciliationZip({
       clinicIds: [clinic.id],
-      title: clinic.name || title,
+      title: title || clinic.name,
       periodFromStr: from,
       periodToStr: to,
     });
@@ -76,7 +76,7 @@ export async function GET(
       headers: {
         "Content-Type": "application/zip",
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Disposition": contentDisposition,
       },
     });
   } catch (e) {

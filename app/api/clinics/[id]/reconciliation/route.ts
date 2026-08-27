@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { parseDateRangeUTC } from "@/lib/clinic-finance";
 import { getPrisma } from "@/lib/get-prisma";
 import { buildClinicReconciliationXlsxBuffer } from "@/lib/clinic-reconciliation-xlsx";
+import {
+  reconciliationAttachmentDisposition,
+  reconciliationFileAsciiStem,
+  reconciliationFileStem,
+} from "@/lib/clinic-reconciliation-filename";
 
 export async function GET(
   req: Request,
@@ -44,8 +49,8 @@ export async function GET(
       selectedOrderIds,
     );
 
-    const asciiName = `svarka_${from}_${to}.xlsx`.replace(/[^\w.\-]/g, "_");
-    const utfName = `Сверка_${clinic.name.slice(0, 60)}_${from}_${to}.xlsx`;
+    const utfName = `${reconciliationFileStem(clinic.name, from, to)}.xlsx`;
+    const asciiName = `${reconciliationFileAsciiStem(from, to)}.xlsx`;
 
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
@@ -53,7 +58,7 @@ export async function GET(
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(utfName)}`,
+        "Content-Disposition": reconciliationAttachmentDisposition(utfName, asciiName),
       },
     });
   } catch (e) {

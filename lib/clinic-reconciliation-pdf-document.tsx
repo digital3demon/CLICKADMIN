@@ -43,7 +43,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     width: PAGE_INNER,
     alignItems: "stretch",
-    overflow: "visible",
   },
   mainWrap: {
     width: PAGE_INNER,
