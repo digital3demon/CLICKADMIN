@@ -61,6 +61,7 @@ import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
 import {
   applyKanbanMembersByOrderId,
+  hasKanbanCardMembers,
   overlayLocalKanbanCardHeadOntoRemote,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import {
