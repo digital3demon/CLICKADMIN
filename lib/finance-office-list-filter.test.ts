@@ -26,13 +26,19 @@ describe("finance-office-list-filter", () => {
     expect(FINANCE_OFFICE_INCLUDED_LAB_STATUSES.at(-1)).toBe("TO_REVIEW");
   });
 
-  it("maps legacy today/tomorrow to actual; default is actual", () => {
-    expect(parseFinanceOfficeMode(undefined)).toBe("actual");
-    expect(parseFinanceOfficeMode(null)).toBe("actual");
-    expect(parseFinanceOfficeMode("")).toBe("actual");
+  it("maps legacy today/tomorrow to actual; default is all", () => {
+    expect(parseFinanceOfficeMode(undefined)).toBe("all");
+    expect(parseFinanceOfficeMode(null)).toBe("all");
+    expect(parseFinanceOfficeMode("")).toBe("all");
+    expect(parseFinanceOfficeMode("all")).toBe("all");
     expect(parseFinanceOfficeMode("today")).toBe("actual");
     expect(parseFinanceOfficeMode("tomorrow")).toBe("actual");
+    expect(parseFinanceOfficeMode("actual")).toBe("actual");
     expect(parseFinanceOfficeMode("period")).toBe("period");
+  });
+
+  it("all не задаёт окно лаб-срока", () => {
+    expect(financeOfficeModeDateWhere({ mode: "all" })).toBeNull();
   });
 
   it("period without to returns null (need date)", () => {

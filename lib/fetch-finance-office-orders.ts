@@ -245,7 +245,7 @@ export async function countFinanceOfficeQuickFilterChips(
   opts: {
     search?: string | null;
     userId?: string;
-    mode?: "actual" | "period" | null;
+    mode?: "all" | "actual" | "period" | null;
     fromYmd?: string | null;
     toYmd?: string | null;
     listTag?: string | null;
@@ -426,29 +426,37 @@ export async function fetchFinanceOfficeOrders(
   opts: {
     listTag?: string | null;
     search?: string | null;
-    mode?: "actual" | "period";
+    mode?: "all" | "actual" | "period";
     fromYmd?: string | null;
     toYmd?: string | null;
     userId?: string | null;
     appointment?: FinanceOfficeAppointmentFilter | null;
     invoiceIssued?: FinanceOfficeInvoiceIssuedFilter | null;
+    /** Явный набор id (выгрузка выбранных) — без окна фильтра списка. */
+    ids?: readonly string[] | null;
   } = {},
 ): Promise<FinanceOfficeOrderRow[]> {
+  const selectedIds = [
+    ...new Set((opts.ids ?? []).map((id) => id.trim()).filter(Boolean)),
+  ].slice(0, 500);
   const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
-  const mode = opts.mode ?? "actual";
+  const mode = opts.mode ?? "all";
   const tagOverridesCalculated = financeOfficeTagOverridesCalculated(opts.listTag);
-  const parts: Prisma.OrderWhereInput[] = [
-    financeOfficeScopeWhere(tenantId, {
-      search: opts.search,
-      mode,
-      fromYmd: opts.fromYmd,
-      toYmd: opts.toYmd,
-      actualNotCalculatedOnly: !tagOverridesCalculated,
-      appointment: opts.appointment,
-      invoiceIssued: opts.invoiceIssued,
-    }),
-  ];
-  if (parsedTag) {
+  const parts: Prisma.OrderWhereInput[] =
+    selectedIds.length > 0
+      ? [{ tenantId, archivedAt: null }, { id: { in: selectedIds } }]
+      : [
+          financeOfficeScopeWhere(tenantId, {
+            search: opts.search,
+            mode,
+            fromYmd: opts.fromYmd,
+            toYmd: opts.toYmd,
+            actualNotCalculatedOnly: !tagOverridesCalculated,
+            appointment: opts.appointment,
+            invoiceIssued: opts.invoiceIssued,
+          }),
+        ];
+  if (selectedIds.length === 0 && parsedTag) {
     if (
       parsedTag.kind === "edo" ||
       parsedTag.kind === "noEdo" ||
@@ -467,7 +475,7 @@ export async function fetchFinanceOfficeOrders(
   const stageFiltered = await db.order.findMany({
     where: { AND: parts },
     orderBy: [{ createdAt: "desc" }, { orderNumber: "desc" }],
-    take: 500,
+    take: selectedIds.length > 0 ? selectedIds.length : 500,
     select: financeOfficeOrderSelect,
   });
 

@@ -67,7 +67,7 @@ export function financeOfficeListHref(
   const shipTo = input.shipTo?.trim();
   const invFrom = input.invFrom?.trim();
   const invTo = input.invTo?.trim();
-  if (tab) sp.set("tab", tab);
+  if (tab && tab !== "all") sp.set("tab", tab);
   if (from) sp.set("from", from);
   if (to) sp.set("to", to);
   if (tag) sp.set("tag", tag);

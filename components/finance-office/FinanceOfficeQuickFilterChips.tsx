@@ -320,7 +320,11 @@ export function FinanceOfficeQuickFilterChips({
                 ? "border-rose-400/90 bg-rose-100 text-rose-950 ring-2 ring-rose-500/85 dark:border-rose-700 dark:bg-rose-950/45 dark:text-rose-100 dark:ring-rose-500/70"
                 : "border-rose-300/70 bg-rose-100/70 text-rose-950 hover:bg-rose-100 dark:border-rose-800/60 dark:bg-rose-950/35 dark:text-rose-100 dark:hover:bg-rose-950/50"
             }`}
-            title="Наряды с отметкой «ждем оплату» (в выбранном периоде)"
+            title={
+              tab === "all"
+                ? "Наряды с отметкой «ждем оплату» (все наряды, как в Заказах)"
+                : "Наряды с отметкой «ждем оплату» (в выбранном периоде)"
+            }
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
               Ждем оплату

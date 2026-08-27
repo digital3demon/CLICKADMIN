@@ -78,11 +78,11 @@ export function FinanceOfficeReconciliationsCard({
         </span>
         <span className="flex items-center justify-center gap-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs">
-            К сдаче
+            Готовы
           </span>
           <span
             className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-sky-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
-            aria-label={`Сверок к сдаче: ${count}`}
+            aria-label={`Сверок готовы: ${count}`}
           >
             {count}
           </span>

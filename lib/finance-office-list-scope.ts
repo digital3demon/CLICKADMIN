@@ -82,7 +82,7 @@ export function financeOfficeScopeWhere(
     parts.push(invoiceWhere);
   } else if (appointment) {
     parts.push(ordersAppointmentDateWhere(appointment));
-  } else if (!opts.skipDueDateWindow && mode) {
+  } else if (!opts.skipDueDateWindow && mode && mode !== "all") {
     if (mode === "actual") {
       parts.push(
         financeOfficeLabDueBeforeEndExclusive(financeOfficeActualEndExclusive()),
@@ -109,8 +109,8 @@ export function financeOfficeScopeWhere(
 }
 
 /**
- * Теги больше не снимают окно лаб-срока: счётчики и список всегда в рамках
- * Актуального / За период.
+ * Теги не снимают окно лаб-срока в режимах Актуальное / За период.
+ * Режим «Все» окна не задаёт — счётчики как в Заказах.
  */
 export function financeOfficeListTagSkipsDueDateWindow(
   _parsed: ParsedListTag | null | undefined,
@@ -158,7 +158,7 @@ export function financeOfficeChipCountScopeWhere(
   const parts: Prisma.OrderWhereInput[] = [
     financeOfficeScopeWhere(tenantId, {
       search: opts.search,
-      mode: opts.mode ?? "actual",
+      mode: opts.mode ?? "all",
       fromYmd: opts.fromYmd,
       toYmd: opts.toYmd,
       actualNotCalculatedOnly: !financeOfficeTagOverridesCalculated(
@@ -192,7 +192,7 @@ export function financeOfficeChipDueWindowScopeWhere(
 ): Prisma.OrderWhereInput {
   return financeOfficeScopeWhere(tenantId, {
     search: opts.search,
-    mode: opts.mode ?? "actual",
+    mode: opts.mode ?? "all",
     fromYmd: opts.fromYmd,
     toYmd: opts.toYmd,
     actualNotCalculatedOnly: false,

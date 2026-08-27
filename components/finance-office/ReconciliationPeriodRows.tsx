@@ -50,6 +50,8 @@ export function ReconciliationPeriodRows({
   const [lockByKey, setLockByKey] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const [dragKey, setDragKey] = useState<string | null>(null);
 
   const rowKey = (r: ReconRowVm) =>
     r.id ?? `${r.groupKey}|${r.slot}|${r.periodFromStr}|${r.periodToStr}`;
@@ -103,24 +105,37 @@ export function ReconciliationPeriodRows({
     }
   };
 
-  const upload = async (row: ReconRowVm, kind: "invoice" | "upd", file: File) => {
+  const uploadFiles = async (row: ReconRowVm, files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => f.size > 0);
+    if (list.length === 0) return;
     setBusy(rowKey(row));
     setErr(null);
+    setHint(null);
     try {
       const id = await ensureId(row);
       if (!id) return;
       const fd = new FormData();
-      fd.set("kind", kind);
-      fd.set("file", file);
+      for (const file of list) fd.append("file", file);
       const res = await fetch(
         `/api/legal-entity-reconciliations/${encodeURIComponent(id)}/file`,
         { method: "POST", credentials: "include", body: fd },
       );
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        uploaded?: Array<{ fileName: string; kind: "invoice" | "upd" }>;
+      };
       if (!res.ok) {
         setErr(j.error ?? "Не удалось загрузить файл");
         return;
       }
+      const labels = (j.uploaded ?? []).map((item) =>
+        item.kind === "upd" ? `УПД «${item.fileName}»` : `счёт «${item.fileName}»`,
+      );
+      setHint(
+        labels.length > 0
+          ? `Определили: ${labels.join(", ")}`
+          : "Файлы загружены",
+      );
       onChanged();
     } finally {
       setBusy(null);
@@ -141,6 +156,9 @@ export function ReconciliationPeriodRows({
         <p className="text-sm text-red-600" role="alert">
           {err}
         </p>
+      ) : null}
+      {hint ? (
+        <p className="text-sm text-[var(--text-secondary)]">{hint}</p>
       ) : null}
       {items.map((row) => {
         const k = rowKey(row);
@@ -210,57 +228,75 @@ export function ReconciliationPeriodRows({
                 ) : null}
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-2 text-xs">
-              <span className="font-semibold text-[var(--text-secondary)]">
-                Счёт и УПД
-              </span>
-              {row.id && row.hasInvoice ? (
-                <a
-                  href={`/api/legal-entity-reconciliations/${encodeURIComponent(row.id)}/file?kind=invoice`}
-                  className="text-[var(--sidebar-blue)] underline"
-                >
-                  Скачать счёт
-                </a>
-              ) : (
-                <span className="text-[var(--text-muted)]">Счёт не загружен</span>
-              )}
-              {row.id && row.hasUpd ? (
-                <a
-                  href={`/api/legal-entity-reconciliations/${encodeURIComponent(row.id)}/file?kind=upd`}
-                  className="text-[var(--sidebar-blue)] underline"
-                >
-                  Скачать УПД
-                </a>
-              ) : (
-                <span className="text-[var(--text-muted)]">УПД не загружен</span>
-              )}
+            <div className="mt-2 border-t border-[var(--border-subtle)] pt-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-[var(--text-secondary)]">
+                  Счёт и УПД
+                </span>
+                {row.id && row.hasInvoice ? (
+                  <a
+                    href={`/api/legal-entity-reconciliations/${encodeURIComponent(row.id)}/file?kind=invoice`}
+                    className="text-[var(--sidebar-blue)] underline"
+                  >
+                    Скачать счёт
+                  </a>
+                ) : (
+                  <span className="text-[var(--text-muted)]">Счёт не загружен</span>
+                )}
+                {row.id && row.hasUpd ? (
+                  <a
+                    href={`/api/legal-entity-reconciliations/${encodeURIComponent(row.id)}/file?kind=upd`}
+                    className="text-[var(--sidebar-blue)] underline"
+                  >
+                    Скачать УПД
+                  </a>
+                ) : (
+                  <span className="text-[var(--text-muted)]">УПД не загружен</span>
+                )}
+              </div>
               {canEdit ? (
-                <>
-                  <label className="cursor-pointer rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 font-semibold">
-                    {row.hasInvoice ? "Заменить счёт" : "Загрузить счёт"}
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.currentTarget.value = "";
-                        if (f) void upload(row, "invoice", f);
-                      }}
-                    />
-                  </label>
-                  <label className="cursor-pointer rounded-full border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 font-semibold">
-                    {row.hasUpd ? "Заменить УПД" : "Загрузить УПД"}
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        e.currentTarget.value = "";
-                        if (f) void upload(row, "upd", f);
-                      }}
-                    />
-                  </label>
-                </>
+                <label
+                  className={[
+                    "mt-2 flex min-h-[2.5rem] cursor-pointer items-center justify-center rounded-md border border-dashed px-3 py-2 text-center font-semibold",
+                    dragKey === k
+                      ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)]/10 text-[var(--app-text)]"
+                      : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]",
+                    busy === k ? "opacity-60" : "",
+                  ].join(" ")}
+                  onDragEnter={(e) => {
+                    e.preventDefault();
+                    setDragKey(k);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragKey(k);
+                  }}
+                  onDragLeave={(e) => {
+                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                    setDragKey((cur) => (cur === k ? null : cur));
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragKey((cur) => (cur === k ? null : cur));
+                    if (busy === k) return;
+                    void uploadFiles(row, e.dataTransfer.files);
+                  }}
+                >
+                  {busy === k
+                    ? "Загрузка…"
+                    : "Перетащите файлы или нажмите — счёт и УПД определим сами"}
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    disabled={busy === k}
+                    onChange={(e) => {
+                      const picked = e.target.files;
+                      e.currentTarget.value = "";
+                      if (picked) void uploadFiles(row, picked);
+                    }}
+                  />
+                </label>
               ) : null}
             </div>
           </article>

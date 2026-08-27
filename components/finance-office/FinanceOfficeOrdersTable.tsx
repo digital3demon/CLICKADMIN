@@ -9,6 +9,7 @@ import { FinanceOfficeDateFilterHeaders } from "@/components/finance-office/Fina
 import { FinanceOfficeOrderRow } from "@/components/finance-office/FinanceOfficeOrderRow";
 import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { FinanceOfficePrintInvoicesButton } from "@/components/finance-office/FinanceOfficePrintInvoicesButton";
+import { FinanceOfficeExportButton } from "@/components/finance-office/FinanceOfficeExportButton";
 import { useFinanceOfficeSelection } from "@/components/finance-office/finance-office-selection";
 
 export type FinanceOfficeOrderTableRow = {
@@ -73,7 +74,6 @@ export function FinanceOfficeOrdersTable({
   shipTo = null,
   invFrom = null,
   invTo = null,
-  exportHref,
   toolbar = null,
 }: {
   orders: FinanceOfficeOrderTableRow[];
@@ -88,7 +88,6 @@ export function FinanceOfficeOrdersTable({
   shipTo?: string | null;
   invFrom?: string | null;
   invTo?: string | null;
-  exportHref?: string;
   toolbar?: ReactNode;
 }) {
   const { user } = useSessionUser();
@@ -172,14 +171,7 @@ export function FinanceOfficeOrdersTable({
             </div>
             {selectedCount > 0 ? (
               <div className="ms-auto flex flex-wrap items-center gap-2">
-                {exportHref ? (
-                  <a
-                    href={exportHref}
-                    className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/35 dark:text-emerald-100 dark:hover:bg-emerald-950/55"
-                  >
-                    Выгрузить
-                  </a>
-                ) : null}
+                <FinanceOfficeExportButton />
                 <FinanceOfficePrintInvoicesButton
                   orderIdsWithInvoice={orderIdsWithInvoice}
                   orderIdsWithUpd={orderIdsWithUpd}

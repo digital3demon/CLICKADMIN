@@ -38,6 +38,11 @@ export function FinanceOfficeModePanel({
     setTo(appliedTo ?? defaultTo);
   }, [appliedFrom, appliedTo, defaultTo]);
 
+  const allHref = financeOfficeListHref({
+    tab: "all",
+    tag: listTag,
+    q: q?.trim() || undefined,
+  });
   const actualHref = financeOfficeListHref({
     tab: "actual",
     tag: listTag,
@@ -47,6 +52,7 @@ export function FinanceOfficeModePanel({
   const dateInp =
     "h-8 w-[6.75rem] min-w-0 max-w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-1 py-0.5 text-[11px] text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 sm:h-9 sm:w-[7.5rem] sm:text-xs";
 
+  const allActive = mode === "all";
   const actualActive = mode === "actual";
   const periodActive = mode === "period";
   const periodHref = (ymd: string) =>
@@ -72,6 +78,20 @@ export function FinanceOfficeModePanel({
   return (
     <div className="no-print flex h-full min-h-[3.25rem] min-w-0 items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] sm:px-3">
       <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1.5">
+        <Link
+          href={allHref}
+          prefetch
+          className={[
+            "inline-flex h-8 shrink-0 items-center rounded-md px-2 text-[11px] font-bold uppercase tracking-wide transition-colors sm:h-9 sm:px-2.5 sm:text-xs",
+            allActive
+              ? "bg-[var(--sidebar-blue)] text-white shadow-sm"
+              : "border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-strong)] hover:bg-[var(--surface-hover)]",
+          ].join(" ")}
+          title="Все наряды, без фильтра по лаб-сроку — как чипы в Заказах"
+          aria-current={allActive ? "page" : undefined}
+        >
+          Все
+        </Link>
         <Link
           href={actualHref}
           prefetch

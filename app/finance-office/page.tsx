@@ -6,6 +6,7 @@ import {
 } from "@/components/finance-office/FinanceOfficeOrdersTable";
 import { FinanceOfficeSelectionProvider } from "@/components/finance-office/finance-office-selection";
 import { FinanceOfficePrintInvoicesButton } from "@/components/finance-office/FinanceOfficePrintInvoicesButton";
+import { FinanceOfficeExportButton } from "@/components/finance-office/FinanceOfficeExportButton";
 import { FinanceOfficeBankImportPanel } from "@/components/finance-office/FinanceOfficeBankImportPanel";
 import { FinanceOfficeQuickFilterChips } from "@/components/finance-office/FinanceOfficeQuickFilterChips";
 import { FinanceOfficeModePanel } from "@/components/finance-office/FinanceOfficeModePanel";
@@ -191,6 +192,8 @@ export default async function FinanceOfficePage({
     rangeSummary = apptLabel
       ? `Запись (МСК): ${apptLabel}, все этапы воронки`
       : "Запись: фильтр по дате приёма, все этапы воронки";
+  } else if (mode === "all") {
+    rangeSummary = "Все наряды, без фильтра по лаб-сроку, все этапы воронки";
   } else if (mode === "actual") {
     rangeSummary = `Актуальное: непросчитанные с лаб-сроком до завтра (${moscowTomorrowYmd()} МСК), все этапы воронки`;
   } else if (!toRaw) {
@@ -209,6 +212,7 @@ export default async function FinanceOfficePage({
     !error &&
     (Boolean(invoiceIssued) ||
       Boolean(appointment) ||
+      mode === "all" ||
       mode === "actual" ||
       (mode === "period" && Boolean(toRaw)));
   const ordersPrisma = await getOrdersPrisma();
@@ -261,21 +265,6 @@ export default async function FinanceOfficePage({
     listRangeSummary && shouldFetch && !error
       ? `${listRangeSummary} · нарядов: ${orders.length}`
       : null;
-  const exportParams = new URLSearchParams();
-  exportParams.set("tab", mode);
-  if (fromRaw) exportParams.set("from", fromRaw);
-  if (toRaw) exportParams.set("to", toRaw);
-  if (rawTag && !rawTagInvalid) exportParams.set("tag", rawTag);
-  if (q) exportParams.set("q", q);
-  if (invoiceIssued) {
-    if (invoiceIssued.fromYmd) exportParams.set("invFrom", invoiceIssued.fromYmd);
-    exportParams.set("invTo", invoiceIssued.toYmd);
-  } else if (appointment) {
-    exportParams.set("ship", appointment.mode);
-    if (appointment.shipFrom) exportParams.set("shipFrom", appointment.shipFrom);
-    if (appointment.shipTo) exportParams.set("shipTo", appointment.shipTo);
-  }
-  const exportHref = `/api/finance-office/export?${exportParams.toString()}`;
   const tableOrders =
     error || !shouldFetch ? [] : orders.map(serializeOrder);
   const orderIdsWithInvoice = tableOrders
@@ -322,12 +311,7 @@ export default async function FinanceOfficePage({
         </button>
       </form>
       <div className="flex flex-wrap items-center gap-2">
-        <a
-          href={exportHref}
-          className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-950 shadow-sm hover:bg-emerald-100 dark:border-emerald-800/70 dark:bg-emerald-950/35 dark:text-emerald-100 dark:hover:bg-emerald-950/55"
-        >
-          Выгрузить
-        </a>
+        <FinanceOfficeExportButton />
         <FinanceOfficePrintInvoicesButton
           orderIdsWithInvoice={orderIdsWithInvoice}
         />
@@ -445,7 +429,6 @@ export default async function FinanceOfficePage({
           shipTo={invoiceIssued ? null : appointment?.shipTo ?? null}
           invFrom={invoiceIssued?.fromYmd ?? null}
           invTo={invoiceIssued?.toYmd ?? null}
-          exportHref={exportHref}
         />
       </div>
       </FinanceOfficeSelectionProvider>

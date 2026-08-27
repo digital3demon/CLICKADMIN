@@ -24,7 +24,7 @@ export const FINANCE_OFFICE_INCLUDED_LAB_STATUSES: LabWorkStatus[] =
       !(FINANCE_OFFICE_EXCLUDED_LAB_STATUSES as readonly string[]).includes(s),
   );
 
-export type FinanceOfficeMode = "actual" | "period";
+export type FinanceOfficeMode = "all" | "actual" | "period";
 
 /**
  * Верхняя граница «Актуального» по лаб-сроку (dueDate):
@@ -224,6 +224,7 @@ export function financeOfficeAppointmentInRange(
 }
 
 /**
+ * Все: без окна лаб-срока (как чипы в Заказах).
  * Актуальное: непросчитанные, лаб-срок до завтра (включая прошлые и без срока).
  * За период: from опционален; to обязателен (календарный день МСК по dueDate).
  */
@@ -232,6 +233,7 @@ export function financeOfficeModeDateWhere(input: {
   fromYmd?: string | null;
   toYmd?: string | null;
 }): Prisma.OrderWhereInput | null {
+  if (input.mode === "all") return null;
   if (input.mode === "actual") {
     return {
       AND: [
@@ -253,11 +255,12 @@ export function financeOfficeModeDateWhere(input: {
   return financeOfficeLabDueBeforeEndExclusive(endExclusive);
 }
 
-/** Старые ссылки today/tomorrow → actual. Без tab → actual. */
+/** Старые ссылки today/tomorrow → actual. Без tab / all → все наряды. */
 export function parseFinanceOfficeMode(
   raw: string | null | undefined,
 ): FinanceOfficeMode {
   const t = raw?.trim();
   if (t === "period") return "period";
-  return "actual";
+  if (t === "actual" || t === "today" || t === "tomorrow") return "actual";
+  return "all";
 }

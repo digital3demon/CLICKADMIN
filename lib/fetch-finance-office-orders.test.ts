@@ -60,6 +60,14 @@ describe("financeOfficeScopeWhere", () => {
     expect(json).not.toContain("kaitenColumnTitle");
   });
 
+  it("all не режет по лаб-сроку и просчёту", () => {
+    const w = financeOfficeScopeWhere("t1", { mode: "all" });
+    const json = JSON.stringify(w);
+    expect(json).toContain("tenantId");
+    expect(json).not.toContain("dueDate");
+    expect(json).not.toContain("financeCalculated");
+  });
+
   it("actual добавляет непросчитанные и верхнюю границу лаб-срока", () => {
     const w = financeOfficeScopeWhere("t1", { mode: "actual" });
     const json = JSON.stringify(w);
@@ -137,6 +145,13 @@ describe("financeOfficeChipCountScopeWhere", () => {
 });
 
 describe("financeOfficeChipDueWindowScopeWhere", () => {
+  it("режим all: пилюля «ждем оплату» без окна лаб-срока", () => {
+    const w = financeOfficeChipDueWindowScopeWhere("t1", { mode: "all" });
+    const json = JSON.stringify(w);
+    expect(json).not.toContain("dueDate");
+    expect(json).not.toContain("financeCalculated");
+  });
+
   it("окно срока на Актуальном без clamp «непросчитанные» (пилюля Корректировки)", () => {
     const w = financeOfficeChipDueWindowScopeWhere("t1", { mode: "actual" });
     const json = JSON.stringify(w);

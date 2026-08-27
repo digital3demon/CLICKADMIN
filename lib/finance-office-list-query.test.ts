@@ -43,6 +43,13 @@ describe("financeOfficeListHref", () => {
     );
   });
 
+  it("режим все не пишет tab в URL", () => {
+    expect(financeOfficeListHref({ tab: "all", q: "Соколов" })).toBe(
+      "/finance-office?q=%D0%A1%D0%BE%D0%BA%D0%BE%D0%BB%D0%BE%D0%B2",
+    );
+    expect(financeOfficeListHref({})).toBe("/finance-office");
+  });
+
   it("без даты «по» у счёта — ошибка на русском", () => {
     const parsed = parseFinanceOfficeInvoiceIssuedParams({
       invFrom: "2026-05-07",

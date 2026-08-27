@@ -6,28 +6,10 @@ import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { fetchFinanceOfficeOrders, type FinanceOfficeOrderRow } from "@/lib/fetch-finance-office-orders";
 import { cleanLegalFullName } from "@/lib/format-counterparty-requisites-summary";
 import { isReconciliationPaymentStatus } from "@/lib/order-clinic-client-fields";
-import { parseFinanceOfficeMode } from "@/lib/finance-office-list-filter";
-import { parseFinanceOfficeInvoiceIssuedParams } from "@/lib/finance-office-list-query";
-import { parseOrdersShipmentParams } from "@/lib/orders-shipment-list-query";
-import {
-  parseYmdOrNull,
-} from "@/lib/shipments-date-range";
-import { parseListTagParam } from "@/lib/order-list-tag-filter";
+import { parseFinanceOfficeExportIds } from "@/lib/finance-office-export-ids";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const MAX_RANGE_DAYS = 366;
-
-function rangeDaySpan(fromYmd: string, toYmd: string): number {
-  const [y1, m1, d1] = fromYmd.split("-").map(Number);
-  const [y2, m2, d2] = toYmd.split("-").map(Number);
-  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / (24 * 60 * 60 * 1000));
-}
-
-function parseTab(raw: string | null): "actual" | "period" {
-  return parseFinanceOfficeMode(raw);
-}
 
 function money(value: number): number {
   return Math.round(value * 100) / 100;
@@ -115,83 +97,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
 
-  const sp = new URL(req.url).searchParams;
-  const mode = parseTab(sp.get("tab"));
-  const fromRaw = parseYmdOrNull(sp.get("from"));
-  const toRaw = parseYmdOrNull(sp.get("to"));
-  const rawTag = sp.get("tag")?.trim() || null;
-  const parsedTag = rawTag ? parseListTagParam(rawTag) : null;
-  const q = sp.get("q")?.trim() || "";
-  const shipParsed = parseOrdersShipmentParams({
-    ship: sp.get("ship"),
-    shipFrom: sp.get("shipFrom"),
-    shipTo: sp.get("shipTo"),
-  });
-  const appointment =
-    shipParsed.mode && !shipParsed.periodError
-      ? {
-          mode: shipParsed.mode,
-          shipFrom: shipParsed.shipFrom,
-          shipTo: shipParsed.shipTo,
-        }
-      : null;
-  const invParsed = parseFinanceOfficeInvoiceIssuedParams({
-    invFrom: sp.get("invFrom"),
-    invTo: sp.get("invTo"),
-  });
-  const invoiceIssued =
-    invParsed.toYmd && !invParsed.error
-      ? { fromYmd: invParsed.fromYmd, toYmd: invParsed.toYmd }
-      : null;
-
-  if (invParsed.error) {
-    return NextResponse.json({ error: invParsed.error }, { status: 400 });
-  }
-  if (!invoiceIssued && shipParsed.periodError) {
-    return NextResponse.json({ error: shipParsed.periodError }, { status: 400 });
+  const ids = parseFinanceOfficeExportIds(new URL(req.url).searchParams);
+  if (ids.length === 0) {
+    return NextResponse.json(
+      { error: "Выберите наряды для выгрузки" },
+      { status: 400 },
+    );
   }
 
-  let periodLabel = "";
-  if (invoiceIssued) {
-    if (
-      invoiceIssued.fromYmd &&
-      rangeDaySpan(invoiceIssued.fromYmd, invoiceIssued.toYmd) > MAX_RANGE_DAYS
-    ) {
-      return NextResponse.json(
-        { error: `Максимальный период — ${MAX_RANGE_DAYS} дней` },
-        { status: 400 },
-      );
-    }
-    periodLabel = invoiceIssued.fromYmd
-      ? `schet_${invoiceIssued.fromYmd}_${invoiceIssued.toYmd}`
-      : `schet_to_${invoiceIssued.toYmd}`;
-  } else if (appointment) {
-    periodLabel = `zapis_${appointment.mode}`;
-  } else if (mode === "actual") {
-    periodLabel = "actual";
-  } else {
-    if (!toRaw) {
-      return NextResponse.json({ error: "Для периода укажите to (from необязателен)" }, { status: 400 });
-    }
-    if (fromRaw && fromRaw > toRaw) {
-      return NextResponse.json({ error: "Дата «с» не может быть позже даты «по»" }, { status: 400 });
-    }
-    if (fromRaw && rangeDaySpan(fromRaw, toRaw) > MAX_RANGE_DAYS) {
-      return NextResponse.json({ error: `Максимальный период — ${MAX_RANGE_DAYS} дней` }, { status: 400 });
-    }
-    periodLabel = fromRaw ? `${fromRaw}_${toRaw}` : `to_${toRaw}`;
-  }
-
+  const periodLabel = `selected-${ids.length}`;
   const orders = (await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
-    listTag: parsedTag ? rawTag : null,
-    search: q,
-    mode,
-    fromYmd:
-      invoiceIssued || appointment ? null : mode === "period" ? fromRaw : null,
-    toYmd:
-      invoiceIssued || appointment ? null : mode === "period" ? toRaw : null,
-    appointment: invoiceIssued ? null : appointment,
-    invoiceIssued,
+    ids,
   })).filter(
     (order) =>
       !isReconciliationPaymentStatus(order.payment) &&
