@@ -14,13 +14,15 @@ import {
 import { unlinkDemoSqliteFiles } from "@/lib/demo-db-path";
 import { seedDemoDatabase } from "@/lib/demo-seed";
 import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
+import { ensureInventoryItemColumns } from "@/lib/ensure-inventory-item-columns";
 import { ensureLegalEntityReconciliationTable } from "@/lib/ensure-legal-entity-reconciliation-table";
 import { resolvePrismaSchemaPath } from "@/lib/prisma-schema-path";
 
 /**
  * Полностью пересоздаёт демо-данные.
- * Postgres: `db push --force-reset` только если схемы ещё нет — иначе сид сам чистит таблицы.
- * (Раньше push на каждый вход → на PaaS часто уходил в `npx prisma` и падал на fast-check.)
+ * Postgres: `db push --force-reset` только если схемы ещё нет.
+ * Если схема есть — мягкий `db push` (без reset), чтобы догнать новые колонки/таблицы,
+ * затем сид сам чистит данные. Локальный Prisma CLI, без npx.
  */
 export async function resetAndSeedDemoDatabase(): Promise<void> {
   assertDemoDatabaseDistinctFromMain();
@@ -32,10 +34,9 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
 
   if (isSqliteFileUrl(url)) {
     unlinkDemoSqliteFiles();
-    await runPrismaDbPush(url);
+    await runPrismaDbPush(url, { forceReset: true });
     const demo = getDemoPrisma();
-    await ensureFinanceOfficeDebtColumns(demo);
-    await ensureLegalEntityReconciliationTable(demo);
+    await prepareDemoSchema(demo);
     await seedDemoDatabase(demo);
     return;
   }
@@ -43,20 +44,38 @@ export async function resetAndSeedDemoDatabase(): Promise<void> {
   if (isPostgresUrl(url)) {
     const ready = await isDemoPostgresSchemaReady();
     if (ready) {
+      await disconnectDemoPrisma();
+      try {
+        await runPrismaDbPush(url, { forceReset: false });
+      } catch (e) {
+        console.warn(
+          "[demo-reset] soft db push failed, falling back to ensures:",
+          e instanceof Error ? e.message : e,
+        );
+      }
       const demo = getDemoPrisma();
-      await ensureFinanceOfficeDebtColumns(demo);
-      await ensureLegalEntityReconciliationTable(demo);
+      await prepareDemoSchema(demo);
       await seedDemoDatabase(demo);
       return;
     }
     await disconnectDemoPrisma();
-    await runPrismaDbPush(url);
-    await seedDemoDatabase(getDemoPrisma());
+    await runPrismaDbPush(url, { forceReset: true });
+    const demo = getDemoPrisma();
+    await prepareDemoSchema(demo);
+    await seedDemoDatabase(demo);
     return;
   }
 
-  await runPrismaDbPush(url);
-  await seedDemoDatabase(getDemoPrisma());
+  await runPrismaDbPush(url, { forceReset: true });
+  const demo = getDemoPrisma();
+  await prepareDemoSchema(demo);
+  await seedDemoDatabase(demo);
+}
+
+async function prepareDemoSchema(demo: ReturnType<typeof getDemoPrisma>) {
+  await ensureFinanceOfficeDebtColumns(demo);
+  await ensureLegalEntityReconciliationTable(demo);
+  await ensureInventoryItemColumns(demo);
 }
 
 /** Есть ли в schema=crm_demo базовая таблица User (после первого успешного push). */
@@ -118,7 +137,10 @@ export function resolveLocalPrismaCliJs(): string | null {
   return null;
 }
 
-function resolvePrismaDbPushSpawn(schemaPath: string): {
+function resolvePrismaDbPushSpawn(
+  schemaPath: string,
+  opts: { forceReset: boolean },
+): {
   command: string;
   args: string[];
   shell: boolean;
@@ -127,10 +149,10 @@ function resolvePrismaDbPushSpawn(schemaPath: string): {
     "db",
     "push",
     "--accept-data-loss",
-    "--force-reset",
+    ...(opts.forceReset ? (["--force-reset"] as const) : []),
     "--skip-generate",
     `--schema=${schemaPath}`,
-  ] as const;
+  ];
 
   const localJs = resolveLocalPrismaCliJs();
   if (localJs) {
@@ -149,7 +171,10 @@ function resolvePrismaDbPushSpawn(schemaPath: string): {
   );
 }
 
-function runPrismaDbPush(databaseUrl: string): Promise<void> {
+function runPrismaDbPush(
+  databaseUrl: string,
+  opts: { forceReset: boolean },
+): Promise<void> {
   const schemaPath = resolvePrismaSchemaPath();
   if (!schemaPath) {
     return Promise.reject(
@@ -164,14 +189,16 @@ function runPrismaDbPush(databaseUrl: string): Promise<void> {
   return new Promise((resolve, reject) => {
     let spawnSpec: { command: string; args: string[]; shell: boolean };
     try {
-      spawnSpec = resolvePrismaDbPushSpawn(schemaPath);
+      spawnSpec = resolvePrismaDbPushSpawn(schemaPath, opts);
     } catch (e) {
       reject(e);
       return;
     }
     const { command, args, shell } = spawnSpec;
     console.info(
-      "[demo-reset] prisma db push via",
+      "[demo-reset] prisma db push",
+      opts.forceReset ? "(force-reset)" : "(soft)",
+      "via",
       command === process.execPath ? args[0] : command,
     );
     const child = spawn(command, args, {

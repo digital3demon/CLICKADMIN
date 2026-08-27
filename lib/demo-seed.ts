@@ -17,6 +17,7 @@ import {
 import { emptyProsthetics, prostheticsToJson } from "@/lib/order-prosthetics";
 import { ORDER_NUMBER_SETTINGS_ID } from "@/lib/order-number";
 import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
+import { ensureInventoryItemColumns } from "@/lib/ensure-inventory-item-columns";
 import { ensureLegalEntityReconciliationTable } from "@/lib/ensure-legal-entity-reconciliation-table";
 import { ensureKaitenDirectory } from "@/lib/kaiten-directory-bootstrap";
 import { DEFAULT_TENANT_ID } from "@/lib/tenant-constants";
@@ -117,8 +118,9 @@ export async function isDemoDatabaseSeeded(db: PrismaClient): Promise<boolean> {
 /** Полная демо-выгрузка: клиники, врачи, наряды, прайс, склад, курьеры, фейковая почта и чат. */
 export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
   await ensureFinanceOfficeDebtColumns(db);
-  /** Демо часто пропускает db push (есть User) — таблица могла появиться в схеме после последнего push. */
+  /** Демо часто пропускает полный force-reset — догоняем таблицы/колонки перед wipe. */
   await ensureLegalEntityReconciliationTable(db);
+  await ensureInventoryItemColumns(db);
   await db.$transaction(
     async (tx) => {
     await tx.orderCustomTag.deleteMany();
