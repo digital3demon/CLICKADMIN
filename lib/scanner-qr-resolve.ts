@@ -7,6 +7,10 @@ import {
   type ScannerOrderResolve,
   type ScannerOrderResolveOk,
 } from "@/lib/scanner-qr-parse";
+import {
+  orderNumberOcrConfusionVariants,
+  pickOrderNumberAfterOcrConfusion,
+} from "@/lib/scanner-ocr-order-parse";
 import { resolveStickerOrderBySlugAndToken } from "@/lib/sticker-public-order-resolve";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 
@@ -23,6 +27,7 @@ const ORDER_SCAN_SELECT = {
   orderNumber: true,
   patientName: true,
   doctor: { select: { fullName: true } },
+  clinic: { select: { name: true } },
 } as const;
 
 type OrderScanRow = {
@@ -30,6 +35,7 @@ type OrderScanRow = {
   orderNumber: string;
   patientName: string | null;
   doctor: { fullName: string } | null;
+  clinic: { name: string } | null;
 };
 
 function toResolveOk(
@@ -104,6 +110,8 @@ export async function resolveOrderFromScannerQr(
 export async function resolveOrderFromOrderNumber(
   orderNumberRaw: string,
   apiKeyTenantId: string,
+  ocrText = "",
+  opts?: { exactOnly?: boolean },
 ): Promise<ScannerOrderResolve> {
   const tenantId = String(apiKeyTenantId || "").trim();
   const orderNumber = String(orderNumberRaw || "").trim();
@@ -111,18 +119,40 @@ export async function resolveOrderFromOrderNumber(
     return { ok: false, reason: "order_not_found" };
   }
   const ordersDb: PrismaClient = await resolveTenantPrismaClient(tenantId);
-  const order = await ordersDb.order.findFirst({
-    where: { tenantId, orderNumber, archivedAt: null },
+  const variants = opts?.exactOnly
+    ? [orderNumber]
+    : [orderNumber, ...orderNumberOcrConfusionVariants(orderNumber)];
+  const rows = await ordersDb.order.findMany({
+    where: { tenantId, orderNumber: { in: variants } },
     select: ORDER_SCAN_SELECT,
   });
-  if (!order) {
-    // Архивный/любой статус — второй шанс без archivedAt фильтра
-    const any = await ordersDb.order.findFirst({
-      where: { tenantId, orderNumber },
-      select: ORDER_SCAN_SELECT,
+  const picked = pickOrderNumberAfterOcrConfusion(
+    orderNumber,
+    rows.map((r) => ({
+      orderNumber: r.orderNumber,
+      patientName: r.patientName,
+      doctorName: r.doctor?.fullName ?? null,
+      clinicName: r.clinic?.name ?? null,
+      row: r,
+    })),
+    ocrText,
+  );
+  if (!picked) {
+    if (rows.length > 1) {
+      return {
+        ok: false,
+        reason: "ambiguous_order_number",
+        candidates: rows.map((r) => r.orderNumber).sort(),
+      };
+    }
+    return { ok: false, reason: "order_not_found" };
+  }
+  const order = picked.row;
+  if (order.orderNumber !== orderNumber) {
+    console.info("[scanner] ocr digit-confusion", {
+      requested: orderNumber,
+      picked: order.orderNumber,
     });
-    if (!any) return { ok: false, reason: "order_not_found" };
-    return toResolveOk(any, tenantId, "ocr");
   }
   return toResolveOk(order, tenantId, "ocr");
 }

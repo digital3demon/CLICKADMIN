@@ -267,11 +267,36 @@ export async function POST(req: Request) {
       | Awaited<ReturnType<typeof resolveOrderFromOrderNumber>>;
 
     if (forcedOrderNumber) {
+      const ocrHeader = req.headers.get("x-scanner-ocr-text")?.trim() || "";
+      let ocrText = "";
+      if (ocrHeader) {
+        try {
+          ocrText = decodeURIComponent(ocrHeader);
+        } catch {
+          ocrText = ocrHeader;
+        }
+      }
+      const exactOnly =
+        String(req.headers.get("x-scanner-order-exact") || "").trim() === "1";
       resolved = await resolveOrderFromOrderNumber(
         forcedOrderNumber,
         apiKey.tenantId,
+        ocrText,
+        { exactOnly },
       );
       if (!resolved.ok) {
+        if (resolved.reason === "ambiguous_order_number") {
+          const list = (resolved.candidates ?? []).join(", ");
+          return NextResponse.json(
+            {
+              error: "ambiguous_order_number",
+              orderNumber: forcedOrderNumber,
+              candidates: resolved.candidates ?? [],
+              detail: `OCR путает 5 и 6. Уточните номер вручную: ${list}`,
+            },
+            { status: 422 },
+          );
+        }
         return NextResponse.json(
           {
             error: "order_not_found",

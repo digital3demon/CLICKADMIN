@@ -620,14 +620,14 @@ def _white_label_crops(img: np.ndarray) -> list[np.ndarray]:
     return out
 
 
-def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
+def local_ocr_hints(path: Path) -> tuple[str | None, str | None, str]:
     """
     Локальный OCR: шапка наряда и белая этикетка отгрузки.
-    Возвращает (номер_наряда YYMM-NNN | None, qr_hint URL | None).
+    Возвращает (номер_наряда YYMM-NNN | None, qr_hint URL | None, сырой текст).
     """
     img = imread_bgr(path)
     if img is None:
-        return None, None
+        return None, None, ""
     h, w = img.shape[:2]
     crops: list[np.ndarray] = []
     # Мелкая этикетка отгрузки часто справа снизу (крупная бирка производителя — слева)
@@ -667,7 +667,7 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
                     "yes" if kaiten else "no",
                     time.time() - t0,
                 )
-                return order_n, kaiten
+                return order_n, kaiten, blob_all
     order_n = pick_order_number_from_text(blob_all)
     kaiten = pick_kaiten_url_from_text(blob_all)
     if order_n or kaiten:
@@ -678,40 +678,42 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None]:
             "yes" if kaiten else "no",
             time.time() - t0,
         )
-        return order_n, kaiten
+        return order_n, kaiten, blob_all
     logging.info(
         "local OCR %s: no match (%.1fs, chars=%s)",
         path.name,
         time.time() - t0,
         len(blob_all.strip()),
     )
-    return None, None
+    return None, None, blob_all
 
 
-def resolve_upload_hints(path: Path) -> tuple[str | None, str | None]:
+def resolve_upload_hints(
+    path: Path,
+) -> tuple[str | None, str | None, str]:
     """
-    CRM-полезный QR → (qr, None).
+    CRM-полезный QR → (qr, None, "").
     DataMatrix/GS1 производителя игнорируем и идём в OCR номера наряда.
-    → (qr_hint | None, force_order_number | None).
+    → (qr_hint | None, force_order_number | None, ocr_text).
     """
     qr = decode_qr(path)
     if qr and is_crm_useful_qr(qr):
-        return qr, None
+        return qr, None, ""
     if qr and is_manufacturer_or_noise_barcode(qr):
         logging.info(
             "product barcode ignored (OCR fallback): %s",
             qr[:64],
         )
         qr = None
-    order_n, kaiten_url = local_ocr_hints(path)
+    order_n, kaiten_url, ocr_text = local_ocr_hints(path)
     # явный номер наряда надёжнее «левого» QR; URL из OCR — как qr hint
     if order_n:
-        return (qr or kaiten_url), order_n
+        return (qr or kaiten_url), order_n, ocr_text
     if qr:
-        return qr, None
+        return qr, None, ocr_text
     if kaiten_url:
-        return kaiten_url, None
-    return None, None
+        return kaiten_url, None, ocr_text
+    return None, None, ocr_text
 
 
 def move_to(subdir: Path, path: Path) -> Path:
@@ -778,6 +780,8 @@ def upload_scan(
     path: Path,
     qr_hint: str | None = None,
     force_order_number: str | None = None,
+    ocr_text: str | None = None,
+    exact_order_number: bool = False,
 ) -> tuple[bool, int, dict]:
     """
     Загрузка с повторами: на проде тело иногда обрезается (415 unsupported_type /
@@ -797,6 +801,9 @@ def upload_scan(
         headers["x-scanner-qr"] = quote(qr_hint, safe=":/?&=#%")
     if force_order_number:
         headers["x-scanner-order-number"] = force_order_number.strip()
+    blob = (ocr_text or "").strip()
+    if blob:
+        headers["x-scanner-ocr-text"] = quote(blob[:500])
 
     upload_attempts = max(MAX_AUTO_ATTEMPTS, 5)
     last_status = 0
@@ -1758,7 +1765,7 @@ class ScannerApp:
         self.ui_q.put(("toast", f"Разбор… {path.name}"))
         t0 = time.time()
         try:
-            qr_hint, force_num = resolve_upload_hints(path)
+            qr_hint, force_num, ocr_text = resolve_upload_hints(path)
             logging.info(
                 "hints %s → qr=%s order=%s (%.1fs)",
                 path.name,
@@ -1786,6 +1793,7 @@ class ScannerApp:
                 path=path,
                 qr_hint=qr_hint,
                 force_order_number=force_num,
+                ocr_text=ocr_text,
             )
             logging.info(
                 "upload %s status=%s ok=%s (%.1fs)",
@@ -2140,7 +2148,7 @@ class ScannerApp:
         label = "Автоповтор" if auto else "Повтор"
         self.ui_q.put(("toast", f"{label}… {path.name}"))
         try:
-            qr_hint, force_num = resolve_upload_hints(path)
+            qr_hint, force_num, ocr_text = resolve_upload_hints(path)
             if not force_num and not qr_hint:
                 err = "не распознан номер"
 
@@ -2158,6 +2166,7 @@ class ScannerApp:
                 path=path,
                 qr_hint=qr_hint,
                 force_order_number=force_num,
+                ocr_text=ocr_text,
             )
         except Exception as e:
             err = str(e)[:200]
@@ -2293,6 +2302,7 @@ class ScannerApp:
             api_key=key,
             path=item.path,
             force_order_number=order_number,
+            exact_order_number=True,
         )
         if not ok:
             self.ui_q.put(

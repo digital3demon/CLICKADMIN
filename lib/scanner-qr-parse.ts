@@ -134,7 +134,13 @@ export type ScannerOrderResolveOk = {
 
 export type ScannerOrderResolveFail = {
   ok: false;
-  reason: "unknown_qr" | "order_not_found" | "tenant_mismatch" | "no_text_match";
+  reason:
+    | "unknown_qr"
+    | "order_not_found"
+    | "tenant_mismatch"
+    | "no_text_match"
+    | "ambiguous_order_number";
+  candidates?: string[];
 };
 
 export type ScannerOrderResolve = ScannerOrderResolveOk | ScannerOrderResolveFail;

@@ -80,6 +80,87 @@ export function pickBestOrderNumberFromOcr(raw: string): string | null {
   return scored[0]?.n ?? null;
 }
 
+/**
+ * OCR часто путает 5↔6 в хвосте YYMM-NNN («2608-266» → «2608-256»).
+ * Одна замена в трёх цифрах номера, YYMM не трогаем.
+ */
+export function orderNumberOcrConfusionVariants(orderNumber: string): string[] {
+  const m = ORDER_NUMBER_PATTERN.exec(String(orderNumber || "").trim());
+  if (!m) return [];
+  const yymm = m[1] ?? "";
+  const nnn = m[2] ?? "";
+  const out: string[] = [];
+  for (let i = 0; i < nnn.length; i += 1) {
+    const ch = nnn[i];
+    const alt = ch === "5" ? "6" : ch === "6" ? "5" : null;
+    if (!alt) continue;
+    out.push(`${yymm}-${nnn.slice(0, i)}${alt}${nnn.slice(i + 1)}`);
+  }
+  return [...new Set(out)];
+}
+
+function foldOcrNameToken(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[^a-zа-я]/gi, "");
+}
+
+/** Совпадение фамилий с этикетки (кириллица до/после номера). */
+export function scoreOcrTextAgainstOrderNames(
+  ocrText: string,
+  names: Array<string | null | undefined>,
+): number {
+  const hay = foldOcrNameToken(ocrText);
+  if (hay.length < 4) return 0;
+  let score = 0;
+  for (const name of names) {
+    const parts = String(name || "")
+      .split(/[\s,.;]+/)
+      .map(foldOcrNameToken)
+      .filter((p) => p.length >= 4);
+    for (const p of parts) {
+      if (hay.includes(p)) score += p.length;
+    }
+  }
+  return score;
+}
+
+export type OcrOrderNameCandidate = {
+  orderNumber: string;
+  patientName?: string | null;
+  doctorName?: string | null;
+  clinicName?: string | null;
+};
+
+/**
+ * Если OCR дал 2608-256, а в БД есть и 256, и 266 — берём того, чья фамилия
+ * есть в тексте этикетки. Без имён оставляем запрошенный номер.
+ */
+export function pickOrderNumberAfterOcrConfusion<T extends OcrOrderNameCandidate>(
+  _requested: string,
+  rows: T[],
+  ocrText: string,
+): T | null {
+  if (rows.length === 0) return null;
+  if (rows.length === 1) return rows[0] ?? null;
+  const scored = rows.map((row) => ({
+    row,
+    score: scoreOcrTextAgainstOrderNames(ocrText, [
+      row.patientName,
+      row.doctorName,
+      row.clinicName,
+    ]),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0];
+  const second = scored[1];
+  if (best && best.score >= 4 && (!second || best.score > second.score)) {
+    return best.row;
+  }
+  return null;
+}
+
 /** ID карточки Kaiten из URL в OCR (распечатка наряда / карточки). */
 export function pickKaitenCardIdFromOcr(raw: string): number | null {
   const text = String(raw ?? "");

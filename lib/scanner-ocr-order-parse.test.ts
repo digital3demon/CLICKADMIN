@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   extractOrderNumbersFromOcrText,
+  orderNumberOcrConfusionVariants,
   pickBestOrderNumberFromOcr,
   pickKaitenCardIdFromOcr,
+  pickOrderNumberAfterOcrConfusion,
 } from "@/lib/scanner-ocr-order-parse";
 
 describe("extractOrderNumbersFromOcrText", () => {
@@ -59,6 +61,53 @@ describe("pickBestOrderNumberFromOcr", () => {
     const raw =
       "Geo 260429-LS80 2026.04.29\nКлиника Атрибут РЕМИ\nПациент Калашникова Ю.\n№ заказа: 2608-156";
     expect(pickBestOrderNumberFromOcr(raw)).toBe("2608-156");
+  });
+});
+
+describe("orderNumberOcrConfusionVariants", () => {
+  it("5↔6 в хвосте: 2608-256 → 266, кириллица в номере не нужна", () => {
+    expect(orderNumberOcrConfusionVariants("2608-256")).toEqual(
+      expect.arrayContaining(["2608-266", "2608-255"]),
+    );
+    expect(orderNumberOcrConfusionVariants("2608-266")).toContain("2608-256");
+  });
+});
+
+describe("pickOrderNumberAfterOcrConfusion", () => {
+  it("при 256 и 266 выбирает наряд с фамилией с этикетки", () => {
+    const ocr =
+      "Клиника АтрибутКидс Доктор Егорова О. К. Пациент Ермаченков М. № заказа 2608-256";
+    const picked = pickOrderNumberAfterOcrConfusion(
+      "2608-256",
+      [
+        {
+          orderNumber: "2608-256",
+          patientName: "Сидоров П.",
+          doctorName: "Невский",
+        },
+        {
+          orderNumber: "2608-266",
+          patientName: "Ермаченков М.",
+          doctorName: "Егорова О. К.",
+          clinicName: "АтрибутКидс",
+        },
+      ],
+      ocr,
+    );
+    expect(picked?.orderNumber).toBe("2608-266");
+  });
+
+  it("без фамилий не выбирает между 256 и 266", () => {
+    expect(
+      pickOrderNumberAfterOcrConfusion(
+        "2608-256",
+        [
+          { orderNumber: "2608-256", patientName: "Сидоров" },
+          { orderNumber: "2608-266", patientName: "Ермаченков" },
+        ],
+        "№ заказа 2608-256",
+      ),
+    ).toBeNull();
   });
 });
 
