@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import {
+  BillingLegalForm,
   ConstructionCategory,
   DemoKanbanColumn,
   EmailDirection,
@@ -11,6 +12,9 @@ import {
   OrderChatInboxItemType,
   OrderChatInboxSyncState,
   OrderStatus,
+  ReconciliationFrequency,
+  ReconciliationSnapshotPaymentStatus,
+  ReconciliationSnapshotSlot,
   StockMovementKind,
   UserRole,
 } from "@prisma/client";
@@ -25,6 +29,15 @@ import { DEFAULT_TENANT_ID } from "@/lib/tenant-constants";
 import { KAITEN_MIRROR_KANBAN_COLUMNS } from "@/lib/kanban/model";
 import { UI_DESIGN_CLIENT_STATE_KEY } from "@/lib/ui-design";
 import { kanbanOrderCommentsStateKey } from "@/lib/kanban/kanban-order-comments";
+import { foReconciliationGroupKey } from "@/lib/clinic-inn-key";
+import {
+  formatReconciliationPeriodLabelRu,
+  formatYmdInMsk,
+} from "@/lib/msk-calendar";
+import {
+  highlightYmdForPeriodTo,
+  standardPeriodContainingYmd,
+} from "@/lib/reconciliation-calendar-period";
 
 const OWNER_ID = "cm_demo_owner_user_v1";
 const OWNER_EMAIL = "owner@demo.crm";
@@ -35,7 +48,7 @@ const DEMO_AUTHOR = "Владелец (демо)";
  * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
  * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
  */
-export const DEMO_SEED_REVISION = 10;
+export const DEMO_SEED_REVISION = 11;
 const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
 /** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
 const DEMO_ORDER_COUNT_MIN = 50;
@@ -159,6 +172,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         name: "Демо",
         plan: "ULTRA",
         addonKanban: true,
+        financeOfficeDebtWorkingDays: 10,
       },
     });
 
@@ -460,16 +474,31 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         name: "Демо — стоматология «Импульс»",
         address: "г. Санкт-Петербург, Невский пр-т, д. 28",
         phone: "+78121110010",
+        worksWithReconciliation: true,
+        reconciliationFrequency: ReconciliationFrequency.MONTHLY_2,
+        inn: "7816123456",
+        legalFullName: "ООО «Импульс Демо»",
+        billingLegalForm: BillingLegalForm.OOO,
       },
       {
         name: "Демо — клиника «Дент-Профи»",
         address: "г. Новосибирск, Красный пр-т, д. 50",
         phone: "+73832220022",
+        worksWithReconciliation: true,
+        reconciliationFrequency: ReconciliationFrequency.MONTHLY_2,
+        inn: "5406987654",
+        legalFullName: "ООО «Дент-Профи Демо»",
+        billingLegalForm: BillingLegalForm.OOO,
       },
       {
         name: "Демо — «Улыбка Плюс»",
         address: "г. Екатеринбург, ул. Малышева, д. 36",
         phone: "+73433330033",
+        worksWithReconciliation: true,
+        reconciliationFrequency: ReconciliationFrequency.MONTHLY_1,
+        inn: "6676123456",
+        legalFullName: "ИП Улыбка Демо",
+        billingLegalForm: BillingLegalForm.IP,
       },
       {
         name: "Демо — «Белый Жемчуг»",
@@ -517,6 +546,15 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
             address: c.address,
             isActive: true,
             phone: c.phone,
+            ...("worksWithReconciliation" in c && c.worksWithReconciliation
+              ? {
+                  worksWithReconciliation: true,
+                  reconciliationFrequency: c.reconciliationFrequency,
+                  inn: c.inn,
+                  legalFullName: c.legalFullName,
+                  billingLegalForm: c.billingLegalForm,
+                }
+              : {}),
           },
         }),
       ),
@@ -816,6 +854,8 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       let adminShippedOtpr = false;
       let adminShippedAt: Date | null = null;
       let payment: string | null = null;
+      let invoiceIssuedAt: Date | null = null;
+      let invoiceNumber: string | null = null;
       if (bucket === 9) {
         status = OrderStatus.CANCELLED;
         labWorkStatus = LabWorkStatus.TO_ADMINS;
@@ -830,6 +870,12 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         );
         payment =
           ix % 3 === 0 ? "Оплачено" : ix % 3 === 1 ? "Сверка-ОПЛАЧЕНО" : null;
+        /** Просроченные долги ФинОтдела: счёт старше 10 раб. дней, оплата пустая. */
+        if (payment == null && clinic) {
+          payment = ix % 6 === 2 ? "Не оплачено" : null;
+          invoiceIssuedAt = daysAgoMsk(18 + (ix % 7), 12);
+          invoiceNumber = `Демо-${orderNumber}`;
+        }
       } else if (bucket <= 1 && daysFromToday < 4) {
         status = OrderStatus.REVIEW;
         labWorkStatus = LabWorkStatus.TO_SCAN;
@@ -917,11 +963,106 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           registeredByLabel: "Демо CRM",
           adminShippedOtpr,
           adminShippedAt,
+          invoiceIssuedAt,
+          invoiceNumber,
           constructions: { create: constructions },
         },
         select: { id: true, orderNumber: true },
       });
       createdOrders.push(order);
+    }
+
+    /**
+     * Сверки ФинОтдела: клиники с worksWithReconciliation + UNPAID-периоды,
+     * у которых сегодня день «Готовы» (highlight = последний будний ≤ periodTo).
+     */
+    {
+      const todayYmd = formatYmdInMsk(new Date());
+      const highlightToday = highlightYmdForPeriodTo(todayYmd) === todayYmd;
+      const reconClinics = clinics.filter((_, i) => i < 3);
+      for (let ri = 0; ri < reconClinics.length; ri++) {
+        const clinic = reconClinics[ri]!;
+        const freq =
+          ri === 2
+            ? ReconciliationFrequency.MONTHLY_1
+            : ReconciliationFrequency.MONTHLY_2;
+        const groupKey = foReconciliationGroupKey(clinic);
+        const label =
+          clinic.legalFullName?.trim() ||
+          clinic.name ||
+          "Демо юрлицо";
+        const std = standardPeriodContainingYmd(todayYmd, freq);
+        if (!std) continue;
+
+        /** Период, готовый к отправке сегодня (бейдж «Готовы»). */
+        if (highlightToday) {
+          await tx.legalEntityReconciliation.create({
+            data: {
+              tenantId: DEFAULT_TENANT_ID,
+              groupKey,
+              slot: std.slot,
+              periodFromStr: std.periodFromStr,
+              periodToStr: todayYmd,
+              periodLabelRu: formatReconciliationPeriodLabelRu(
+                std.periodFromStr,
+                todayYmd,
+              ),
+              legalEntityLabel: label,
+              periodLocked: true,
+              paymentStatus: ReconciliationSnapshotPaymentStatus.UNPAID,
+            },
+          });
+        }
+
+        /** Предыдущий закрытый слот в архиве (оплачен). */
+        const prevTo =
+          std.slot === ReconciliationSnapshotSlot.SECOND_HALF
+            ? `${todayYmd.slice(0, 7)}-15`
+            : std.slot === ReconciliationSnapshotSlot.FIRST_HALF
+              ? (() => {
+                  const [ys, ms] = todayYmd.split("-");
+                  const y = Number(ys);
+                  const m = Number(ms);
+                  const pm = m === 1 ? 12 : m - 1;
+                  const py = m === 1 ? y - 1 : y;
+                  const dim = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+                  return `${py}-${String(pm).padStart(2, "0")}-${String(dim).padStart(2, "0")}`;
+                })()
+              : (() => {
+                  const [ys, ms] = todayYmd.split("-");
+                  const y = Number(ys);
+                  const m = Number(ms);
+                  const pm = m === 1 ? 12 : m - 1;
+                  const py = m === 1 ? y - 1 : y;
+                  const dim = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+                  return `${py}-${String(pm).padStart(2, "0")}-${String(dim).padStart(2, "0")}`;
+                })();
+        const prevFrom =
+          std.slot === ReconciliationSnapshotSlot.SECOND_HALF
+            ? `${todayYmd.slice(0, 7)}-01`
+            : prevTo.slice(0, 8) + "01";
+        const prevSlot =
+          std.slot === ReconciliationSnapshotSlot.SECOND_HALF
+            ? ReconciliationSnapshotSlot.FIRST_HALF
+            : std.slot === ReconciliationSnapshotSlot.FIRST_HALF
+              ? ReconciliationSnapshotSlot.MONTHLY_FULL
+              : ReconciliationSnapshotSlot.MONTHLY_FULL;
+        await tx.legalEntityReconciliation.create({
+          data: {
+            tenantId: DEFAULT_TENANT_ID,
+            groupKey,
+            slot: prevSlot,
+            periodFromStr: prevFrom,
+            periodToStr: prevTo,
+            periodLabelRu: formatReconciliationPeriodLabelRu(prevFrom, prevTo),
+            legalEntityLabel: label,
+            periodLocked: true,
+            paymentStatus: ReconciliationSnapshotPaymentStatus.PAID,
+            paidAt: daysAgoMsk(12, 15),
+            downloadedAt: daysAgoMsk(14, 11),
+          },
+        });
+      }
     }
 
     /**
