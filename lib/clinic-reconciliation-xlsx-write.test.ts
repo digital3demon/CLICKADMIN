@@ -45,7 +45,7 @@ const payload: ClinicReconciliationPdfPayload = {
       unitRub: 1500,
       baseTotalRub: 1500,
       lineTotalRub: 1500,
-      discountPercent: null,
+      discountPercent: 5,
     },
   ],
 };
@@ -69,6 +69,8 @@ describe("writeReconciliationSheet", () => {
     expect(s.getRow(3).getCell(9).alignment?.horizontal).toBe("right");
     expect(s.getRow(6).getCell(1).value).toBe("Дата когда зашла работа");
     expect(s.getRow(6).getCell(2).value).toBe("Дата отправки работы");
+    expect(s.getRow(6).getCell(10).value).toBe("СКИДКА");
+    expect(s.getColumn(10).hidden).not.toBe(true);
     expect(s.getRow(7).getCell(4).value).toBe("Тындик Т.В.");
     expect(s.getRow(7).getCell(6).value).toBe(
       "2004 Единица цифрового моделирования",
@@ -76,9 +78,10 @@ describe("writeReconciliationSheet", () => {
     expect(s.getRow(8).getCell(6).value).toBe(
       "5003 Модель неразборная/диагностическая",
     );
+    expect(s.getRow(8).getCell(10).value).toBe("5%");
     expect(s.getRow(8).getCell(1).border?.left?.style).toBe("thin");
     expect(s.getRow(8).getCell(5).border?.right?.style).toBe("thin");
     expect(s.getColumn(8).width).toBeGreaterThanOrEqual(16);
-    expect(s.getColumn(10).width).toBeGreaterThanOrEqual(16);
+    expect(s.getColumn(10).width).toBeGreaterThanOrEqual(12);
   });
 });

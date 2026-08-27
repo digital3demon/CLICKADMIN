@@ -67,8 +67,10 @@ function frameSpan(
 
 function excelColWidth(pt: number, col: number): number {
   const w = reconExcelColWidth(pt);
-  // H–J: «р. 403 020,00» не влезает в pt/7 → Excel рисует #####
-  if (col >= 8) return Math.max(w, 16);
+  // H–I: «р. 403 020,00» не влезает в pt/7 → Excel рисует #####
+  if (col === 8 || col === 9) return Math.max(w, 16);
+  // J — СКИДКА: не сжимать в 0 при fitToWidth / пустых %
+  if (col === 10) return Math.max(w, 12);
   return w;
 }
 
@@ -82,7 +84,9 @@ export function writeReconciliationSheet(
 ): void {
   sheet.name = "Сверка";
   for (let c = 1; c <= 10; c++) {
-    sheet.getColumn(c).width = excelColWidth(RECON_COL_W_PT[c - 1]!, c);
+    const col = sheet.getColumn(c);
+    col.width = excelColWidth(RECON_COL_W_PT[c - 1]!, c);
+    col.hidden = false;
   }
 
   const head = sheet.getRow(1);
@@ -192,12 +196,13 @@ export function writeReconciliationSheet(
     paint(
       row.getCell(10),
       line.discountPercent == null
-        ? ""
+        ? "\u00A0"
         : `${String(line.discountPercent).replace(".", ",")}%`,
       { align: "right" },
     );
   });
 
+  const lastData = hdrR + Math.max(1, payload.detail.length);
   sheet.views = [{ state: "frozen", ySplit: 1, activeCell: "A1", showGridLines: true }];
   sheet.pageSetup = {
     orientation: "landscape",
@@ -205,6 +210,7 @@ export function writeReconciliationSheet(
     fitToPage: true,
     fitToWidth: 1,
     fitToHeight: 0,
+    printArea: `A1:J${lastData}`,
     horizontalDpi: 120,
     verticalDpi: 120,
   };
