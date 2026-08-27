@@ -46,6 +46,44 @@ export function shouldKeepLocalKanbanStageDue(
   return Boolean(local) && !inbound;
 }
 
+/** Накладывает непустой состав с Kaiten/titles-sync по наряду. */
+export function applyKanbanMembersByOrderId(
+  state: KanbanAppState,
+  byOrderId: Readonly<
+    Record<string, { assignees?: readonly string[]; participants?: readonly string[] }>
+  >,
+): boolean {
+  let changed = false;
+  forEachKanbanCardInState(state, (card) => {
+    const oid = String(card.linkedOrderId || "").trim();
+    if (!oid) return;
+    const row = byOrderId[oid];
+    if (!row) return;
+    if (inboundKanbanMembersEmpty(row.assignees, row.participants)) return;
+    if (
+      shouldKeepLocalKanbanMembers(card, {
+        assignees: row.assignees,
+        participants: row.participants,
+      })
+    ) {
+      return;
+    }
+    const nextA = [...(row.assignees || [])];
+    const nextP = [...(row.participants || [])];
+    const prevA = card.assignees || [];
+    const prevP = card.participants || [];
+    const sameA =
+      prevA.length === nextA.length && prevA.every((id, i) => id === nextA[i]);
+    const sameP =
+      prevP.length === nextP.length && prevP.every((id, i) => id === nextP[i]);
+    if (sameA && sameP) return;
+    card.assignees = nextA;
+    card.participants = nextP;
+    changed = true;
+  });
+  return changed;
+}
+
 /** Копирует людей/срок с local на remote, если remote пустой. */
 export function overlayLocalKanbanCardHeadOntoRemote(
   local: KanbanAppState,

@@ -4,6 +4,7 @@ import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-
 import {
   applyKanbanCardHeadsCache,
   collectKanbanCardHeadsCache,
+  mergeKanbanCardHeadsCache,
 } from "./kanban-card-heads-cache";
 
 describe("kanban card heads cache", () => {
@@ -39,5 +40,36 @@ describe("kanban card heads cache", () => {
     expect(card.assignees).toEqual(["u-саша"]);
     expect(getKanbanStageDue(card)).toBe("2026-09-08");
     setKanbanStageDue(card, "2026-09-08");
+  });
+
+  it("не выкидывает людей с других карточек, если входящий снимок почти пустой", () => {
+    const existing = {
+      "oid:наряд-юля": {
+        assignees: ["u-саша"],
+        participants: ["u-юлич"],
+        fingerprint: "fp-юля",
+        stageDue: "2026-08-26",
+      },
+    };
+    const incoming = collectKanbanCardHeadsCache(
+      (() => {
+        const state = defaultAppState();
+        state.boards[0]!.columns[0]!.cards.push({
+          id: "k-other",
+          title: "2608-364 Растегаев",
+          assignees: [],
+          participants: [],
+          stageDueDate: "2026-09-01",
+          dueDate: "",
+          linkedOrderId: "oid-other",
+        } as never);
+        return state;
+      })(),
+    );
+    const merged = mergeKanbanCardHeadsCache(existing, incoming);
+    expect(merged["oid:наряд-юля"]?.assignees).toEqual(["u-саша"]);
+    expect(merged["oid:наряд-юля"]?.participants).toEqual(["u-юлич"]);
+    expect(merged["oid:наряд-юля"]?.stageDue).toBe("2026-08-26");
+    expect(merged["oid:oid-other"]?.stageDue).toBe("2026-09-01");
   });
 });

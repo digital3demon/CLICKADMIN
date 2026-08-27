@@ -1,5 +1,6 @@
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
+import { upsertKanbanCardHeadCache } from "@/lib/kanban/kanban-card-heads-cache";
 import { findCard, pushActivity } from "@/lib/kanban/model";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
@@ -88,6 +89,7 @@ export function applyKanbanCardMembersOnBoard(
     );
   }
   fc.card.updatedAt = new Date().toISOString();
+  upsertKanbanCardHeadCache(fc.card);
   return fc.card;
 }
 

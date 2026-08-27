@@ -10,7 +10,10 @@ import {
   unwrapKaitenCardPayload,
   ymdFromKaitenDueDate,
 } from "@/lib/kanban/kaiten-head-to-kanban-card";
-import { shouldKeepLocalKanbanMembers } from "@/lib/kanban/preserve-kanban-card-head";
+import {
+  inboundKanbanMembersEmpty,
+  shouldKeepLocalKanbanMembers,
+} from "@/lib/kanban/preserve-kanban-card-head";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
 export type KaitenRefreshCardPatch = {
@@ -40,6 +43,9 @@ export function slimKaitenHeadForPatch(
 }
 
 function applyMembersPatch(card: KanbanCard, patch: KaitenRefreshCardPatch): boolean {
+  if (inboundKanbanMembersEmpty(patch.assignees, patch.participants)) {
+    return false;
+  }
   if (
     shouldKeepLocalKanbanMembers(card, {
       assignees: patch.assignees,

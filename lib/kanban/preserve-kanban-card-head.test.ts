@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 import {
+  applyKanbanMembersByOrderId,
   overlayLocalKanbanCardHeadOntoRemote,
   shouldKeepLocalKanbanMembers,
   shouldKeepLocalKanbanStageDue,
@@ -135,5 +136,43 @@ describe("overlayLocalKanbanCardHeadOntoRemote", () => {
     expect(remote.boards[0]!.columns[0]!.cards[0]!.participants).toEqual([
       "u-саша",
     ]);
+  });
+});
+
+describe("applyKanbanMembersByOrderId", () => {
+  it("ставит людей на пустую карточку, пустой inbound не трогает", () => {
+    const state = {
+      boards: [
+        {
+          id: "b",
+          columns: [
+            {
+              id: "col",
+              cards: [
+                {
+                  id: "c1",
+                  title: "2608-312 Растегаев Ю.В.",
+                  linkedOrderId: "наряд-юля",
+                  assignees: [],
+                  participants: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as KanbanAppState;
+    expect(
+      applyKanbanMembersByOrderId(state, {
+        "наряд-юля": { assignees: ["u-юлич"], participants: ["u-саша"] },
+      }),
+    ).toBe(true);
+    expect(state.boards[0]!.columns[0]!.cards[0]!.assignees).toEqual(["u-юлич"]);
+    expect(
+      applyKanbanMembersByOrderId(state, {
+        "наряд-юля": { assignees: [], participants: [] },
+      }),
+    ).toBe(false);
+    expect(state.boards[0]!.columns[0]!.cards[0]!.assignees).toEqual(["u-юлич"]);
   });
 });

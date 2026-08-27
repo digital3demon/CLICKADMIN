@@ -5,13 +5,17 @@ import {
 } from "@/lib/kaiten-card-block";
 import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
+import { kaitenMembersFingerprint } from "@/lib/kaiten-members-parse";
 import {
   type KaitenAuth,
   kaitenGetCard,
   kaitenListBoardColumns,
   kaitenListComments,
+  kaitenMembersFromCardJson,
   trackLaneForBoardId,
 } from "@/lib/kaiten-rest";
+import { mapKaitenCardMembersToCrm } from "@/lib/kanban/kaiten-members-inbound";
+import { loadKaitenUsersDirectory } from "@/lib/kaiten-user-directory";
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import {
@@ -53,6 +57,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
   titles: Record<string, string | null>;
   /** YYYY-MM-DD или null, только если в ответе Kaiten было поле due_date. */
   stageDueByOrderId: Record<string, string | null>;
+  /** CRM user id с карточки Kaiten, если GET /cards отдал members. */
+  membersByOrderId: Record<string, { assignees: string[]; participants: string[] }>;
   syncedCount: number;
   errorCount: number;
   /** Есть ли в комментариях упоминание тега лаборатории (Tenant.kanbanAdminMentionTag; подсветка «чат» в списке). */
@@ -68,9 +74,26 @@ export async function syncKaitenColumnTitlesForOrderIds(
   );
   const titles: Record<string, string | null> = {};
   const stageDueByOrderId: Record<string, string | null> = {};
+  const membersByOrderId: Record<
+    string,
+    { assignees: string[]; participants: string[] }
+  > = {};
   const headByTenant = new Map<
     string,
-    Record<string, { stageDue?: string | null; urgent?: boolean }>
+    Record<
+      string,
+      {
+        stageDue?: string | null;
+        urgent?: boolean;
+        assignees?: string[];
+        participants?: string[];
+        fingerprint?: string;
+      }
+    >
+  >();
+  const directoryByTenant = new Map<
+    string,
+    Awaited<ReturnType<typeof loadKaitenUsersDirectory>>
   >();
   const clicklabByOrderId: Record<string, boolean> = {};
   let syncedCount = 0;
@@ -223,6 +246,40 @@ export async function syncKaitenColumnTitlesForOrderIds(
         ...(dueYmd != null || dueExplicitEmpty ? { stageDue: dueYmd ?? null } : {}),
         ...("asap" in cardObj ? { urgent: cardObj.asap === true } : {}),
       };
+      const rawMembers = kaitenMembersFromCardJson(cardObj);
+      if (rawMembers && rawMembers.length > 0) {
+        try {
+          let directory = directoryByTenant.get(row.tenantId);
+          if (!directory) {
+            directory = await loadKaitenUsersDirectory(db, row.tenantId, auth);
+            directoryByTenant.set(row.tenantId, directory);
+          }
+          const mapped = await mapKaitenCardMembersToCrm(
+            db,
+            row.tenantId,
+            auth,
+            rawMembers,
+            directory,
+          );
+          if (mapped.assignees.length > 0 || mapped.participants.length > 0) {
+            tenantHead[row.id] = {
+              ...tenantHead[row.id],
+              assignees: mapped.assignees,
+              participants: mapped.participants,
+              fingerprint: kaitenMembersFingerprint(rawMembers),
+            };
+            membersByOrderId[row.id] = {
+              assignees: mapped.assignees,
+              participants: mapped.participants,
+            };
+          }
+        } catch (e) {
+          kaitenLogger.warn(
+            { err: e, orderId: row.id, msg: "kaiten_titles_sync_map_members" },
+            "kaiten titles sync map members failed",
+          );
+        }
+      }
       headByTenant.set(row.tenantId, tenantHead);
       const boardIdRaw = cardObj.board_id;
       const boardId = typeof boardIdRaw === "number" ? boardIdRaw : null;
@@ -355,7 +412,11 @@ export async function syncKaitenColumnTitlesForOrderIds(
   for (const [tenantId, patches] of headByTenant) {
     const nonempty = Object.fromEntries(
       Object.entries(patches).filter(
-        ([, p]) => p.stageDue !== undefined || typeof p.urgent === "boolean",
+        ([, p]) =>
+          p.stageDue !== undefined ||
+          typeof p.urgent === "boolean" ||
+          (p.assignees?.length ?? 0) > 0 ||
+          (p.participants?.length ?? 0) > 0,
       ),
     );
     if (Object.keys(nonempty).length === 0) continue;
@@ -372,6 +433,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   return {
     titles,
     stageDueByOrderId,
+    membersByOrderId,
     syncedCount,
     errorCount,
     clicklabByOrderId,

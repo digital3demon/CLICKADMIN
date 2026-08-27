@@ -68,10 +68,21 @@ function snapshotHead(card: KanbanCard): InboundKanbanHeadByOrder[string] {
   };
 }
 
-/** Пишет этапные сроки (и asap, если передали карточку) в kanbanAppStateV3. */
+/** Пишет этапные сроки (и asap / людей, если передали) в kanbanAppStateV3. */
 export async function persistKaitenStageDueToKanbanState(
   tenantId: string,
-  byOrderId: Readonly<Record<string, { stageDue?: string | null; urgent?: boolean }>>,
+  byOrderId: Readonly<
+    Record<
+      string,
+      {
+        stageDue?: string | null;
+        urgent?: boolean;
+        assignees?: string[];
+        participants?: string[];
+        fingerprint?: string;
+      }
+    >
+  >,
 ): Promise<{ changed: boolean; skipped: boolean }> {
   const tid = tenantId.trim();
   const keys = Object.keys(byOrderId);
@@ -103,8 +114,22 @@ export async function persistKaitenStageDueToKanbanState(
       if (typeof patch.urgent === "boolean") {
         head.asap = patch.urgent;
       }
-      if (Object.keys(head).length === 0) continue;
-      if (applyKaitenHeadFieldsToKanbanCard(card, head)) {
+      if (Object.keys(head).length > 0 && applyKaitenHeadFieldsToKanbanCard(card, head)) {
+        card.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+      const assignees = patch.assignees ?? [];
+      const participants = patch.participants ?? [];
+      if (
+        applyInboundMembersToKanbanCard(card, {
+          assignees,
+          participants,
+          fingerprint:
+            patch.fingerprint ||
+            `crm:${assignees.slice().sort().join(",")}|${participants.slice().sort().join(",")}`,
+          unmappedLabels: [],
+        })
+      ) {
         card.updatedAt = new Date().toISOString();
         changed = true;
       }

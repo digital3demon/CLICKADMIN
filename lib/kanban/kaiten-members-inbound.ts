@@ -16,7 +16,10 @@ import {
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
 import type { KanbanCard } from "@/lib/kanban/types";
-import { shouldKeepLocalKanbanMembers } from "@/lib/kanban/preserve-kanban-card-head";
+import {
+  inboundKanbanMembersEmpty,
+  shouldKeepLocalKanbanMembers,
+} from "@/lib/kanban/preserve-kanban-card-head";
 import {
   kaitenListCardMembers,
   KAITEN_MEMBER_TYPE_RESPONSIBLE,
@@ -131,6 +134,10 @@ function applyMembersToCard(
     forceApply?: boolean;
   },
 ): boolean {
+  /** Пустой inbound (в т.ч. forceApply / backfill) не затирает людей на карточке. */
+  if (inboundKanbanMembersEmpty(input.assignees, input.participants)) {
+    return false;
+  }
   if (
     !input.forceApply &&
     input.skipIfPushedFingerprint &&
@@ -312,10 +319,16 @@ export async function updateLastPushedMembersFingerprintInKanbanState(input: {
   tenantId: string;
   orderId: string;
   fingerprint: string;
+  /** CRM id — пишем в JSON сразу после успешного push в Kaiten (не ждём debounce PUT). */
+  assignees?: string[];
+  participants?: string[];
 }): Promise<void> {
   const tenantId = input.tenantId.trim();
   const orderId = input.orderId.trim();
-  if (!tenantId || !orderId || !input.fingerprint) return;
+  const hasMembersPayload =
+    input.assignees !== undefined || input.participants !== undefined;
+  if (!tenantId || !orderId) return;
+  if (!input.fingerprint && !hasMembersPayload) return;
 
   try {
     const corePrisma = await getPrisma();
@@ -329,7 +342,16 @@ export async function updateLastPushedMembersFingerprintInKanbanState(input: {
     if (!loc) return;
     const card =
       state.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
-    card.lastPushedMembersFingerprint = input.fingerprint;
+    if (input.fingerprint) {
+      card.lastPushedMembersFingerprint = input.fingerprint;
+      card.kaitenMembersFingerprint = input.fingerprint;
+    }
+    if (input.assignees !== undefined) card.assignees = [...input.assignees];
+    if (input.participants !== undefined) {
+      const assignSet = new Set(card.assignees || []);
+      card.participants = input.participants.filter((id) => !assignSet.has(id));
+    }
+    card.kaitenMembersSyncWarning = null;
     card.updatedAt = new Date().toISOString();
     await corePrisma.tenantClientState.upsert({
       where: { tenantId_key: { tenantId, key: KANBAN_CHAT_STATE_KEY } },

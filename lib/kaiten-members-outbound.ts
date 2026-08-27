@@ -148,6 +148,8 @@ export async function pushOrderMembersToKaiten(
     tenantId: input.tenantId,
     orderId: input.orderId,
     fingerprint,
+    assignees: assigneeCrm,
+    participants: participantCrm,
   });
 
   return { ok: true, fingerprint };

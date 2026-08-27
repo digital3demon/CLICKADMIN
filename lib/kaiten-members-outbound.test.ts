@@ -26,6 +26,7 @@ import {
   kaitenListCardMembers,
   kaitenRemoveCardMember,
 } from "@/lib/kaiten-rest";
+import { updateLastPushedMembersFingerprintInKanbanState } from "@/lib/kanban/kaiten-members-inbound";
 import { pushOrderMembersToKaiten } from "@/lib/kaiten-members-outbound";
 
 const db = {} as never;
@@ -37,6 +38,7 @@ describe("pushOrderMembersToKaiten", () => {
     vi.mocked(kaitenListCardMembers).mockReset();
     vi.mocked(kaitenAddCardMember).mockReset();
     vi.mocked(kaitenRemoveCardMember).mockReset();
+    vi.mocked(updateLastPushedMembersFingerprintInKanbanState).mockClear();
   });
 
   it("returns 422 when CRM user has no Kaiten match", async () => {
@@ -85,6 +87,14 @@ describe("pushOrderMembersToKaiten", () => {
       participants: [],
     });
     expect(result.ok).toBe(true);
+    expect(updateLastPushedMembersFingerprintInKanbanState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "t1",
+        orderId: "o1",
+        assignees: ["u1"],
+        participants: [],
+      }),
+    );
     expect(kaitenAddCardMember).toHaveBeenCalled();
     expect(kaitenRemoveCardMember).toHaveBeenCalledWith(
       auth,

@@ -51,12 +51,77 @@ export function collectKanbanCardHeadsCache(
   return out;
 }
 
+/**
+ * Не заменяет весь кэш: пустой paint (F5 / зеркало без людей) не должен
+ * выкидывать ключи, которые уже были сохранены.
+ * Пустые people в incoming не затирают непустые в existing.
+ */
+export function mergeKanbanCardHeadsCache(
+  existing: KanbanCardHeadsCache | null,
+  incoming: KanbanCardHeadsCache,
+): KanbanCardHeadsCache {
+  const out: KanbanCardHeadsCache = { ...(existing ?? {}) };
+  for (const [key, row] of Object.entries(incoming)) {
+    const prev = out[key];
+    const incomingHasMembers =
+      (row.assignees?.length ?? 0) > 0 || (row.participants?.length ?? 0) > 0;
+    const incomingDue = (row.stageDue || "").trim();
+    if (!prev) {
+      out[key] = {
+        assignees: [...(row.assignees || [])],
+        participants: [...(row.participants || [])],
+        fingerprint: row.fingerprint ?? null,
+        stageDue: incomingDue,
+      };
+      continue;
+    }
+    out[key] = {
+      assignees: incomingHasMembers
+        ? [...(row.assignees || [])]
+        : [...(prev.assignees || [])],
+      participants: incomingHasMembers
+        ? [...(row.participants || [])]
+        : [...(prev.participants || [])],
+      fingerprint: incomingHasMembers
+        ? (row.fingerprint ?? null)
+        : (prev.fingerprint ?? row.fingerprint ?? null),
+      stageDue: incomingDue || prev.stageDue || "",
+    };
+  }
+  return out;
+}
+
+function writeHeadsCache(heads: KanbanCardHeadsCache): void {
+  if (typeof window === "undefined") return;
+  if (Object.keys(heads).length === 0) return;
+  window.localStorage.setItem(KANBAN_CARD_HEADS_CACHE_KEY, JSON.stringify(heads));
+}
+
 export function persistKanbanCardHeadsCache(state: KanbanAppState): void {
   if (typeof window === "undefined") return;
   try {
-    const heads = collectKanbanCardHeadsCache(state);
-    if (Object.keys(heads).length === 0) return;
-    window.localStorage.setItem(KANBAN_CARD_HEADS_CACHE_KEY, JSON.stringify(heads));
+    const incoming = collectKanbanCardHeadsCache(state);
+    const merged = mergeKanbanCardHeadsCache(loadKanbanCardHeadsCache(), incoming);
+    writeHeadsCache(merged);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** Явная смена людей на карточке (в т.ч. снятие всех) — одна строка кэша. */
+export function upsertKanbanCardHeadCache(card: KanbanCard): void {
+  if (typeof window === "undefined") return;
+  try {
+    const key = cacheKeyForCard(card);
+    if (!key) return;
+    const existing = loadKanbanCardHeadsCache() ?? {};
+    existing[key] = {
+      assignees: [...(card.assignees || [])],
+      participants: [...(card.participants || [])],
+      fingerprint: card.kaitenMembersFingerprint ?? null,
+      stageDue: getKanbanStageDue(card),
+    };
+    writeHeadsCache(existing);
   } catch {
     /* quota / private mode */
   }

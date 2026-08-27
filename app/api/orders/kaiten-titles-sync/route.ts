@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       ok: true,
       titles: {},
       stageDueByOrderId: {},
+      membersByOrderId: {},
       syncedCount: 0,
       errorCount: 0,
       clicklabByOrderId: {},
@@ -73,6 +74,7 @@ export async function POST(req: Request) {
     const {
       titles,
       stageDueByOrderId,
+      membersByOrderId,
       syncedCount,
       errorCount,
       clicklabByOrderId,
@@ -94,6 +96,7 @@ export async function POST(req: Request) {
       ok: !rateLimited,
       titles,
       stageDueByOrderId,
+      membersByOrderId,
       syncedCount,
       errorCount,
       clicklabByOrderId,

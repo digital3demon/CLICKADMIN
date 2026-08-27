@@ -74,4 +74,49 @@ describe("applyKaitenRefreshPatchesToState", () => {
     expect(card.stageDueDate).toBe("2026-09-03");
     expect(card.kaitenCardId).toBe(68058214);
   });
+
+  it("пустой inbound не снимает уже стоящих людей (кириллица в title)", () => {
+    const state = {
+      activeBoardId: "ortho",
+      boards: [
+        {
+          id: "ortho",
+          title: "Ортопедия",
+          columns: [
+            {
+              id: "c",
+              cards: [
+                {
+                  id: "kc-1",
+                  title: "2608-312 Растегаев Ю.В.",
+                  linkedOrderId: "ord-а",
+                  assignees: ["u-юлич"],
+                  participants: ["u-саша"],
+                  dueDate: "",
+                  urgent: false,
+                } as KanbanCard,
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+
+    const { changed, state: next } = applyKaitenRefreshPatchesToState(state, [
+      {
+        cardId: "kaiten-order-ord-а",
+        linkedOrderId: "ord-а",
+        kaitenCardId: 68058214,
+        assignees: [],
+        participants: [],
+        fingerprint: "fp-empty",
+        unmappedLabels: ["Kaiten user"],
+        kaitenHead: null,
+      },
+    ]);
+    expect(changed).toBe(0);
+    const card = next.boards[0]!.columns[0]!.cards[0]!;
+    expect(card.assignees).toEqual(["u-юлич"]);
+    expect(card.participants).toEqual(["u-саша"]);
+  });
 });

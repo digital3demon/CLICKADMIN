@@ -55,7 +55,10 @@ import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban
 import { applyKaitenRefreshPatchesToState } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
-import { overlayLocalKanbanCardHeadOntoRemote } from "@/lib/kanban/preserve-kanban-card-head";
+import {
+  applyKanbanMembersByOrderId,
+  overlayLocalKanbanCardHeadOntoRemote,
+} from "@/lib/kanban/preserve-kanban-card-head";
 import {
   forgetOptimisticKanbanStageDue,
   rememberOptimisticKanbanStageDue,
@@ -116,7 +119,10 @@ import {
   applyKanbanCardHeadsCache,
   loadKanbanCardHeadsCache,
 } from "@/lib/kanban/kanban-card-heads-cache";
-import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
+import {
+  kanbanMembersLookStarved,
+  shouldSkipSparseKanbanTenantWrite,
+} from "@/lib/kanban/kanban-tenant-write-guard";
 import {
   applyKanbanArchiveSettings,
   extractKanbanArchiveSettings,
@@ -511,6 +517,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const lastTenantKanbanRef = useRef<KanbanAppState | null>(null);
   /** F5: не писать default в tenant, пока GET не подтвердил живой снимок. */
   const tenantKanbanWriteAllowedRef = useRef(isDemo);
+  /** Один раз за сессию: если доска без людей — подтянуть состав с Kaiten. */
+  const membersAutoRecoverRef = useRef(false);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
@@ -544,6 +552,48 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     },
     [isDemo],
   );
+
+  const recoverStarvedKanbanMembers = useCallback(async () => {
+    if (isDemo) return;
+    const cur = appStateRef.current;
+    if (!cur || !kanbanMembersLookStarved(cur)) return;
+    const targets = collectKanbanKaitenRefreshTargets(cur);
+    if (targets.length === 0) return;
+    try {
+      const res = await fetch("/api/kanban/members-backfill", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "batch",
+          all: true,
+          total: targets.length,
+          targets,
+        }),
+      });
+      if (!res.ok) return;
+      const batch = (await res.json()) as {
+        patches?: Parameters<typeof applyKaitenRefreshPatchesToState>[1];
+      };
+      const patches = Array.isArray(batch.patches) ? batch.patches : [];
+      if (patches.length === 0) return;
+      setAppState((prev) => {
+        if (!prev) return prev;
+        const { state } = applyKaitenRefreshPatchesToState(prev, patches);
+        saveKanbanState(state, false);
+        if (canPersistTenantKanban(state)) {
+          void writeClientState(
+            "tenant",
+            "kanbanAppStateV3",
+            kanbanStateForPersistence(state, false),
+          );
+        }
+        return state;
+      });
+    } catch {
+      /* offline */
+    }
+  }, [isDemo, canPersistTenantKanban]);
 
   const optimisticKaitenColumnMovesRef = useRef(
     new Map<
@@ -756,13 +806,26 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             } else if (tsRes.ok) {
               const tsJson = (await tsRes.json()) as {
                 stageDueByOrderId?: Record<string, string | null>;
+                membersByOrderId?: Record<
+                  string,
+                  { assignees?: string[]; participants?: string[] }
+                >;
               };
               const inboundStageDue = tsJson.stageDueByOrderId;
-              if (inboundStageDue && typeof inboundStageDue === "object") {
+              const inboundMembers = tsJson.membersByOrderId;
+              if (
+                (inboundStageDue && typeof inboundStageDue === "object") ||
+                (inboundMembers && typeof inboundMembers === "object")
+              ) {
                 setAppState((prev) => {
                   if (!prev) return prev;
                   const next = structuredClone(prev);
-                  applyKaitenStageDueByOrderId(next, inboundStageDue);
+                  if (inboundStageDue && typeof inboundStageDue === "object") {
+                    applyKaitenStageDueByOrderId(next, inboundStageDue);
+                  }
+                  if (inboundMembers && typeof inboundMembers === "object") {
+                    applyKanbanMembersByOrderId(next, inboundMembers);
+                  }
                   return next;
                 });
               }
@@ -880,6 +943,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const params = new URLSearchParams(window.location.search);
     const bid = params.get("board");
     let next = isDemo ? normalizeDemoKanbanAppState(loaded) : loaded;
+    if (!isDemo) {
+      applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+    }
     if (
       !isDemo &&
       bid &&
@@ -1227,6 +1293,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       window.removeEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
     };
   }, [kanbanStateReady, syncKanbanMirrorFromApi]);
+
+  useEffect(() => {
+    if (isDemo || !kanbanStateReady || !appState) return;
+    if (membersAutoRecoverRef.current) return;
+    if (!kanbanMembersLookStarved(appState)) return;
+    membersAutoRecoverRef.current = true;
+    void recoverStarvedKanbanMembers();
+  }, [appState, isDemo, kanbanStateReady, recoverStarvedKanbanMembers]);
 
   useEffect(() => {
     if (isDemo) return;
