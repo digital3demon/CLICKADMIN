@@ -15,6 +15,7 @@ import {
   UserRole,
 } from "@prisma/client";
 import { emptyProsthetics, prostheticsToJson } from "@/lib/order-prosthetics";
+import { applyStockMovement } from "@/lib/inventory/apply-stock-movement";
 import { ORDER_NUMBER_SETTINGS_ID } from "@/lib/order-number";
 import { ensureFinanceOfficeDebtColumns } from "@/lib/ensure-finance-office-debt-columns";
 import { ensureInventoryItemColumns } from "@/lib/ensure-inventory-item-columns";
@@ -34,7 +35,7 @@ const DEMO_AUTHOR = "Владелец (демо)";
  * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
  * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
  */
-export const DEMO_SEED_REVISION = 7;
+export const DEMO_SEED_REVISION = 8;
 const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
 /** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
 const DEMO_ORDER_COUNT_MIN = 50;
@@ -400,6 +401,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           isActive: true,
           manufacturer: "ДемоCAD",
           referenceUnitPriceRub: 4200,
+          saleUnitPriceRub: 6800,
         },
       }),
       tx.inventoryItem.create({
@@ -412,6 +414,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           isActive: true,
           manufacturer: "ДемоImplant",
           referenceUnitPriceRub: 890,
+          saleUnitPriceRub: 1450,
         },
       }),
       tx.inventoryItem.create({
@@ -424,6 +427,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           isActive: true,
           manufacturer: "ДемоCAD",
           referenceUnitPriceRub: 2100,
+          saleUnitPriceRub: 3500,
         },
       }),
     ]);
@@ -919,6 +923,67 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       createdOrders.push(order);
     }
 
+    /**
+     * Списания «наше» к нарядам: ourLines + SALE_ISSUE через applyStockMovement
+     * (остатки и журнал совпадают; вкладка «Склад» / блок протетики в наряде).
+     */
+    const ourWriteOffs: Array<{
+      orderIx: number;
+      itemIx: number;
+      qty: number;
+      clientDesc?: string;
+    }> = [
+      {
+        orderIx: 10,
+        itemIx: 1,
+        qty: 1,
+        clientDesc: "Абатмент Multi-unit на 36",
+      },
+      { orderIx: 18, itemIx: 0, qty: 1 },
+      { orderIx: 25, itemIx: 2, qty: 1 },
+      { orderIx: 32, itemIx: 1, qty: 2 },
+      { orderIx: 40, itemIx: 0, qty: 1 },
+      { orderIx: 48, itemIx: 2, qty: 1 },
+      { orderIx: 55, itemIx: 1, qty: 1 },
+      { orderIx: 70, itemIx: 0, qty: 1 },
+    ];
+    for (const spec of ourWriteOffs) {
+      const order = createdOrders[spec.orderIx];
+      if (!order) continue;
+      const item = invPros[spec.itemIx]!;
+      const ourLines = [
+        {
+          inventoryItemId: item.id,
+          warehouseId: whPros.id,
+          quantity: spec.qty,
+        },
+      ];
+      const clientProvided = spec.clientDesc
+        ? [{ description: spec.clientDesc, quantity: 1 }]
+        : [];
+      await applyStockMovement(tx, {
+        kind: StockMovementKind.SALE_ISSUE,
+        itemId: item.id,
+        warehouseId: whPros.id,
+        quantity: spec.qty,
+        orderId: order.id,
+        note: "Протетика (наше)",
+        actorLabel: DEMO_AUTHOR,
+        idempotencyKey: `demo-pros-our-${order.orderNumber}`,
+      });
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          prosthetics: prostheticsToJson({
+            v: 1,
+            clientProvided,
+            ourLines,
+          }),
+          prostheticsOrdered: true,
+        },
+      });
+    }
+
     const latestYymm = [...seqByYymm.keys()].sort().at(-1) ?? "2608";
     const maxSeqLatest = seqByYymm.get(latestYymm) ?? 0;
     await tx.orderNumberSettings.update({
@@ -1323,15 +1388,30 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       syncStatus: "local";
     };
 
+    type SeedChatExtras = {
+      correctionText?: string;
+      correctionDraftId?: string;
+      correctionCreatedAt?: Date;
+      correctionResolvedAt?: Date | null;
+      correctionRejectedAt?: Date | null;
+      clarifyAskedAt?: Date | null;
+      clarifyCommentId?: string | null;
+      clarifyReplyAt?: Date | null;
+      prostheticsText?: string;
+      prostheticsDraftId?: string;
+      prostheticsCreatedAt?: Date;
+      prostheticsResolvedAt?: Date | null;
+      prostheticsRejectedAt?: Date | null;
+      orderedAt?: Date | null;
+      arrivedAt?: Date | null;
+      checkedAt?: Date | null;
+      completedAt?: Date | null;
+    };
+
     async function seedOrderChat(
       orderId: string,
       comments: SeedComment[],
-      extras?: {
-        correctionText?: string;
-        correctionDraftId?: string;
-        prostheticsText?: string;
-        prostheticsDraftId?: string;
-      },
+      extras?: SeedChatExtras,
     ) {
       await tx.tenantClientState.create({
         data: {
@@ -1341,12 +1421,22 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         },
       });
       if (extras?.correctionText && extras.correctionDraftId) {
+        const corrCreated = extras.correctionCreatedAt ?? hoursAgo(2);
         await tx.orderChatCorrection.create({
           data: {
             orderId,
             source: OrderChatCorrectionSource.DEMO_KANBAN,
             text: extras.correctionText,
             authorLabel: DEMO_AUTHOR,
+            createdAt: corrCreated,
+            resolvedAt: extras.correctionResolvedAt ?? null,
+            resolvedByUserId: extras.correctionResolvedAt ? OWNER_ID : null,
+            rejectedAt: extras.correctionRejectedAt ?? null,
+            rejectedByUserId: extras.correctionRejectedAt ? OWNER_ID : null,
+            clarifyAskedAt: extras.clarifyAskedAt ?? null,
+            clarifyAskedByUserId: extras.clarifyAskedAt ? OWNER_ID : null,
+            clarifyCommentId: extras.clarifyCommentId ?? null,
+            clarifyReplyAt: extras.clarifyReplyAt ?? null,
           },
         });
         await tx.orderChatInboxItem.create({
@@ -1359,16 +1449,39 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
             authorLabel: DEMO_AUTHOR,
             crmDraftId: extras.correctionDraftId,
             syncState: OrderChatInboxSyncState.LOCAL_ONLY,
+            createdAt: corrCreated,
+            resolvedAt: extras.correctionResolvedAt ?? null,
+            resolvedByUserId: extras.correctionResolvedAt ? OWNER_ID : null,
+            rejectedAt: extras.correctionRejectedAt ?? null,
+            rejectedByUserId: extras.correctionRejectedAt ? OWNER_ID : null,
+            clarifyAskedAt: extras.clarifyAskedAt ?? null,
+            clarifyAskedByUserId: extras.clarifyAskedAt ? OWNER_ID : null,
+            clarifyCommentId: extras.clarifyCommentId ?? null,
+            clarifyReplyAt: extras.clarifyReplyAt ?? null,
           },
         });
       }
       if (extras?.prostheticsText && extras.prostheticsDraftId) {
+        const prosCreated = extras.prostheticsCreatedAt ?? hoursAgo(1);
         await tx.orderProstheticsRequest.create({
           data: {
             orderId,
             source: OrderChatCorrectionSource.DEMO_KANBAN,
             text: extras.prostheticsText,
             authorLabel: DEMO_AUTHOR,
+            createdAt: prosCreated,
+            resolvedAt: extras.prostheticsResolvedAt ?? null,
+            resolvedByUserId: extras.prostheticsResolvedAt ? OWNER_ID : null,
+            rejectedAt: extras.prostheticsRejectedAt ?? null,
+            rejectedByUserId: extras.prostheticsRejectedAt ? OWNER_ID : null,
+            orderedAt: extras.orderedAt ?? null,
+            orderedByUserId: extras.orderedAt ? OWNER_ID : null,
+            arrivedAt: extras.arrivedAt ?? null,
+            arrivedByUserId: extras.arrivedAt ? OWNER_ID : null,
+            checkedAt: extras.checkedAt ?? null,
+            checkedByUserId: extras.checkedAt ? OWNER_ID : null,
+            completedAt: extras.completedAt ?? null,
+            completedByUserId: extras.completedAt ? OWNER_ID : null,
           },
         });
         await tx.orderChatInboxItem.create({
@@ -1381,6 +1494,19 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
             authorLabel: DEMO_AUTHOR,
             crmDraftId: extras.prostheticsDraftId,
             syncState: OrderChatInboxSyncState.LOCAL_ONLY,
+            createdAt: prosCreated,
+            resolvedAt: extras.prostheticsResolvedAt ?? null,
+            resolvedByUserId: extras.prostheticsResolvedAt ? OWNER_ID : null,
+            rejectedAt: extras.prostheticsRejectedAt ?? null,
+            rejectedByUserId: extras.prostheticsRejectedAt ? OWNER_ID : null,
+            orderedAt: extras.orderedAt ?? null,
+            orderedByUserId: extras.orderedAt ? OWNER_ID : null,
+            arrivedAt: extras.arrivedAt ?? null,
+            arrivedByUserId: extras.arrivedAt ? OWNER_ID : null,
+            checkedAt: extras.checkedAt ?? null,
+            checkedByUserId: extras.checkedAt ? OWNER_ID : null,
+            completedAt: extras.completedAt ?? null,
+            completedByUserId: extras.completedAt ? OWNER_ID : null,
           },
         });
       }
@@ -1392,6 +1518,13 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     const oChat1 = createdOrders[createdOrders.length - 1]!;
     const oChat2 = createdOrders[createdOrders.length - 2]!;
     const oChat3 = createdOrders[createdOrders.length - 3]!;
+    const oChat4 = createdOrders[createdOrders.length - 4]!;
+    const oChat5 = createdOrders[createdOrders.length - 5]!;
+    const oChat6 = createdOrders[10] ?? createdOrders[createdOrders.length - 6]!;
+    const oChat7 = createdOrders[32] ?? createdOrders[createdOrders.length - 7]!;
+    const oChat8 = createdOrders[55] ?? createdOrders[createdOrders.length - 8]!;
+
+    /** В работе — корректировка ожидает решения */
     await seedOrderChat(
       oChat1.id,
       [
@@ -1426,9 +1559,11 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       {
         correctionText: "Убрать 12, оставить только 11",
         correctionDraftId: c1b,
+        correctionCreatedAt: hoursAgo(2),
       },
     );
 
+    /** Протетика: подтверждена и заказана у поставщика (в пути) */
     const c2a = "cm_demo_chat_002a";
     const c2b = "cm_demo_chat_002b";
     await seedOrderChat(
@@ -1456,6 +1591,9 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       {
         prostheticsText: "Абатмент Multi-unit на 36",
         prostheticsDraftId: c2b,
+        prostheticsCreatedAt: hoursAgo(26),
+        prostheticsResolvedAt: hoursAgo(24),
+        orderedAt: hoursAgo(22),
       },
     );
 
@@ -1471,6 +1609,179 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         syncStatus: "local",
       },
     ]);
+
+    /** Принятая корректировка */
+    const c4a = "cm_demo_chat_004a";
+    const c4b = "cm_demo_chat_004b";
+    await seedOrderChat(
+      oChat4.id,
+      [
+        {
+          id: c4a,
+          userId: OWNER_ID,
+          text: "!!! Сменить оттенок A2 → A3.5 на 21–22",
+          createdAt: hoursAgo(30).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+        {
+          id: c4b,
+          userId: OWNER_ID,
+          text: "Корректировку приняли, оттенок поменяли.",
+          createdAt: hoursAgo(28).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+      ],
+      {
+        correctionText: "Сменить оттенок A2 → A3.5 на 21–22",
+        correctionDraftId: c4a,
+        correctionCreatedAt: hoursAgo(30),
+        correctionResolvedAt: hoursAgo(28),
+      },
+    );
+
+    /** Отклонённая корректировка */
+    const c5a = "cm_demo_chat_005a";
+    const c5b = "cm_demo_chat_005b";
+    await seedOrderChat(
+      oChat5.id,
+      [
+        {
+          id: c5a,
+          userId: OWNER_ID,
+          text: "!!! Срезать контактный пункт на 36 — врач настаивает",
+          createdAt: hoursAgo(40).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+        {
+          id: c5b,
+          userId: OWNER_ID,
+          text: "Корректировку отклонили: по прикусу всё ок на модели.",
+          createdAt: hoursAgo(36).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+      ],
+      {
+        correctionText: "Срезать контактный пункт на 36 — врач настаивает",
+        correctionDraftId: c5a,
+        correctionCreatedAt: hoursAgo(40),
+        correctionRejectedAt: hoursAgo(36),
+      },
+    );
+
+    /** Протетика: полный цикл до «Готово» + списание «наше» на том же наряде */
+    const c6a = "cm_demo_chat_006a";
+    const c6b = "cm_demo_chat_006b";
+    await seedOrderChat(
+      oChat6.id,
+      [
+        {
+          id: c6a,
+          userId: OWNER_ID,
+          text: "??? Титановый абатмент + винт на 36",
+          createdAt: daysAgo(5, 10).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+        {
+          id: c6b,
+          userId: OWNER_ID,
+          text: "Пришло, проверили, списали со склада протетики.",
+          createdAt: daysAgo(2, 14).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+      ],
+      {
+        prostheticsText: "Титановый абатмент + винт на 36",
+        prostheticsDraftId: c6a,
+        prostheticsCreatedAt: daysAgo(5, 10),
+        prostheticsResolvedAt: daysAgo(5, 8),
+        orderedAt: daysAgo(5, 7),
+        arrivedAt: daysAgo(3, 11),
+        checkedAt: daysAgo(2, 16),
+        completedAt: daysAgo(2, 14),
+      },
+    );
+
+    /** Корректировка с уточнением */
+    const c7a = "cm_demo_chat_007a";
+    const c7q = "cm_demo_chat_007q";
+    const c7r = "cm_demo_chat_007r";
+    await seedOrderChat(
+      oChat7.id,
+      [
+        {
+          id: c7a,
+          userId: OWNER_ID,
+          text: "!!! Укоротить режущий край на 0.5 мм",
+          createdAt: hoursAgo(20).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+        {
+          id: c7q,
+          userId: OWNER_ID,
+          text: "Уточните: только 11 или ещё 21?",
+          createdAt: hoursAgo(18).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+        {
+          id: c7r,
+          userId: OWNER_ID,
+          text: "Только 11, 21 не трогаем.",
+          createdAt: hoursAgo(12).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+      ],
+      {
+        correctionText: "Укоротить режущий край на 0.5 мм",
+        correctionDraftId: c7a,
+        correctionCreatedAt: hoursAgo(20),
+        clarifyAskedAt: hoursAgo(18),
+        clarifyCommentId: c7q,
+        clarifyReplyAt: hoursAgo(12),
+      },
+    );
+
+    /** Протетика: пришла, ждёт проверки */
+    const c8a = "cm_demo_chat_008a";
+    await seedOrderChat(
+      oChat8.id,
+      [
+        {
+          id: c8a,
+          userId: OWNER_ID,
+          text: "??? Циркониевый диск под коронки 45–47",
+          createdAt: daysAgo(4, 9).toISOString(),
+          authorLabel: DEMO_AUTHOR,
+          source: "CRM",
+          syncStatus: "local",
+        },
+      ],
+      {
+        prostheticsText: "Циркониевый диск под коронки 45–47",
+        prostheticsDraftId: c8a,
+        prostheticsCreatedAt: daysAgo(4, 9),
+        prostheticsResolvedAt: daysAgo(4, 7),
+        orderedAt: daysAgo(4, 6),
+        arrivedAt: daysAgo(1, 15),
+      },
+    );
 
     await tx.tenantClientState.create({
       data: {
