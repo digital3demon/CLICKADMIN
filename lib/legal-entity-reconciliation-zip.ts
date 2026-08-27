@@ -40,8 +40,10 @@ export async function buildLegalEntityReconciliationZip(input: {
     input.periodToStr,
   );
   const zip = new JSZip();
-  zip.file(`${base}.pdf`, pdfBuf);
-  zip.file(`${base}.xlsx`, xlsx.buffer);
+  const pdfBytes = pdfBuf instanceof Uint8Array ? pdfBuf : new Uint8Array(pdfBuf);
+  const xlsxBytes = new Uint8Array(xlsx.buffer);
+  zip.file(`${base}.pdf`, pdfBytes, { binary: true });
+  zip.file(`${base}.xlsx`, xlsxBytes, { binary: true });
   const bytes = await zip.generateAsync({ type: "uint8array" });
   const utfName = `${reconciliationFileStem(
     input.title,

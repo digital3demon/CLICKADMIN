@@ -21,7 +21,23 @@ import {
   reconColSpan as span,
 } from "@/lib/clinic-reconciliation-layout";
 
+/**
+ * Сетка сверки: линии — отдельные View, не border ячеек.
+ * Yoga срезает 1pt у border на краю flex-ряда; линия-sibling остаётся.
+ * В ряду две вертикальные «спины» по 1pt → ячейки суммируют PAGE_INNER-2.
+ */
+const SPINE = 1;
 const CELL_PAD = 2;
+
+function innerCol(i: number): number {
+  return i === 9 ? COL_W[9]! - SPINE * 2 : COL_W[i]!;
+}
+
+function innerSpan(from: number, to: number): number {
+  let s = 0;
+  for (let i = from; i <= to; i++) s += innerCol(i);
+  return s;
+}
 
 const styles = StyleSheet.create({
   page: {
@@ -34,27 +50,26 @@ const styles = StyleSheet.create({
     color: "#000",
     backgroundColor: "#fff",
   },
-  topWrap: {
+  hLine: {
     width: PAGE_INNER,
-    flexDirection: "row",
-    marginBottom: 0,
+    height: SPINE,
+    backgroundColor: BORDER,
   },
-  row: {
+  vLine: {
+    width: SPINE,
+    alignSelf: "stretch",
+    backgroundColor: BORDER,
+  },
+  rowInner: {
     flexDirection: "row",
     width: PAGE_INNER,
     alignItems: "stretch",
-  },
-  mainWrap: {
-    width: PAGE_INNER,
   },
 });
 
 function PdfCell({
   w,
-  first,
   last,
-  box,
-  top,
   bg,
   align,
   bold,
@@ -62,10 +77,7 @@ function PdfCell({
   children,
 }: {
   w: number;
-  first?: boolean;
   last?: boolean;
-  box?: boolean;
-  top?: boolean;
   bg?: string;
   align?: "left" | "right" | "center";
   bold?: boolean;
@@ -83,15 +95,13 @@ function PdfCell({
         flexBasis: w,
         padding: CELL_PAD,
         backgroundColor: bg,
-        // Каждая ячейка — замкнутая рамка. Yoga срезает «только правую»
-        // у последней колонки, если опираться на border родителя.
         borderStyle: "solid",
         borderColor: BORDER,
-        borderTopWidth: 1,
-        borderRightWidth: 1,
-        borderBottomWidth: 1,
-        borderLeftWidth: 1,
-        justifyContent: "flex-start",
+        borderRightWidth: last ? 0 : 1,
+        borderLeftWidth: 0,
+        borderTopWidth: 0,
+        borderBottomWidth: 0,
+        justifyContent: "center",
       }}
     >
       <Text
@@ -111,29 +121,78 @@ function PdfCell({
 
 function GridRow({
   bg,
-  lastRow,
+  first,
   minHeight,
-  top,
   children,
 }: {
   bg?: string;
-  lastRow?: boolean;
+  first?: boolean;
   minHeight?: number;
-  top?: boolean;
   children: ReactNode;
 }) {
   return (
+    <View wrap={false} style={{ width: PAGE_INNER }}>
+      {first ? <View style={styles.hLine} /> : null}
+      <View
+        style={[
+          styles.rowInner,
+          { backgroundColor: bg, minHeight: minHeight ?? 14 },
+        ]}
+      >
+        <View style={styles.vLine} />
+        {children}
+        <View style={styles.vLine} />
+      </View>
+      <View style={styles.hLine} />
+    </View>
+  );
+}
+
+function BoxCell({
+  w,
+  bg,
+  align,
+  bold,
+  size,
+  children,
+}: {
+  w: number;
+  bg?: string;
+  align?: "left" | "right" | "center";
+  bold?: boolean;
+  size?: number;
+  children?: string;
+}) {
+  return (
     <View
-      wrap={false}
-      style={[
-        styles.row,
-        {
-          backgroundColor: bg,
-          minHeight: minHeight ?? 14,
-        },
-      ]}
+      style={{
+        width: w,
+        minWidth: w,
+        maxWidth: w,
+        flexGrow: 0,
+        flexShrink: 0,
+        padding: CELL_PAD,
+        backgroundColor: bg,
+        borderStyle: "solid",
+        borderColor: BORDER,
+        borderTopWidth: 1,
+        borderRightWidth: 1,
+        borderBottomWidth: 1,
+        borderLeftWidth: 1,
+        justifyContent: "center",
+      }}
     >
-      {children}
+      <Text
+        style={{
+          fontSize: size ?? 6.5,
+          lineHeight: 1.15,
+          textAlign: align ?? "left",
+          fontWeight: bold ? 700 : 400,
+          color: bg === HEAD_GRAY ? "#FFFFFF" : "#000000",
+        }}
+      >
+        {children ?? ""}
+      </Text>
     </View>
   );
 }
@@ -145,42 +204,40 @@ function moneyOrDash(v: number | null): string {
 
 function DetailRow({
   line,
-  last,
 }: {
   line: ReconciliationPdfDetailLine;
-  last: boolean;
 }) {
   const showMeta = line.showOrderColumns;
   return (
-    <GridRow bg={ROW_GRAY} lastRow={last} minHeight={14}>
-      <PdfCell w={COL_W[0]} first align="right" bg={ROW_GRAY}>
+    <GridRow bg={ROW_GRAY} minHeight={14}>
+      <PdfCell w={innerCol(0)} align="right" bg={ROW_GRAY}>
         {showMeta ? line.zashla : ""}
       </PdfCell>
-      <PdfCell w={COL_W[1]} align="right" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(1)} align="right" bg={ROW_GRAY}>
         {showMeta && line.otpr !== "—" ? line.otpr : ""}
       </PdfCell>
-      <PdfCell w={COL_W[2]} align="center" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(2)} align="center" bg={ROW_GRAY}>
         {showMeta ? line.orderNumber : ""}
       </PdfCell>
-      <PdfCell w={COL_W[3]} align="left" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(3)} align="left" bg={ROW_GRAY}>
         {showMeta ? line.patient : ""}
       </PdfCell>
-      <PdfCell w={COL_W[4]} align="left" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(4)} align="left" bg={ROW_GRAY}>
         {showMeta ? line.doctor : ""}
       </PdfCell>
-      <PdfCell w={COL_W[5]} align="left" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(5)} align="left" bg={ROW_GRAY}>
         {line.description}
       </PdfCell>
-      <PdfCell w={COL_W[6]} align="right" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(6)} align="right" bg={ROW_GRAY}>
         {String(line.quantity).replace(".", ",")}
       </PdfCell>
-      <PdfCell w={COL_W[7]} align="right" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(7)} align="right" bg={ROW_GRAY}>
         {moneyOrDash(line.unitRub)}
       </PdfCell>
-      <PdfCell w={COL_W[8]} align="right" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(8)} align="right" bg={ROW_GRAY}>
         {formatRubPdf(line.lineTotalRub)}
       </PdfCell>
-      <PdfCell w={COL_W[9]} last align="right" bg={ROW_GRAY}>
+      <PdfCell w={innerCol(9)} last align="right" bg={ROW_GRAY}>
         {line.discountPercent == null
           ? ""
           : `${String(line.discountPercent).replace(".", ",")}%`}
@@ -189,37 +246,37 @@ function DetailRow({
   );
 }
 
-function DetailHeaderRow() {
+function DetailHeaderRow({ first }: { first?: boolean }) {
   return (
-    <GridRow bg={HEAD_GRAY} minHeight={24} top>
-      <PdfCell w={COL_W[0]} first bg={HEAD_GRAY} align="center" bold size={5.9}>
+    <GridRow bg={HEAD_GRAY} minHeight={24} first={first}>
+      <PdfCell w={innerCol(0)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Число когда зашла работа
       </PdfCell>
-      <PdfCell w={COL_W[1]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(1)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Число отправки работы
       </PdfCell>
-      <PdfCell w={COL_W[2]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(2)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         {`Номер заказ-\nнаряда`}
       </PdfCell>
-      <PdfCell w={COL_W[3]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(3)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Пациент
       </PdfCell>
-      <PdfCell w={COL_W[4]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(4)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Врач
       </PdfCell>
-      <PdfCell w={COL_W[5]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(5)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Выставлено(наименование позиции)
       </PdfCell>
-      <PdfCell w={COL_W[6]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(6)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Кол-во единиц
       </PdfCell>
-      <PdfCell w={COL_W[7]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(7)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Цена за единицу
       </PdfCell>
-      <PdfCell w={COL_W[8]} bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(8)} bg={HEAD_GRAY} align="center" bold size={5.9}>
         Стоим. (Сумма единиц)
       </PdfCell>
-      <PdfCell w={COL_W[9]} last bg={HEAD_GRAY} align="center" bold size={5.9}>
+      <PdfCell w={innerCol(9)} last bg={HEAD_GRAY} align="center" bold size={5.9}>
         СКИДКА
       </PdfCell>
     </GridRow>
@@ -231,14 +288,14 @@ function SummaryBlock({
 }: {
   payload: ClinicReconciliationPdfPayload;
 }) {
-  const nameW = span(0, 5);
-  const qtyW = COL_W[6];
-  const unitW = COL_W[7];
-  const sumW = span(8, 9);
+  const nameW = innerSpan(0, 5);
+  const qtyW = innerCol(6);
+  const unitW = innerCol(7);
+  const sumW = innerSpan(8, 9);
   return (
-    <View style={{ width: PAGE_INNER, marginBottom: 0 }}>
-      <GridRow bg={HEAD_GRAY} minHeight={18} top>
-        <PdfCell w={nameW} first bg={HEAD_GRAY} align="center" bold size={5.8}>
+    <View style={{ width: PAGE_INNER }}>
+      <GridRow bg={HEAD_GRAY} minHeight={18} first>
+        <PdfCell w={nameW} bg={HEAD_GRAY} align="center" bold size={5.8}>
           НАИМЕНОВАНИЕ ПОЗИЦИИ
         </PdfCell>
         <PdfCell w={qtyW} bg={HEAD_GRAY} align="center" bold size={5.8}>
@@ -253,7 +310,7 @@ function SummaryBlock({
       </GridRow>
       {payload.summary.map((row, i) => (
         <GridRow key={`s-${i}`} bg={ROW_GRAY} minHeight={15}>
-          <PdfCell w={nameW} first bg={ROW_GRAY} size={6.2}>
+          <PdfCell w={nameW} bg={ROW_GRAY} size={6.2}>
             {row.label}
           </PdfCell>
           <PdfCell w={qtyW} bg={ROW_GRAY} align="right" size={6.2}>
@@ -267,6 +324,30 @@ function SummaryBlock({
           </PdfCell>
         </GridRow>
       ))}
+      <GridRow bg={ROW_GRAY} minHeight={20}>
+        <PdfCell w={innerSpan(0, 2)} bg={ROW_GRAY} align="center" bold>
+          {payload.labLegalName}
+        </PdfCell>
+        <PdfCell w={innerCol(3)} bg={ROW_GRAY} align="center" bold>
+          {payload.periodFromLabel}
+        </PdfCell>
+        <PdfCell w={innerCol(4)} bg={ROW_GRAY} align="center" bold>
+          {payload.periodToLabel}
+        </PdfCell>
+        <PdfCell w={innerCol(5)} bg={ROW_GRAY} align="center" bold>
+          {payload.clinicTitleLine}
+        </PdfCell>
+        <PdfCell w={innerCol(6)} bg={ROW_GRAY} align="center" bold>
+          {String(payload.yellowRow.totalUnits).replace(".", ",")}
+        </PdfCell>
+        <PdfCell w={innerCol(7)} bg={ROW_GRAY} />
+        <PdfCell w={innerCol(8)} bg={ROW_GRAY} align="center" bold>
+          {formatRubPdf(payload.yellowRow.baseTotalRub)}
+        </PdfCell>
+        <PdfCell w={innerCol(9)} last bg={ROW_GRAY} align="center" bold>
+          {formatRubPdf(payload.yellowRow.discountedTotalRub)}
+        </PdfCell>
+      </GridRow>
     </View>
   );
 }
@@ -290,21 +371,21 @@ function PayTotalsBlock({
     <View wrap={false} style={{ width: PAGE_INNER }}>
       <View style={{ flexDirection: "row", width: PAGE_INNER }}>
         <View style={spacer} />
-        <PdfCell w={labelW} first box top bg={HEAD_GRAY} align="center" bold size={6.4}>
+        <BoxCell w={labelW} bg={HEAD_GRAY} align="center" bold size={6.4}>
           Всего к оплате:
-        </PdfCell>
-        <PdfCell w={valueW} last box top bg={ROW_GRAY} align="right" bold>
+        </BoxCell>
+        <BoxCell w={valueW} bg={ROW_GRAY} align="right" bold>
           {formatRubPdf(payload.yellowRow.discountedTotalRub)}
-        </PdfCell>
+        </BoxCell>
       </View>
       <View style={{ flexDirection: "row", width: PAGE_INNER }}>
         <View style={spacer} />
-        <PdfCell w={labelW} first box bg={HEAD_GRAY} align="center" bold size={6.4}>
+        <BoxCell w={labelW} bg={HEAD_GRAY} align="center" bold size={6.4}>
           В т.ч. Сумма НДС 5%:
-        </PdfCell>
-        <PdfCell w={valueW} last box bg={ROW_GRAY} align="right" bold>
+        </BoxCell>
+        <BoxCell w={valueW} bg={ROW_GRAY} align="right" bold>
           {formatRubPdf(payload.yellowRow.vatRub)}
-        </PdfCell>
+        </BoxCell>
       </View>
     </View>
   );
@@ -327,49 +408,15 @@ export function ClinicReconciliationPdfDocument({
         <View
           fixed
           render={({ pageNumber }) =>
-            pageNumber > 1 ? <DetailHeaderRow /> : <View />
+            pageNumber > 1 ? <DetailHeaderRow first /> : <View />
           }
         />
         <SummaryBlock payload={payload} />
-
-        <View style={styles.mainWrap}>
-          <GridRow bg={ROW_GRAY} minHeight={20} top>
-            <PdfCell w={span(0, 2)} first bg={ROW_GRAY} align="center" bold>
-              {payload.labLegalName}
-            </PdfCell>
-            <PdfCell w={COL_W[3]} bg={ROW_GRAY} align="center" bold>
-              {payload.periodFromLabel}
-            </PdfCell>
-            <PdfCell w={COL_W[4]} bg={ROW_GRAY} align="center" bold>
-              {payload.periodToLabel}
-            </PdfCell>
-            <PdfCell w={COL_W[5]} bg={ROW_GRAY} align="center" bold>
-              {payload.clinicTitleLine}
-            </PdfCell>
-            <PdfCell w={COL_W[6]} bg={ROW_GRAY} align="center" bold>
-              {String(payload.yellowRow.totalUnits).replace(".", ",")}
-            </PdfCell>
-            <PdfCell w={COL_W[7]} bg={ROW_GRAY} />
-            <PdfCell w={COL_W[8]} bg={ROW_GRAY} align="center" bold>
-              {formatRubPdf(payload.yellowRow.baseTotalRub)}
-            </PdfCell>
-            <PdfCell w={COL_W[9]} last bg={ROW_GRAY} align="center" bold>
-              {formatRubPdf(payload.yellowRow.discountedTotalRub)}
-            </PdfCell>
-          </GridRow>
-
-          <PayTotalsBlock payload={payload} />
-
-          <DetailHeaderRow />
-
-          {payload.detail.map((line, i) => (
-            <DetailRow
-              key={`d-${i}`}
-              line={line}
-              last={i === payload.detail.length - 1}
-            />
-          ))}
-        </View>
+        <PayTotalsBlock payload={payload} />
+        <DetailHeaderRow first />
+        {payload.detail.map((line, i) => (
+          <DetailRow key={`d-${i}`} line={line} />
+        ))}
       </Page>
     </Document>
   );

@@ -1,0 +1,176 @@
+/**
+ * Лист сверки без шаблона: те же 10 колонок, что PDF.
+ * Сводка с левого края (имя = 1–6, сумма = 9–10).
+ */
+import type ExcelJS from "exceljs";
+import type { ClinicReconciliationPdfPayload } from "@/lib/clinic-reconciliation-pdf-data";
+import {
+  RECON_COL_W_PT,
+  RECON_EXCEL_NUMFMT_RUB,
+  reconExcelColWidth,
+} from "@/lib/clinic-reconciliation-layout";
+
+const THIN: ExcelJS.Borders = {
+  top: { style: "thin", color: { argb: "FF000000" } },
+  left: { style: "thin", color: { argb: "FF000000" } },
+  bottom: { style: "thin", color: { argb: "FF000000" } },
+  right: { style: "thin", color: { argb: "FF000000" } },
+  diagonal: { up: false, down: false, style: "thin", color: { argb: "FF000000" } },
+};
+
+function valueFill(): ExcelJS.Fill {
+  return { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } };
+}
+
+function headFill(): ExcelJS.Fill {
+  return { type: "pattern", pattern: "solid", fgColor: { argb: "FF5A5A5A" } };
+}
+
+function paint(
+  cell: ExcelJS.Cell,
+  value: string | number | null | undefined,
+  opts?: {
+    head?: boolean;
+    rub?: boolean;
+    align?: ExcelJS.Alignment["horizontal"];
+  },
+) {
+  cell.value = value ?? "";
+  cell.fill = opts?.head ? headFill() : valueFill();
+  cell.border = THIN;
+  cell.font = opts?.head
+    ? { bold: true, color: { argb: "FFFFFFFF" }, size: 8 }
+    : { bold: false, color: { argb: "FF000000" }, size: 9 };
+  cell.alignment = {
+    wrapText: true,
+    vertical: "middle",
+    horizontal: opts?.align ?? (opts?.head ? "center" : "left"),
+  };
+  if (opts?.rub && typeof value === "number") {
+    cell.numFmt = RECON_EXCEL_NUMFMT_RUB;
+  }
+}
+
+function merge(sheet: ExcelJS.Worksheet, range: string) {
+  sheet.mergeCells(range);
+}
+
+export function writeReconciliationSheet(
+  sheet: ExcelJS.Worksheet,
+  payload: ClinicReconciliationPdfPayload,
+): void {
+  sheet.name = "Сверка";
+  for (let c = 1; c <= 10; c++) {
+    sheet.getColumn(c).width = reconExcelColWidth(RECON_COL_W_PT[c - 1]!);
+  }
+
+  const head = sheet.getRow(1);
+  head.height = 22;
+  merge(sheet, "A1:F1");
+  merge(sheet, "I1:J1");
+  paint(head.getCell(1), "НАИМЕНОВАНИЕ ПОЗИЦИИ", { head: true });
+  paint(head.getCell(7), "КОЛ-ВО ЕДИНИЦ", { head: true });
+  paint(head.getCell(8), "СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК", { head: true });
+  paint(head.getCell(9), "СУММА ЕДИНИЦ БЕЗ СКИДОК", { head: true });
+
+  const summary = payload.summary;
+  for (let i = 0; i < summary.length; i++) {
+    const r = 2 + i;
+    merge(sheet, `A${r}:F${r}`);
+    merge(sheet, `I${r}:J${r}`);
+    const row = sheet.getRow(r);
+    const s = summary[i]!;
+    paint(row.getCell(1), s.label);
+    paint(row.getCell(7), s.quantity, { align: "right" });
+    paint(row.getCell(8), s.unitRub, { rub: true, align: "right" });
+    paint(row.getCell(9), s.totalRub, { rub: true, align: "right" });
+  }
+
+  const metaR = 2 + summary.length;
+  const meta = sheet.getRow(metaR);
+  meta.height = 20;
+  merge(sheet, `A${metaR}:C${metaR}`);
+  paint(meta.getCell(1), payload.labLegalName, { align: "center" });
+  paint(meta.getCell(4), payload.periodFromLabel, { align: "center" });
+  paint(meta.getCell(5), payload.periodToLabel, { align: "center" });
+  paint(meta.getCell(6), payload.clinicTitleLine, { align: "center" });
+  paint(meta.getCell(7), payload.yellowRow.totalUnits, { align: "center" });
+  paint(meta.getCell(8), "");
+  paint(meta.getCell(9), payload.yellowRow.baseTotalRub, {
+    rub: true,
+    align: "center",
+  });
+  paint(meta.getCell(10), payload.yellowRow.discountedTotalRub, {
+    rub: true,
+    align: "center",
+  });
+
+  const payR = metaR + 1;
+  const vatR = metaR + 2;
+  merge(sheet, `I${payR}:J${payR}`);
+  merge(sheet, `I${vatR}:J${vatR}`);
+  paint(sheet.getRow(payR).getCell(8), "Всего к оплате:", { head: true });
+  paint(sheet.getRow(payR).getCell(9), payload.yellowRow.discountedTotalRub, {
+    rub: true,
+    align: "right",
+  });
+  paint(sheet.getRow(vatR).getCell(8), "В т.ч. Сумма НДС 5%:", { head: true });
+  paint(sheet.getRow(vatR).getCell(9), payload.yellowRow.vatRub, {
+    rub: true,
+    align: "right",
+  });
+
+  const hdrR = metaR + 3;
+  const hdr = sheet.getRow(hdrR);
+  hdr.height = 28;
+  const headers = [
+    "Число когда зашла работа",
+    "Число отправки работы",
+    "Номер заказ-наряда",
+    "Пациент",
+    "Врач",
+    "Выставлено(наименование позиции)",
+    "Кол-во единиц",
+    "Цена за единицу",
+    "Стоим. (Сумма единиц)",
+    "СКИДКА",
+  ];
+  headers.forEach((title, i) => {
+    paint(hdr.getCell(i + 1), title, { head: true });
+  });
+
+  payload.detail.forEach((line, i) => {
+    const row = sheet.getRow(hdrR + 1 + i);
+    if (line.showOrderColumns) {
+      paint(row.getCell(1), line.zashla, { align: "right" });
+      paint(row.getCell(2), line.otpr === "—" ? "" : line.otpr, { align: "right" });
+      paint(row.getCell(3), line.orderNumber, { align: "center" });
+      paint(row.getCell(4), line.patient);
+      paint(row.getCell(5), line.doctor);
+    } else {
+      for (const c of [1, 2, 3, 4, 5]) paint(row.getCell(c), "");
+    }
+    paint(row.getCell(6), line.description);
+    paint(row.getCell(7), line.quantity, { align: "right" });
+    paint(row.getCell(8), line.unitRub, { rub: true, align: "right" });
+    paint(row.getCell(9), line.lineTotalRub, { rub: true, align: "right" });
+    paint(
+      row.getCell(10),
+      line.discountPercent == null
+        ? ""
+        : `${String(line.discountPercent).replace(".", ",")}%`,
+      { align: "right" },
+    );
+  });
+
+  sheet.views = [{ state: "frozen", ySplit: 1, activeCell: "A1", showGridLines: true }];
+  sheet.pageSetup = {
+    orientation: "landscape",
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalDpi: 120,
+    verticalDpi: 120,
+  };
+}
