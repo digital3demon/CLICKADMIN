@@ -5,6 +5,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import {
+  formatPgToolSpawnError,
+  resolvePgToolPath,
+} from "@/lib/crm-backup/resolve-pg-tool";
 import type { CrmBackupEngine } from "@/lib/crm-backup/types";
 import { getCrmDumpLocalDir } from "@/lib/crm-dump/local-dir";
 
@@ -33,15 +37,7 @@ export function resolveSqliteFilePath(url: string = resolveLiveDatabaseUrl()): s
 }
 
 function resolvePgTool(name: "pg_dump" | "psql"): string {
-  const envKey = name === "pg_dump" ? "PG_DUMP_PATH" : "PSQL_PATH";
-  const fromEnv = String(process.env[envKey] || "").trim();
-  if (fromEnv) return fromEnv;
-  if (process.platform !== "win32") return name;
-  for (let v = 18; v >= 10; v -= 1) {
-    const candidate = `C:\\Program Files\\PostgreSQL\\${v}\\bin\\${name}.exe`;
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  return name;
+  return resolvePgToolPath(name);
 }
 
 function normalizePgUrl(rawUrl: string): string {
@@ -94,10 +90,7 @@ export function dumpLivePostgresSql(): Buffer {
     } catch {
       /* ignore */
     }
-    throw new Error(
-      cmd.stderr?.trim() ||
-        "Не удалось сделать pg_dump. Проверьте PATH или PG_DUMP_PATH.",
-    );
+    throw new Error(formatPgToolSpawnError("pg_dump", pgDump, cmd));
   }
   const bytes = fs.readFileSync(tmp);
   try {
@@ -154,10 +147,7 @@ export function restoreLivePostgresSql(sql: Buffer): void {
     /* ignore */
   }
   if (cmd.status !== 0) {
-    throw new Error(
-      cmd.stderr?.trim() ||
-        "Не удалось восстановить PostgreSQL. Проверьте PATH или PSQL_PATH.",
-    );
+    throw new Error(formatPgToolSpawnError("psql", psql, cmd));
   }
 }
 

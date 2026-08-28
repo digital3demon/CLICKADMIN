@@ -22,10 +22,22 @@ const envUrl = process.env.DATABASE_URL || "";
 function resolvePgDumpExecutable() {
   const fromEnv = String(process.env.PG_DUMP_PATH || "").trim();
   if (fromEnv) return fromEnv;
-  if (process.platform !== "win32") return "pg_dump";
-  for (let v = 18; v >= 10; v -= 1) {
-    const candidate = `C:\\Program Files\\PostgreSQL\\${v}\\bin\\pg_dump.exe`;
+  const linux = [
+    "/usr/local/bin/pg_dump",
+    "/usr/bin/pg_dump",
+    "/bin/pg_dump",
+  ];
+  for (let v = 18; v >= 13; v -= 1) {
+    linux.push(`/usr/lib/postgresql/${v}/bin/pg_dump`);
+  }
+  for (const candidate of linux) {
     if (fs.existsSync(candidate)) return candidate;
+  }
+  if (process.platform === "win32") {
+    for (let v = 18; v >= 10; v -= 1) {
+      const candidate = `C:\\Program Files\\PostgreSQL\\${v}\\bin\\pg_dump.exe`;
+      if (fs.existsSync(candidate)) return candidate;
+    }
   }
   return "pg_dump";
 }

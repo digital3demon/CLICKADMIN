@@ -119,10 +119,22 @@ function resolvePgTool(name) {
   const envKey = name === "pg_dump" ? "PG_DUMP_PATH" : "PSQL_PATH";
   const fromEnv = String(process.env[envKey] || "").trim();
   if (fromEnv) return fromEnv;
-  if (process.platform !== "win32") return name;
-  for (let v = 18; v >= 10; v -= 1) {
-    const candidate = `C:\\Program Files\\PostgreSQL\\${v}\\bin\\${name}.exe`;
+  const linux = [
+    `/usr/local/bin/${name}`,
+    `/usr/bin/${name}`,
+    `/bin/${name}`,
+  ];
+  for (let v = 18; v >= 13; v -= 1) {
+    linux.push(`/usr/lib/postgresql/${v}/bin/${name}`);
+  }
+  for (const candidate of linux) {
     if (fs.existsSync(candidate)) return candidate;
+  }
+  if (process.platform === "win32") {
+    for (let v = 18; v >= 10; v -= 1) {
+      const candidate = `C:\\Program Files\\PostgreSQL\\${v}\\bin\\${name}.exe`;
+      if (fs.existsSync(candidate)) return candidate;
+    }
   }
   return name;
 }

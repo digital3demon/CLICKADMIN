@@ -181,6 +181,10 @@ export function CrmBackupClient() {
             }.`
           : "В хранилище ещё нет бекапа."}
       </p>
+      {err ? <p className="text-sm text-red-600">{err}</p> : null}
+      {okInfo ? (
+        <p className="text-sm text-[var(--text-secondary)]">{okInfo}</p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -262,10 +266,6 @@ npm start`}
           {busy === "restore" ? "Восстанавливаю…" : "Восстановить CRM"}
         </button>
       </div>
-      {err ? <p className="text-sm text-red-600">{err}</p> : null}
-      {okInfo ? (
-        <p className="text-sm text-[var(--text-secondary)]">{okInfo}</p>
-      ) : null}
     </div>
   );
 }
