@@ -13,6 +13,10 @@ import {
   labTaskKindToQuery,
 } from "@/lib/lab-tasks";
 import {
+  LabTaskChatToggle,
+  LabTaskMiniChat,
+} from "@/components/orders/LabTaskMiniChat";
+import {
   ImageLightbox,
   type ImageLightboxState,
 } from "@/components/ui/ImageLightbox";
@@ -99,6 +103,7 @@ export function LabTasksActionCard({
   const [imageViewer, setImageViewer] = useState<ImageLightboxState | null>(
     null,
   );
+  const [chatOpenId, setChatOpenId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftFilesRef = useRef(draftFiles);
   draftFilesRef.current = draftFiles;
@@ -116,6 +121,7 @@ export function LabTasksActionCard({
   useEffect(() => {
     if (!open) {
       setConfirmDoneId(null);
+      setChatOpenId(null);
       return;
     }
     const ac = new AbortController();
@@ -395,6 +401,15 @@ export function LabTasksActionCard({
                             </div>
                           ) : null}
                         </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <LabTaskChatToggle
+                          unread={row.hasUnreadChat}
+                          count={row.chatMessageCount}
+                          open={chatOpenId === row.id}
+                          onClick={() =>
+                            setChatOpenId((cur) => (cur === row.id ? null : row.id))
+                          }
+                        />
                         {canResolveLive ? (
                           <button
                             type="button"
@@ -425,7 +440,20 @@ export function LabTasksActionCard({
                                 : "Готово"}
                           </button>
                         ) : null}
+                        </div>
                       </div>
+                      {chatOpenId === row.id ? (
+                        <LabTaskMiniChat
+                          taskId={row.id}
+                          onStats={(next) =>
+                            setItems((prev) =>
+                              prev.map((it) =>
+                                it.id === row.id ? { ...it, ...next } : it,
+                              ),
+                            )
+                          }
+                        />
+                      ) : null}
                     </li>
                   ))}
                 </ul>

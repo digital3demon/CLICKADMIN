@@ -23,6 +23,8 @@ export type LabTaskJson = {
   resolvedAt: string | null;
   resolvedByName: string | null;
   attachments: LabTaskAttachmentJson[];
+  chatMessageCount: number;
+  hasUnreadChat: boolean;
 };
 
 /** Query/API: task | pickup_from */

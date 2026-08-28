@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getPrisma } from "@/lib/get-prisma";
+import { attachLabTaskChatStats } from "@/lib/lab-task-chat.server";
 import {
   labTaskAttachmentUrl,
   type LabTaskJson,
@@ -15,6 +16,7 @@ type LoadOpts = {
   status?: "pending" | "all";
   limit?: number;
   q?: string;
+  viewerUserId?: string | null;
 };
 
 export async function countPendingLabTasks(
@@ -63,7 +65,7 @@ export async function loadLabTasks(opts: LoadOpts): Promise<LabTaskJson[]> {
     },
   });
 
-  return rows.map((row) => ({
+  const items: LabTaskJson[] = rows.map((row) => ({
     id: row.id,
     kind: row.kind,
     text: row.text,
@@ -80,5 +82,8 @@ export async function loadLabTasks(opts: LoadOpts): Promise<LabTaskJson[]> {
       size: a.size,
       url: labTaskAttachmentUrl(row.id, a.id),
     })),
+    chatMessageCount: 0,
+    hasUnreadChat: false,
   }));
+  return attachLabTaskChatStats(opts.viewerUserId, items);
 }

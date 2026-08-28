@@ -53,6 +53,7 @@ export async function GET(req: Request) {
       kind,
       status,
       limit: status === "all" ? 80 : 100,
+      viewerUserId: session.sub,
     });
 
     return NextResponse.json(
@@ -180,7 +181,12 @@ export async function POST(req: Request) {
       }
     }
 
-    const items = await loadLabTasks({ tenantId, kind, status: "pending" });
+    const items = await loadLabTasks({
+      tenantId,
+      kind,
+      status: "pending",
+      viewerUserId: session.sub,
+    });
     return NextResponse.json({
       ok: true,
       id: created.id,

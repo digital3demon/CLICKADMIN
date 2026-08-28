@@ -898,6 +898,8 @@ model User {
   orderProstheticsRequestsCompleted OrderProstheticsRequest[] @relation("OrderProstheticsRequestCompletedBy")
   labTasksCreated                  LabTask[]                  @relation("LabTaskAuthor")
   labTasksResolved                 LabTask[]                  @relation("LabTaskResolvedBy")
+  labTaskComments                  LabTaskComment[]           @relation("LabTaskCommentAuthor")
+  labTaskCommentReads              LabTaskCommentRead[]
   orderListAdminMemoEvents         OrderListAdminMemoEvent[]
   orderListTechMemoEvents          OrderListTechMemoEvent[]
   orderKaitenLabMentionAcks        OrderKaitenLabMentionAck[]
@@ -1801,6 +1803,8 @@ model LabTask {
   resolvedByUserId String?
   resolvedBy       User?               @relation("LabTaskResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
   attachments      LabTaskAttachment[]
+  comments         LabTaskComment[]
+  commentReads     LabTaskCommentRead[]
 
   @@index([tenantId, kind, resolvedAt, createdAt])
   @@index([tenantId, kind, createdAt])
@@ -1818,6 +1822,38 @@ model LabTaskAttachment {
   data      Bytes
   createdAt DateTime @default(now())
 
+  @@index([taskId])
+}
+
+/// Мини-чат по задаче лаборатории.
+model LabTaskComment {
+  id           String            @id @default(cuid())
+  taskId       String
+  task         LabTask           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorUserId String?
+  author       User?             @relation("LabTaskCommentAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorLabel  String
+  text         String
+  parentId     String?
+  parent       LabTaskComment?   @relation("LabTaskCommentReply", fields: [parentId], references: [id], onDelete: SetNull)
+  replies      LabTaskComment[]  @relation("LabTaskCommentReply")
+  createdAt    DateTime          @default(now())
+  editedAt     DateTime?
+  deletedAt    DateTime?
+
+  @@index([taskId, createdAt])
+  @@index([parentId])
+}
+
+/// Когда пользователь последний раз открывал чат задачи.
+model LabTaskCommentRead {
+  userId String
+  taskId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task   LabTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  seenAt DateTime
+
+  @@id([userId, taskId])
   @@index([taskId])
 }
 

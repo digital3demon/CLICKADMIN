@@ -65,7 +65,12 @@ export async function POST(_req: Request, ctx: Ctx) {
       ok: true,
       kind,
       pendingCount: await countPendingLabTasks(tenantId, kind),
-      items: await loadLabTasks({ tenantId, kind, status: "pending" }),
+      items: await loadLabTasks({
+        tenantId,
+        kind,
+        status: "pending",
+        viewerUserId: session.sub,
+      }),
     });
   } catch (e) {
     console.error("[lab-tasks/resolve]", e);

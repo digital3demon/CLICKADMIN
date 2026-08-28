@@ -62,6 +62,7 @@ export default async function OrdersHistoryPage({
         status: "all",
         limit: 150,
         q,
+        viewerUserId: session?.sub,
       });
     } else if (tab === "pickups" && tenantId) {
       pickupsItems = await loadLabTasks({
@@ -70,6 +71,7 @@ export default async function OrdersHistoryPage({
         status: "all",
         limit: 150,
         q,
+        viewerUserId: session?.sub,
       });
     } else if (tab === "stock") {
       stockItems = await loadStockHistory({ q });
