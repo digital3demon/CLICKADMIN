@@ -385,7 +385,6 @@ export async function countFinanceOfficeQuickFilterChips(
           where: {
             AND: [
               scope,
-              { prostheticsOrdered: false },
               { id: { in: pendingProsList } },
             ],
           },

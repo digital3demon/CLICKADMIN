@@ -15,6 +15,17 @@ export type ProstheticsInTransitOurLine = {
   quantity: number;
 };
 
+/**
+ * Статус истории «Ожидает» = секция модалки «Заказать».
+ * Галочка наряда `prostheticsOrdered` сюда не входит: иначе заявка есть в журнале и пуста в блоке.
+ */
+export function isProstheticsAwaitingAccept(row: {
+  resolvedAt?: Date | string | null;
+  rejectedAt?: Date | string | null;
+}): boolean {
+  return row.resolvedAt == null && row.rejectedAt == null;
+}
+
 /** Заявка ещё не принята — секция «Заказать». */
 export type ProstheticsToOrderRow = {
   id: string;

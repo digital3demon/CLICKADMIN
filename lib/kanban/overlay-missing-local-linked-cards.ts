@@ -1,6 +1,6 @@
 /**
- * Tenant JSON — база merge. Поиск upsert’ит карточку только локально;
- * F5 без этого оверлея снова теряет наряд (и «МОИ» его не видит).
+ * Tenant JSON — база merge. Зеркало/поиск upsert’ят карточку локально;
+ * F5 без оверлея снова теряет наряд, если remote снимок беднее.
  */
 import { forEachKanbanCardInState } from "@/lib/kanban/kanban-stage-due";
 import type {

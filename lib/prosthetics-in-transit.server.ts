@@ -305,7 +305,7 @@ export async function listProstheticsInTransit(
  * Ещё не принята («Заказать»): resolved/rejected пусты. Dedup inbox+legacy.
  * Inbox читаем всегда (как чип «Заказ протетики» на /orders), иначе READ_NEW=off
  * даёт count=0 при живых заявках только в inbox.
- * Только наряды без галочки «Протетика заказана» — тот же смысл, что у чипа.
+ * Как история «Ожидает»: галочка «Протетика заказана» заявку не прячет.
  */
 export async function listProstheticsToOrder(
   db: PrismaClient,
@@ -316,7 +316,6 @@ export async function listProstheticsToOrder(
   const tenantId = opts?.tenantId?.trim() || null;
   const orderWhere = {
     ...orderScope,
-    prostheticsOrdered: false,
     ...(tenantId ? { tenantId } : {}),
   };
   const pendingWhere = {

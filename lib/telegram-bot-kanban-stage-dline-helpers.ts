@@ -97,3 +97,27 @@ export function collectKanbanStageDueCards(
   });
   return out;
 }
+
+/** Сначала наряды из CRM, потом leftover JSON (standalone). Один ключ — один раз. */
+export function mergeKanbanStageDueCards(
+  fromOrders: readonly KanbanCard[],
+  fromJson: readonly KanbanCard[],
+): KanbanCard[] {
+  const seen = new Set<string>();
+  const out: KanbanCard[] = [];
+  const keyOf = (card: KanbanCard) =>
+    String(card.linkedOrderId || card.id || "").trim();
+  for (const card of [...fromOrders, ...fromJson]) {
+    const key = keyOf(card);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(card);
+  }
+  out.sort((a, b) => {
+    const da = getKanbanStageDue(a);
+    const db = getKanbanStageDue(b);
+    if (da !== db) return da.localeCompare(db);
+    return kanbanCardTelegramLabel(a).localeCompare(kanbanCardTelegramLabel(b), "ru");
+  });
+  return out;
+}

@@ -4,6 +4,7 @@ import { upsertKanbanCardHeadCache } from "@/lib/kanban/kanban-card-heads-cache"
 import { findCard, pushActivity } from "@/lib/kanban/model";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
+import { persistCrmBoardFieldsClient } from "@/lib/kanban/persist-crm-board-fields-client";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 
 export type KanbanMemberPickerMode = "assign" | "part";
@@ -197,6 +198,13 @@ export function notifyKanbanCardMemberChange(args: {
     }
   }
 
+  if (oid) {
+    persistCrmBoardFieldsClient({
+      orderId: oid,
+      assignees: nextAssign,
+      participants: nextPart,
+    });
+  }
   if (oid && card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)) {
     postKaitenAssigneesSync(oid, nextAssign, nextPart);
   }

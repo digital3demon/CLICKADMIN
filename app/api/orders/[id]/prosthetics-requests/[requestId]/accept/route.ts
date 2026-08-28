@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { notifyOrderRequestStatusTelegram } from "@/lib/order-request-status-telegram.server";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
@@ -54,5 +55,14 @@ export async function POST(
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
   }
 
+  after(() => {
+    void notifyOrderRequestStatusTelegram({
+      tenantId,
+      orderId,
+      actorUserId: session.sub,
+      kind: "prosthetics",
+      status: "accepted",
+    }).catch((e) => console.error("[prosthetics-requests/accept] telegram", e));
+  });
   return NextResponse.json({ ok: true });
 }

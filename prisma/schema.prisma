@@ -1616,6 +1616,14 @@ model Order {
   sourceEmailLinks                   EmailSourceOrder[]
   aiPredictions                      AiOrderPrediction[]
   depositLedgerEntries               DepositLedgerEntry[]
+  /// CRM-канбан: ответственные (id пользователей). Не Kaiten.
+  kanbanAssigneeIds                  String[]                   @default([])
+  /// CRM-канбан: участники (id пользователей). Не Kaiten.
+  kanbanParticipantIds               String[]                   @default([])
+  /// CRM-канбан: этапный срок YYYY-MM-DD.
+  kanbanStageDueYmd                  String?
+  /// CRM-канбан: когда плитка менялась (дельта доски).
+  kanbanBoardUpdatedAt               DateTime?
   /// Мягкое архивирование («удаление»): наряд скрыт из списков и канбана; номер YYMM-NNN снимается (плейхолдер `ARCH:id`), чтобы его можно было выдать другому наряду.
   archivedAt                         DateTime?
   createdAt                          DateTime                   @default(now())
@@ -1623,6 +1631,8 @@ model Order {
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
+  @@index([tenantId, kaitenTrackLane, archivedAt])
+  @@index([tenantId, kanbanBoardUpdatedAt])
   @@index([clinicId])
   @@index([status])
   @@index([labWorkStatus])

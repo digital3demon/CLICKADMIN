@@ -11,6 +11,11 @@ import {
 } from "@/lib/kanban-telegram-prefs";
 import type { UserRole } from "@prisma/client";
 import { getPrisma } from "@/lib/get-prisma";
+import { loadOrderKanbanTelegramMemberIds } from "@/lib/telegram-kanban-card-members.server";
+import {
+  isCardMemberScopedTelegramEvent,
+  uniqTelegramTargetUserIds,
+} from "@/lib/telegram-kanban-card-scope";
 import {
   notifyKanbanTelegramSubscribers,
   notifyKanbanTelegramTargetUsers,
@@ -130,7 +135,7 @@ export async function POST(req: Request) {
     parseMode = o.parseMode === "HTML" ? ("HTML" as const) : undefined;
   }
 
-  const targetUserIds = Array.isArray(o.targetUserIds)
+  let targetUserIds = Array.isArray(o.targetUserIds)
     ? o.targetUserIds.filter((x): x is string => typeof x === "string" && x.length > 0)
     : [];
 
@@ -153,6 +158,17 @@ export async function POST(req: Request) {
   const actorUserId = session.sub;
   const tenantId = await getTenantIdForSession(session);
   const recipientRoles = parseRecipientRoles(o.recipientRoles);
+  const orderId = typeof o.orderId === "string" ? o.orderId.trim() : "";
+
+  if (
+    isCardMemberScopedTelegramEvent(event) &&
+    targetUserIds.length === 0 &&
+    tenantId &&
+    orderId
+  ) {
+    targetUserIds = await loadOrderKanbanTelegramMemberIds(tenantId, orderId);
+  }
+  targetUserIds = uniqTelegramTargetUserIds(targetUserIds);
 
   try {
     if (targetUserIds.length > 0) {
@@ -170,6 +186,8 @@ export async function POST(req: Request) {
         linesAdmin: effectiveLinesAdmin,
         tenantId: tenantId ?? undefined,
       });
+    } else if (isCardMemberScopedTelegramEvent(event)) {
+      /* Без людей на карточке не рассылаем всей лаборатории. */
     } else {
       await notifyKanbanTelegramSubscribers(prisma, {
         event,

@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { ConstructionCategory, OrderStatus, Prisma } from "@prisma/client";
+import {
+  ConstructionCategory,
+  type KaitenTrackLane,
+  OrderStatus,
+  Prisma,
+} from "@prisma/client";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
@@ -17,8 +22,19 @@ import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 import { kanbanLinkedOrderNumberSuffixContains } from "@/lib/kanban/linked-orders-search-where";
 import { kanbanLinkedOrderGoneIds } from "@/lib/kanban/linked-orders-gone-ids";
+import {
+  KANBAN_LANE_HYDRATE_TAKE,
+  parseKanbanHydrateLanesParam,
+} from "@/lib/kanban/linked-orders-hydrate";
 
+/**
+ * GET linked-orders:
+ * — без q: recent 200 + ids на доске + ?lanes= (наряды дорожки из БД, без поиска);
+ * — q≥2: текст/суффикс, hydrateWhere (в т.ч. «Kaiten позже»);
+ * goneIds только по запрошенным ids (архив/отмена/нет в БД).
+ */
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const LINKED_ORDER_SELECT = {
   id: true,
@@ -115,6 +131,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const boardOrderIds = parseLinkedOrderIdsParam(url.searchParams.get("ids"));
     const searchQ = url.searchParams.get("q")?.replace(/\s+/g, " ").trim() ?? "";
+    const hydrateLanes = parseKanbanHydrateLanesParam(url.searchParams.get("lanes"));
     const [ordersPrisma, clientsPrisma, pricingPrisma] = await Promise.all([
       getOrdersPrisma(),
       getClientsPrisma(),
@@ -164,6 +181,28 @@ export async function GET(request: Request) {
             select: LINKED_ORDER_SELECT,
           })
         : [];
+    /**
+     * Доска без q: все живые наряды дорожки из БД (не 200 свежих и не tenant JSON).
+     * Иначе карточка появляется только после поиска.
+     */
+    const laneRows =
+      !searchActive && hydrateLanes.length > 0
+        ? (
+            await Promise.all(
+              hydrateLanes.map((lane) =>
+                ordersPrisma.order.findMany({
+                  where: {
+                    ...hydrateWhere,
+                    kaitenTrackLane: lane as KaitenTrackLane,
+                  },
+                  orderBy: { createdAt: "desc" },
+                  take: KANBAN_LANE_HYDRATE_TAKE,
+                  select: LINKED_ORDER_SELECT,
+                }),
+              ),
+            )
+          ).flat()
+        : [];
     /* Поиск: не nested doctor/clinic (SaaS split DB); суффикс -NNN отдельно, чтобы take не вытеснил 2607-299. */
     let suffixRows: typeof recentRows = [];
     let searchExtraRows: typeof recentRows = [];
@@ -199,6 +238,7 @@ export async function GET(request: Request) {
     const rows = [
       ...suffixRows,
       ...searchExtraRows,
+      ...laneRows,
       ...boardExtraRows,
       ...recentRows,
     ].filter((r) => {

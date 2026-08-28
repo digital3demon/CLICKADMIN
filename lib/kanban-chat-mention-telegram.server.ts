@@ -16,6 +16,7 @@ import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { normalizeProductionMentionTag } from "@/lib/kanban-production-mention-tag";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { getPrisma } from "@/lib/get-prisma";
+import { loadOrderKanbanTelegramMemberIds } from "@/lib/telegram-kanban-card-members.server";
 import {
   notifyKanbanTelegramSubscribers,
   notifyKanbanTelegramTargetUsers,
@@ -207,10 +208,15 @@ export async function notifyTelegramForKanbanChatCommentAdded(opts: {
   const quote = telegramMentionCommentQuote(opts.text);
   const snippet = quote ? escapeTelegramHtml(quote) : "";
   const tail = snippet ? `\n«${snippet}»` : "";
+  const onlyUserIds = await loadOrderKanbanTelegramMemberIds(
+    opts.tenantId,
+    opts.orderId,
+  );
   await notifyKanbanTelegramSubscribers(prisma, {
     event: "tg_comment_added",
     actorUserId: opts.actorUserId,
     alsoExcludeUserIds: opts.excludeUserIds,
+    onlyUserIds,
     lines: [`${who} оставил(а) комментарий к ${cardLink}${tail}`],
     linesAdmin: [
       `${who} оставил(а) комментарий к ${cardWord} и ${orderWord}${tail}`,

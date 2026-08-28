@@ -172,15 +172,25 @@ function uniqMemberIds(...lists: Array<readonly string[] | undefined>): string[]
   return out;
 }
 
-/** Живые люди карточки ∪ кэш шапки (F5 / slim часто обнуляют массивы). */
+/**
+ * Люди для «МОИ» / «Ответственный».
+ * Если на карточке уже есть ответственные/участники — только они (кэш шапки
+ * устаревает и иначе оставляет чужие карточки). Кэш — только когда массивы пустые (F5 / slim).
+ */
 export function membersForKanbanAggregateKeep(
   card: Pick<KanbanCard, "id" | "linkedOrderId" | "assignees" | "participants">,
   heads: KanbanCardHeadsCache | null | undefined,
 ): { assignees: string[]; participants: string[] } {
+  if (hasKanbanCardMembers(card)) {
+    return {
+      assignees: uniqMemberIds(card.assignees),
+      participants: uniqMemberIds(card.participants),
+    };
+  }
   const row = lookupKanbanCardHead(heads, card);
   return {
-    assignees: uniqMemberIds(card.assignees, row?.assignees),
-    participants: uniqMemberIds(card.participants, row?.participants),
+    assignees: uniqMemberIds(row?.assignees),
+    participants: uniqMemberIds(row?.participants),
   };
 }
 

@@ -104,7 +104,7 @@ describe("kanban card heads cache", () => {
     ).toEqual(["ord-степанов", "ord-на-доске"]);
   });
 
-  it("для фильтра «МОИ» склеивает людей карточки с кэшем (кириллица вокруг id)", () => {
+  it("для фильтра «МОИ» берёт кэш шапки только если на карточке никого нет (кириллица вокруг id)", () => {
     const heads = {
       "oid:ord-степанов": {
         assignees: [],
@@ -113,7 +113,7 @@ describe("kanban card heads cache", () => {
         stageDue: "",
       },
     };
-    const members = membersForKanbanAggregateKeep(
+    const empty = membersForKanbanAggregateKeep(
       {
         id: "карта-степанов",
         linkedOrderId: "ord-степанов",
@@ -122,8 +122,26 @@ describe("kanban card heads cache", () => {
       },
       heads,
     );
-    expect(members.participants).toEqual(["u-всеволод"]);
-    expect(members.assignees).toEqual([]);
+    expect(empty.participants).toEqual(["u-всеволод"]);
+    expect(empty.assignees).toEqual([]);
+    const live = membersForKanbanAggregateKeep(
+      {
+        id: "карта-иванова",
+        linkedOrderId: "ord-иванова",
+        assignees: ["u-арина"],
+        participants: [],
+      },
+      {
+        "oid:ord-иванова": {
+          assignees: [],
+          participants: ["u-всеволод"],
+          fingerprint: null,
+          stageDue: "",
+        },
+      },
+    );
+    expect(live.assignees).toEqual(["u-арина"]);
+    expect(live.participants).toEqual([]);
   });
 
   it("новые найденные наряды в sticky идут первыми (кириллица в id)", () => {

@@ -58,13 +58,10 @@ import {
   forEachKanbanCardInState,
   setKanbanStageDue,
 } from "@/lib/kanban/kanban-stage-due";
-import { applyKaitenStageDueByOrderId } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { applyKaitenRefreshPatchesToState } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
-import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
 import {
   applyKanbanMembersByOrderId,
-  hasKanbanCardMembers,
   overlayLocalKanbanCardHeadOntoRemote,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import {
@@ -81,6 +78,12 @@ import {
   notifyKanbanCardMemberChange,
   type KanbanMemberPickerMode,
 } from "@/lib/kanban/kanban-card-members-client";
+import {
+  persistCrmBoardFieldsClient,
+  persistMissingCrmStageDuesFromState,
+} from "@/lib/kanban/persist-crm-board-fields-client";
+import { applyCrmBoardTilesToAppState } from "@/lib/kanban/apply-crm-board-tiles";
+import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
 import {
   autoArchiveReadyProductionChildren,
   expandProductionChecklistFromArchives,
@@ -105,7 +108,6 @@ import {
 } from "@/lib/kanban/aggregate-card-drag";
 import { applyKanbanCardTrackLaneChange } from "@/lib/kanban/apply-card-track-lane";
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
-import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 import { canUseKanbanActualAppointmentFilter } from "@/lib/auth/permissions";
 import {
   applyKanbanActualAppointmentView,
@@ -119,6 +121,7 @@ import { canUserManageKanbanBlockForCard } from "@/lib/kanban-block-permissions"
 import { postKanbanTelegramNotify } from "@/lib/kanban-crm-telegram-notify-client";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
+import { kanbanCardTelegramMemberIds } from "@/lib/telegram-kanban-card-scope";
 import { telegramHtmlLink, escapeTelegramHtml } from "@/lib/telegram-html";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import {
@@ -137,12 +140,9 @@ import {
   loadStickyLinkedOrderIds,
   mergeStickyLinkedOrderIds,
   persistStickyLinkedOrderIds,
-  prependMissingLinkedOrderIds,
 } from "@/lib/kanban/kanban-card-heads-cache";
-import {
-  kanbanMembersNeedHydration,
-  shouldSkipSparseKanbanTenantWrite,
-} from "@/lib/kanban/kanban-tenant-write-guard";
+import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
+import { linkedOrdersApiUrl } from "@/lib/kanban/linked-orders-hydrate";
 import {
   applyKanbanArchiveSettings,
   extractKanbanArchiveSettings,
@@ -241,6 +241,8 @@ function notifyKanbanColumnTelegram(
     kaitenCardId: card.kaitenCardId,
     event: "tg_kanban_crm_sync",
     parseMode: "HTML",
+    targetUserIds: kanbanCardTelegramMemberIds(card),
+    orderId: oid || undefined,
     lines: [`В ${linkHtml} колонка — ${col}`],
     ...(oid
       ? {
@@ -255,110 +257,6 @@ function notifyKanbanColumnTelegram(
 const STOP_HOVER_PREVIEW_OFFSET = 14;
 const STOP_HOVER_PREVIEW_WIDTH = 288;
 const STOP_HOVER_PREVIEW_MAX = 8;
-
-/** Сколько нарядов за один проход тянем колонку/sort из Kaiten → БД (как в OrderListKaitenPoller). */
-const KAITEN_BOARD_TITLES_SYNC_WINDOW = 10;
-
-function parseKaitenRetryAfterMs(value: string | null): number {
-  const raw = String(value || "").trim();
-  if (!raw) return 90_000;
-  const asSeconds = Number.parseInt(raw, 10);
-  if (Number.isFinite(asSeconds) && asSeconds > 0) {
-    return Math.min(asSeconds * 1000, 120_000);
-  }
-  const dateMs = Date.parse(raw);
-  if (Number.isFinite(dateMs)) {
-    return Math.max(0, Math.min(dateMs - Date.now(), 120_000));
-  }
-  return 90_000;
-}
-
-function collectAllLinkedOrderIdsOnBoards(state: KanbanAppState): string[] {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  const push = (oidRaw: string | undefined) => {
-    const oid = String(oidRaw || "").trim();
-    if (!oid || seen.has(oid)) return;
-    seen.add(oid);
-    ids.push(oid);
-  };
-  for (const b of state.boards ?? []) {
-    for (const col of b.columns ?? []) {
-      for (const c of col.cards ?? []) push(c.linkedOrderId);
-    }
-    for (const row of b.stoppedCards ?? []) push(row.card.linkedOrderId);
-    for (const row of b.archivedCards ?? []) push(row.card.linkedOrderId);
-  }
-  return ids;
-}
-
-const LINKED_ORDERS_IDS_CAP = 250;
-
-function takeLinkedOrderIdsBatch(
-  ids: string[],
-  offsetRef: { current: number },
-  max = LINKED_ORDERS_IDS_CAP,
-): string[] {
-  if (ids.length <= max) return ids;
-  const start = offsetRef.current % ids.length;
-  const picked: string[] = [];
-  for (let i = 0; i < max; i += 1) {
-    picked.push(ids[(start + i) % ids.length]!);
-  }
-  offsetRef.current = (start + max) % ids.length;
-  return picked;
-}
-
-function linkedOrdersApiUrl(boardIds: string[], search: string): string {
-  const p = new URLSearchParams();
-  if (boardIds.length > 0) p.set("ids", boardIds.join(","));
-  const q = search.trim();
-  if (q.length >= 2) p.set("q", q);
-  const qs = p.toString();
-  return qs ? `/api/kanban/linked-orders?${qs}` : "/api/kanban/linked-orders";
-}
-
-/**
- * Id нарядов с карточками Kaiten на досках: сначала активная доска (дорожка),
- * чтобы позиция на экране обновлялась раньше остальных.
- */
-function collectLinkedOrderIdsPreferActiveBoard(state: KanbanAppState): string[] {
-  const activeId = state.activeBoardId;
-  const active: string[] = [];
-  const other: string[] = [];
-  const seen = new Set<string>();
-  const push = (bucket: string[], oid: string) => {
-    if (seen.has(oid)) return;
-    seen.add(oid);
-    bucket.push(oid);
-  };
-  for (const b of state.boards ?? []) {
-    const bucket = b.id === activeId ? active : other;
-    for (const col of b.columns ?? []) {
-      for (const c of col.cards ?? []) {
-        const oid = String(c.linkedOrderId || "").trim();
-        if (!oid) continue;
-        if (c.kaitenCardId == null || !Number.isFinite(Number(c.kaitenCardId))) {
-          continue;
-        }
-        push(bucket, oid);
-      }
-    }
-  }
-  return [...active, ...other];
-}
-
-function linkedOrderIdsMissingMembers(state: KanbanAppState): string[] {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  forEachKanbanCardInState(state, (card) => {
-    const oid = String(card.linkedOrderId || "").trim();
-    if (!oid || seen.has(oid) || hasKanbanCardMembers(card)) return;
-    seen.add(oid);
-    ids.push(oid);
-  });
-  return ids;
-}
 
 function findLinkedOrderIdInState(
   state: KanbanAppState,
@@ -599,16 +497,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const mirrorSyncQueuedRef = useRef(false);
   const searchHitsSyncInFlightRef = useRef(false);
   const searchHitsSyncQueuedQRef = useRef<string | null>(null);
-  const titlesSyncOffsetRef = useRef(0);
-  const linkedOrdersIdsOffsetRef = useRef(0);
-  const titlesSyncBackoffRef = useRef(0);
-  const titlesSyncLastAtRef = useRef(0);
+  const boardTilesAsOfRef = useRef<Record<string, string>>({});
+  const boardTilesBoardRef = useRef("");
+  const boardTilesInFlightRef = useRef(false);
   const tenantKanbanReadAtRef = useRef(0);
   const lastTenantKanbanRef = useRef<KanbanAppState | null>(null);
   /** F5: не писать default в tenant, пока GET не подтвердил живой снимок. */
   const tenantKanbanWriteAllowedRef = useRef(isDemo);
-  /** Один раз за сессию: если доска без людей — подтянуть состав с Kaiten. */
-  const membersAutoRecoverRef = useRef(false);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
@@ -643,49 +538,64 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     [isDemo],
   );
 
-  const recoverStarvedKanbanMembers = useCallback(async (): Promise<boolean> => {
-    if (isDemo) return true;
-    const cur = appStateRef.current;
-    if (!cur || !kanbanMembersNeedHydration(cur)) return true;
-    const targets = collectKanbanKaitenRefreshTargets(cur).filter((t) => {
-      const oid = String(t.linkedOrderId || "").trim();
-      if (!oid) return false;
-      const card = findLinkedOrderIdInState(cur, oid);
-      return card != null && !hasKanbanCardMembers(card);
-    });
-    if (targets.length === 0) return true;
-    try {
-      const res = await fetch("/api/kanban/members-backfill", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "batch",
-          all: true,
-          total: targets.length,
-          targets,
-        }),
-      });
-      if (!res.ok) return false;
-      const batch = (await res.json()) as {
-        patches?: Parameters<typeof applyKaitenRefreshPatchesToState>[1];
-      };
-      const patches = Array.isArray(batch.patches) ? batch.patches : [];
-      if (patches.length === 0) return true;
-      setAppState((prev) => {
-        if (!prev) return prev;
-        const { state } = applyKaitenRefreshPatchesToState(prev, patches);
-        saveKanbanState(state, false);
-        if (canPersistTenantKanban(state)) {
-          writePersistedKanbanState(state, false);
-        }
-        return state;
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }, [isDemo, canPersistTenantKanban]);
+  const syncCrmBoardTiles = useCallback(
+    async (opts?: { full?: boolean }) => {
+      if (isDemo) return;
+      const cur = appStateRef.current;
+      if (!cur || boardTilesInFlightRef.current) return;
+      const boardId = cur.activeBoardId;
+      boardTilesInFlightRef.current = true;
+      try {
+        const since =
+          opts?.full || !boardTilesAsOfRef.current[boardId]
+            ? ""
+            : boardTilesAsOfRef.current[boardId] || "";
+        const qs = new URLSearchParams({ boardId });
+        if (since) qs.set("since", since);
+        const r = await fetch(`/api/kanban/board-tiles?${qs}`, {
+          credentials: "include",
+        });
+        if (!r.ok) return;
+        const j = (await r.json()) as { tiles?: CrmBoardTile[]; asOf?: string };
+        const tiles = Array.isArray(j.tiles) ? j.tiles : [];
+        if (j.asOf) boardTilesAsOfRef.current[boardId] = j.asOf;
+        setLinkedAppointmentByOrderId((prev) => {
+          const next = new Map(prev);
+          for (const t of tiles) {
+            next.set(t.orderId, {
+              orderNumber: t.orderNumber,
+              appointmentDate: t.appointmentDate,
+              dueToAdminsAt: t.dueToAdminsAt,
+              dueToAdminsHasTime: t.dueToAdminsHasTime,
+            });
+          }
+          return next;
+        });
+        setAppState((prev) => {
+          if (!prev) return prev;
+          const replaceBoardId =
+            !since && !isKanbanAggregateBoardId(boardId) ? boardId : null;
+          const pruneMemberUserId =
+            !since && isKanbanAggregateBoardId(boardId)
+              ? kanbanSessionUserIdRef.current
+              : null;
+          const next = applyCrmBoardTilesToAppState(prev, tiles, {
+            replaceBoardId,
+            pruneMemberUserId,
+          });
+          applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+          persistMissingCrmStageDuesFromState(next, tiles);
+          saveKanbanState(next, false);
+          return next;
+        });
+      } catch {
+        /* offline */
+      } finally {
+        boardTilesInFlightRef.current = false;
+      }
+    },
+    [isDemo],
+  );
 
   const optimisticKaitenColumnMovesRef = useRef(
     new Map<
@@ -787,156 +697,20 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         }
       }
 
-      const searchQ = (appStateRef.current?.search || "").trim();
-      const searchActive = searchQ.length >= 2;
-
-      const boardIds = searchActive
-        ? []
-        : appStateRef.current
-          ? takeLinkedOrderIdsBatch(
-              prependMissingLinkedOrderIds(
-                collectAllLinkedOrderIdsOnBoards(appStateRef.current),
-                collectLinkedOrderIdsFromHeadsCache(loadKanbanCardHeadsCache(), {
-                  sessionUserId: kanbanSessionUserIdRef.current,
-                }),
-              ),
-              linkedOrdersIdsOffsetRef,
-            )
-          : [];
-      const linkedOrdersUrl = linkedOrdersApiUrl(
-        boardIds,
-        appStateRef.current?.search || "",
-      );
-      const [rLinked, rStandalone] = await Promise.all([
-        fetch(linkedOrdersUrl, { credentials: "include" }),
-        fetch("/api/kanban/standalone-cards", { credentials: "include" }),
-      ]);
-      if (!rLinked.ok) {
-        console.error("[kanban] linked-orders", rLinked.status);
-        return;
-      }
-      const jL = (await rLinked.json()) as {
-        orders?: KaitenLinkedOrderForKanban[];
-        goneIds?: string[];
-      };
-      const linkedRows = applyOptimisticKaitenBlocksToLinkedRows(
-        applyOptimisticKaitenMovesToLinkedRows(jL.orders ?? []),
-      );
-      const incomingAppt = linkedOrdersToAppointmentMap(linkedRows);
-      setLinkedAppointmentByOrderId((prev) => {
-        const next = new Map(prev);
-        for (const [id, snap] of incomingAppt) next.set(id, snap);
-        return next;
+      const rStandalone = await fetch("/api/kanban/standalone-cards", {
+        credentials: "include",
       });
       let standaloneRows: StandaloneRow[] = [];
       if (rStandalone.ok) {
         const jS = (await rStandalone.json()) as { rows?: StandaloneRow[] };
         standaloneRows = Array.isArray(jS.rows) ? jS.rows : [];
       }
-      const skipFreshTenantRead =
-        tenantKanbanReadAtRef.current > 0 &&
-        Date.now() - tenantKanbanReadAtRef.current < 15_000;
-      const remoteKanban = skipFreshTenantRead
-        ? null
-        : parseKanbanAppState(
-            await readClientState<unknown>("tenant", "kanbanAppStateV3"),
-          );
-      if (!skipFreshTenantRead) tenantKanbanReadAtRef.current = Date.now();
-      if (remoteKanban) lastTenantKanbanRef.current = remoteKanban;
       setAppState((prev) => {
         if (!prev) return prev;
-        let next = mergeKaitenLinkedOrdersIntoAppState(prev, linkedRows, {
-          demo: false,
-          mode: "upsertOnly",
-        });
-        next = removeLinkedOrderCardsFromAppState(next, jL.goneIds ?? [], {
-          columnsOnly: true,
-        });
-        next = applyStandaloneRowsFromServer(next, standaloneRows);
-        overlayLocalKanbanCardHeadOntoRemote(prev, next);
-        const storedMembers = remoteKanban ?? lastTenantKanbanRef.current;
-        if (storedMembers) {
-          mergeInboundKaitenMirrorFieldsFromStored(next, storedMembers);
-        }
+        const next = applyStandaloneRowsFromServer(prev, standaloneRows);
         applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
         return next;
       });
-
-      /**
-       * Сроки/колонки из Kaiten — после первой отрисовки зеркала,
-       * чтобы открытие доски не ждало внешний API.
-       */
-      const curForTitles = appStateRef.current;
-      const titlesMinGapMs = Math.max(8_000, kaitenClientPollIntervalMs() - 2_000);
-      if (
-        !searchActive &&
-        curForTitles &&
-        !isKanbanCardDragInProgress() &&
-        Date.now() >= titlesSyncBackoffRef.current &&
-        Date.now() - titlesSyncLastAtRef.current >= titlesMinGapMs
-      ) {
-        const ids = prependMissingLinkedOrderIds(
-          collectLinkedOrderIdsPreferActiveBoard(curForTitles),
-          linkedOrderIdsMissingMembers(curForTitles),
-        );
-        if (ids.length > 0) {
-          let batch: string[];
-          if (ids.length <= KAITEN_BOARD_TITLES_SYNC_WINDOW) {
-            batch = ids;
-          } else {
-            const start = titlesSyncOffsetRef.current % ids.length;
-            const picked = new Set<string>();
-            for (let i = 0; i < KAITEN_BOARD_TITLES_SYNC_WINDOW; i += 1) {
-              picked.add(ids[(start + i) % ids.length]!);
-            }
-            batch = [...picked];
-            titlesSyncOffsetRef.current =
-              (start + KAITEN_BOARD_TITLES_SYNC_WINDOW) % ids.length;
-          }
-          try {
-            const tsRes = await fetch("/api/orders/kaiten-titles-sync", {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ orderIds: batch, includeComments: false }),
-            });
-            titlesSyncLastAtRef.current = Date.now();
-            if (tsRes.status === 429) {
-              titlesSyncBackoffRef.current =
-                Date.now() +
-                parseKaitenRetryAfterMs(tsRes.headers.get("Retry-After"));
-            } else if (tsRes.ok) {
-              const tsJson = (await tsRes.json()) as {
-                stageDueByOrderId?: Record<string, string | null>;
-                membersByOrderId?: Record<
-                  string,
-                  { assignees?: string[]; participants?: string[] }
-                >;
-              };
-              const inboundStageDue = tsJson.stageDueByOrderId;
-              const inboundMembers = tsJson.membersByOrderId;
-              if (
-                (inboundStageDue && typeof inboundStageDue === "object") ||
-                (inboundMembers && typeof inboundMembers === "object")
-              ) {
-                setAppState((prev) => {
-                  if (!prev) return prev;
-                  const next = structuredClone(prev);
-                  if (inboundStageDue && typeof inboundStageDue === "object") {
-                    applyKaitenStageDueByOrderId(next, inboundStageDue);
-                  }
-                  if (inboundMembers && typeof inboundMembers === "object") {
-                    applyKanbanMembersByOrderId(next, inboundMembers);
-                  }
-                  return next;
-                });
-              }
-            }
-          } catch {
-            /* offline */
-          }
-        }
-      }
     } catch {
       /* offline */
     } finally {
@@ -1407,7 +1181,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [appState, isDemo, kanbanStateReady, cardTypeLanesReady]);
 
   useEffect(() => {
-    if (!appState || !kanbanStateReady) {
+    if (!appState) {
       kaitenPullOnceRef.current = false;
       return;
     }
@@ -1415,7 +1189,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       kaitenPullOnceRef.current = true;
       void syncKanbanMirrorFromApi();
     }
-  }, [appState, kanbanStateReady, syncKanbanMirrorFromApi]);
+  }, [appState, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
     if (!kanbanStateReady) return;
@@ -1436,6 +1210,30 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   }, [kanbanStateReady, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
+    if (isDemo || !appState) return;
+    const bid = appState.activeBoardId;
+    if (boardTilesBoardRef.current !== bid) {
+      boardTilesBoardRef.current = bid;
+      void syncCrmBoardTiles({ full: true });
+    }
+  }, [appState?.activeBoardId, appState, isDemo, syncCrmBoardTiles]);
+
+  useEffect(() => {
+    if (isDemo || !kanbanStateReady) return;
+    const pull = () => {
+      if (document.visibilityState === "visible") void syncCrmBoardTiles();
+    };
+    const iv = window.setInterval(pull, kanbanLinkedOrdersPullIntervalMs());
+    document.addEventListener("visibilitychange", pull);
+    window.addEventListener("focus", pull);
+    return () => {
+      window.clearInterval(iv);
+      document.removeEventListener("visibilitychange", pull);
+      window.removeEventListener("focus", pull);
+    };
+  }, [isDemo, kanbanStateReady, syncCrmBoardTiles]);
+
+  useEffect(() => {
     if (!kanbanStateReady) return;
     const q = (appState?.search || "").trim();
     if (q.length < 2) return;
@@ -1449,25 +1247,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (!kanbanStateReady) return;
     const onOrderArchived = () => {
       void syncKanbanMirrorFromApi();
+      void syncCrmBoardTiles({ full: true });
     };
     window.addEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
     return () => {
       window.removeEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
     };
-  }, [kanbanStateReady, syncKanbanMirrorFromApi]);
-
-  useEffect(() => {
-    if (isDemo || !kanbanStateReady || !appState) return;
-    if (membersAutoRecoverRef.current) return;
-    if (!kanbanMembersNeedHydration(appState)) return;
-    membersAutoRecoverRef.current = true;
-    void recoverStarvedKanbanMembers().then((ok) => {
-      if (ok) return;
-      window.setTimeout(() => {
-        membersAutoRecoverRef.current = false;
-      }, 12_000);
-    });
-  }, [appState, isDemo, kanbanStateReady, recoverStarvedKanbanMembers]);
+  }, [kanbanStateReady, syncKanbanMirrorFromApi, syncCrmBoardTiles]);
 
   useEffect(() => {
     const uid = (kanbanSessionUserId || "").trim();
@@ -1850,6 +1636,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       });
       const card = loc.card;
       const oid = card.linkedOrderId?.trim() || "";
+      if (oid) {
+        persistCrmBoardFieldsClient({ orderId: oid, stageDueYmd: ymd || null });
+      }
       if (
         oid &&
         card.kaitenCardId != null &&
@@ -1878,6 +1667,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           kaitenCardId: card.kaitenCardId,
           event: "tg_due_changed",
           parseMode: "HTML",
+          targetUserIds: kanbanCardTelegramMemberIds(card),
+          orderId: oid || undefined,
           lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
           ...(oid
             ? {
@@ -2007,6 +1798,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       kaitenTrackLane?: KaitenTrackLane;
       sortOrder: number;
     }) => {
+      persistCrmBoardFieldsClient({
+        orderId: args.orderId,
+        columnTitle: args.columnTitle?.trim() || null,
+        sortOrder: args.sortOrder,
+        trackLane: args.kaitenTrackLane ?? null,
+      });
       /* UI уже обновлён локально — Kaiten в фоне; защищаем merge от отката. */
       if (args.columnTitle?.trim()) {
         rememberPendingKanbanColumnMove({
@@ -2862,6 +2659,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           columnTitle: targetCol.title,
           kaitenTrackLane: kaitenLaneForKanbanBoardId(home.id),
           sortOrder,
+        });
+      }
+      if (!isDemo && cardSnapshot.linkedOrderId) {
+        persistCrmBoardFieldsClient({
+          orderId: cardSnapshot.linkedOrderId,
+          columnTitle: targetCol.title,
+          sortOrder,
+          trackLane: kaitenLaneForKanbanBoardId(home.id),
         });
       }
       if (!isDemo) {

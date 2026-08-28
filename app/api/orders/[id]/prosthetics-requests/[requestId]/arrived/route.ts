@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { notifyOrderRequestStatusTelegram } from "@/lib/order-request-status-telegram.server";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { buildKaitenCommentTextWithCrmAuthor } from "@/lib/kaiten-comment-parse";
@@ -136,5 +137,14 @@ export async function POST(
     }
   }
 
+  after(() => {
+    void notifyOrderRequestStatusTelegram({
+      tenantId,
+      orderId,
+      actorUserId: session.sub,
+      kind: "prosthetics",
+      status: "arrived",
+    }).catch((e) => console.error("[prosthetics-requests/arrived] telegram", e));
+  });
   return NextResponse.json({ ok: true });
 }

@@ -20,6 +20,9 @@ import {
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import type { KanbanMemberPickerMode } from "@/lib/kanban/kanban-card-members-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+const LIST_ROW_PX = 68;
+const LIST_OVERSCAN = 10;
 import { IconBrick, IconListCheck, IconPlus } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
 import { KanbanMemberPickerDialog } from "./KanbanMemberPickerDialog";
@@ -462,6 +465,28 @@ export function KanbanListView({
       }),
     [board, appState, sort, cardHomeBoardId],
   );
+  const [listRange, setListRange] = useState({ start: 0, end: 40 });
+  const onListScroll = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el) return;
+      const start = Math.max(
+        0,
+        Math.floor(el.scrollTop / LIST_ROW_PX) - LIST_OVERSCAN,
+      );
+      const visible =
+        Math.ceil((el.clientHeight || 480) / LIST_ROW_PX) + LIST_OVERSCAN * 2;
+      const end = Math.min(rows.length, start + visible);
+      setListRange((prev) =>
+        prev.start === start && prev.end === end ? prev : { start, end },
+      );
+    },
+    [rows.length],
+  );
+  const listStart = Math.min(listRange.start, rows.length);
+  const listEnd = Math.min(Math.max(listRange.end, listStart), rows.length);
+  const listSlice = rows.slice(listStart, listEnd);
+  const listPadTop = listStart * LIST_ROW_PX;
+  const listPadBottom = Math.max(0, (rows.length - listEnd) * LIST_ROW_PX);
 
   /** Ширина колонки «положение» — по самому длинному названию в текущем списке. */
   const longestColumnTitleCh = useMemo(() => {
@@ -542,7 +567,11 @@ export function KanbanListView({
             Сброс сортировки
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto"
+          ref={onListScroll}
+          onScroll={(e) => onListScroll(e.currentTarget)}
+        >
         <div className={LIST_TABLE}>
         <div
           className="sticky top-0 z-10 hidden border-b border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] pb-1 text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:border-l-[3px] sm:border-l-transparent sm:border-r sm:border-r-transparent"
@@ -599,7 +628,11 @@ export function KanbanListView({
             Нет карточек по текущим фильтрам и поиску.
           </p>
         ) : (
-          rows.map(({ card, columnTitle, homeBoardId }) => {
+          <>
+          {listPadTop > 0 ? (
+            <div className="sm:col-span-full" style={{ height: listPadTop }} aria-hidden />
+          ) : null}
+          {listSlice.map(({ card, columnTitle, homeBoardId }) => {
             const rowBoard =
               appState.boards.find((b) => b.id === homeBoardId) ?? board;
             const accent = getCardTypeAccent(rowBoard, card.cardTypeId);
@@ -913,7 +946,11 @@ export function KanbanListView({
                   </div>
                 </article>
             );
-          })
+          })}
+          {listPadBottom > 0 ? (
+            <div className="sm:col-span-full" style={{ height: listPadBottom }} aria-hidden />
+          ) : null}
+          </>
         )}
         </div>
         </div>

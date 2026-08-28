@@ -164,7 +164,7 @@ describe("buildKanbanDisplayView · Мои", () => {
     expect(allIds).toContain("stepanov-empty");
   });
 
-  it("без поиска оставляет найденный наряд по sticky oid, даже без людей", () => {
+  it("без поиска не оставляет чужой наряд по sticky oid", () => {
     const board = orthopedicsMirrorBoard();
     const prod = board.columns.find((c) => c.title === "Производство")!;
     prod.cards.push(
@@ -197,7 +197,53 @@ describe("buildKanbanDisplayView · Мои", () => {
       stickyLinkedOrderIds: ["ord-степанов"],
     });
     const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
-    expect(allIds).toContain("stepanov-sticky");
+    expect(allIds).not.toContain("stepanov-sticky");
+  });
+
+  it("живые люди на карточке важнее устаревшего кэша шапки", () => {
+    const board = orthopedicsMirrorBoard();
+    const col = board.columns.find((c) => c.title === "Согласование") ??
+      board.columns.find((c) => c.title === "К исполнению")!;
+    col.cards.push(
+      createCard({
+        id: "чужая-арина",
+        title: "2608-318 Иванова С.В.",
+        linkedOrderId: "ord-иванова",
+        assignees: ["u-арина"],
+        participants: [],
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [board],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const memberHeads = {
+      "oid:ord-иванова": {
+        assignees: [],
+        participants: ["u-всеволод"],
+        fingerprint: null,
+        stageDue: "2026-08-29",
+      },
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "u-всеволод",
+      sessionUserRole: "ADMIN",
+      stickyLinkedOrderIds: ["ord-иванова"],
+      memberHeads,
+    });
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).not.toContain("чужая-арина");
   });
 
   it("без поиска оставляет наряд по кэшу шапки, даже если массивы пустые", () => {

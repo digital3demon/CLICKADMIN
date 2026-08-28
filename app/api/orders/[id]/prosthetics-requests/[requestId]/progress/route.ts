@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { notifyOrderRequestStatusTelegram } from "@/lib/order-request-status-telegram.server";
+import type { OrderRequestTelegramStatus } from "@/lib/order-request-status-telegram";
 import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { buildKaitenCommentTextWithCrmAuthor } from "@/lib/kaiten-comment-parse";
@@ -79,6 +81,17 @@ export async function POST(
       { status: advanced.status },
     );
   }
+
+  const tgStatus: OrderRequestTelegramStatus = step;
+  after(() => {
+    void notifyOrderRequestStatusTelegram({
+      tenantId,
+      orderId,
+      actorUserId: session.sub,
+      kind: "prosthetics",
+      status: tgStatus,
+    }).catch((e) => console.error("[prosthetics-requests/progress] telegram", e));
+  });
 
   if (step !== "ordered" && step !== "arrived") {
     return NextResponse.json({ ok: true, step });

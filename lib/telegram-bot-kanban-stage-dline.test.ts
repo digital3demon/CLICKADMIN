@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectKanbanStageDueCards,
   kanbanStageDueYmdInInclusiveRange,
+  mergeKanbanStageDueCards,
 } from "@/lib/telegram-bot-kanban-stage-dline-helpers";
 import { createCard } from "@/lib/kanban/model";
 import type { KanbanAppState } from "@/lib/kanban/types";
@@ -114,5 +115,40 @@ describe("collectKanbanStageDueCards", () => {
       { startYmd: "2026-07-10", endYmd: "2026-07-10", header: "x" },
     );
     expect(cards.map((c) => c.id)).toEqual(["mine-today", "other-today"]);
+  });
+});
+
+describe("mergeKanbanStageDueCards", () => {
+  it("наряд из CRM побеждает leftover JSON с тем же oid (кириллица в номере)", () => {
+    const fromOrders = [
+      createCard({
+        id: "kaiten-order-ord-степанов",
+        title: "2607-299 Степанов А.В. из CRM",
+        linkedOrderId: "ord-степанов",
+        assignees: ["user-a"],
+        stageDueDate: "2026-08-29",
+      }),
+    ];
+    const fromJson = [
+      createCard({
+        id: "old-json",
+        title: "2607-299 Степанов устарел",
+        linkedOrderId: "ord-степанов",
+        assignees: ["user-a"],
+        stageDueDate: "2026-08-01",
+      }),
+      createCard({
+        id: "локальная",
+        title: "Локальная карточка",
+        assignees: ["user-a"],
+        stageDueDate: "2026-08-30",
+      }),
+    ];
+    const merged = mergeKanbanStageDueCards(fromOrders, fromJson);
+    expect(merged.map((c) => c.id)).toEqual([
+      "kaiten-order-ord-степанов",
+      "локальная",
+    ]);
+    expect(merged[0]!.title).toContain("из CRM");
   });
 });

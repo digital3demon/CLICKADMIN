@@ -8,10 +8,8 @@ import {
 } from "@prisma/client";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
-import {
-  notifyKanbanTelegramSubscribers,
-  notifyKanbanTelegramSubscribersAndTenantSharedChat,
-} from "@/lib/telegram-kanban-notify";
+import { loadOrderKanbanTelegramMemberIds } from "@/lib/telegram-kanban-card-members.server";
+import { notifyKanbanTelegramSubscribers } from "@/lib/telegram-kanban-notify";
 import { telegramHtmlLink } from "@/lib/telegram-html";
 import { after, NextResponse } from "next/server";
 import {
@@ -38,10 +36,7 @@ import { runSelfCorrectionForOrderInBackground } from "@/lib/llm/self-correction
 import { syncOrderProstheticsStockTx } from "@/lib/sync-order-prosthetics-stock";
 import { applyWorkSentKanbanSideEffects } from "@/lib/kanban/advance-linked-order-column.server";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
-import {
-  isOrderCorrectionTrack,
-  ORDER_CORRECTION_TRACK_LABELS,
-} from "@/lib/order-correction-track";
+import { isOrderCorrectionTrack } from "@/lib/order-correction-track";
 import {
   pushKaitenCardTitleForOrderIfLinked,
   pushKaitenHeadForContinuationParents,
@@ -1405,17 +1400,6 @@ export async function PATCH(
 
     after(async () => {
       try {
-        const base = crmPublicBaseUrl();
-        const rel = kanbanOrderDeepLinkPath(orderId);
-        const cardUrl = `${base}${rel}`;
-        const orderPageUrl = `${base}/orders/${encodeURIComponent(orderId)}`;
-        const linkLabel =
-          order.kaitenCardTitleMirror?.trim() || `Наряд №${order.orderNumber}`;
-        const linkHtml = telegramHtmlLink(cardUrl, linkLabel);
-        const cardWord = telegramHtmlLink(cardUrl, "карточке");
-        const orderWord = telegramHtmlLink(orderPageUrl, "заказе");
-
-        // Фоновое сравнение предсказания ИИ с эталоном админа после сохранения
         runSelfCorrectionForOrderInBackground(order.tenantId, orderId);
 
         const clientContextChanged =
@@ -1427,87 +1411,8 @@ export async function PATCH(
             clinicId: order.clinicId,
           });
         }
-
-        const touchedCorrection =
-          body.correctionTrack !== undefined ||
-          body.correctionReason !== undefined ||
-          body.correctionPaid !== undefined;
-        const correctionChanged =
-          touchedCorrection &&
-          (existing.correctionTrack !== order.correctionTrack ||
-            (existing.correctionReason ?? "") !== (order.correctionReason ?? "") ||
-            existing.correctionPaid !== order.correctionPaid);
-
-        if (correctionChanged) {
-          const corrParts: string[] = [];
-          if (order.correctionTrack) {
-            corrParts.push(
-              `направление — ${ORDER_CORRECTION_TRACK_LABELS[order.correctionTrack]}`,
-            );
-          } else {
-            corrParts.push("направление не задано");
-          }
-          corrParts.push(
-            order.correctionPaid ? "за счёт клиента: да" : "за счёт клиента: нет",
-          );
-          const reason = (order.correctionReason ?? "").trim();
-          if (reason) {
-            corrParts.push(
-              reason.length > 120
-                ? `причина: ${reason.slice(0, 117)}…`
-                : `причина: ${reason}`,
-            );
-          }
-          const detail = corrParts.join("; ");
-          await notifyKanbanTelegramSubscribersAndTenantSharedChat(clientsPrisma, {
-            tenantId,
-            event: "tg_order_correction_changed",
-            actorUserId: session?.sub ?? null,
-            lines: [`В ${linkHtml} обновлены корректировки: ${detail}`],
-            linesAdmin: [
-              `В ${cardWord} и ${orderWord} обновлены корректировки: ${detail}`,
-            ],
-            parseMode: "HTML",
-          });
-        }
-
-        const touchedProstheticsOrdered = body.prostheticsOrdered !== undefined;
-        const touchedProstheticsJson = body.prosthetics !== undefined;
-        const prevP = prostheticsFromDb(existing.prosthetics);
-        const nextP = prostheticsFromDb(order.prosthetics);
-        const prostheticsJsonChanged =
-          touchedProstheticsJson &&
-          JSON.stringify(prevP) !== JSON.stringify(nextP);
-        const prostheticsOrderedChanged =
-          touchedProstheticsOrdered &&
-          existing.prostheticsOrdered !== order.prostheticsOrdered;
-
-        if (prostheticsJsonChanged || prostheticsOrderedChanged) {
-          const pParts: string[] = [];
-          if (prostheticsOrderedChanged) {
-            pParts.push(
-              order.prostheticsOrdered
-                ? "отмечено «заказ протетики»"
-                : "снято «заказ протетики»",
-            );
-          }
-          if (prostheticsJsonChanged) {
-            pParts.push("изменён состав протетики (клиент / склад)");
-          }
-          const detail = pParts.join("; ");
-          await notifyKanbanTelegramSubscribersAndTenantSharedChat(clientsPrisma, {
-            tenantId,
-            event: "tg_order_prosthetics_changed",
-            actorUserId: session?.sub ?? null,
-            lines: [`В ${linkHtml} обновлена протетика: ${detail}`],
-            linesAdmin: [
-              `В ${cardWord} и ${orderWord} обновлена протетика: ${detail}`,
-            ],
-            parseMode: "HTML",
-          });
-        }
       } catch (e) {
-        console.error("[PATCH order] telegram order fields notify", e);
+        console.error("[PATCH order] after-save side effects", e);
       }
 
       if (touchedCrmKanbanFields) {
@@ -1536,9 +1441,14 @@ export async function PATCH(
           const linesAdmin = [
             `В ${cardWord} и ${orderWord} обновлено: ${details.join("; ")}`,
           ];
+          const onlyUserIds = await loadOrderKanbanTelegramMemberIds(
+            order.tenantId,
+            orderId,
+          );
           await notifyKanbanTelegramSubscribers(clientsPrisma, {
             event: "tg_kanban_crm_sync",
             actorUserId: session?.sub ?? null,
+            onlyUserIds,
             lines,
             linesAdmin,
             parseMode: "HTML",

@@ -124,7 +124,7 @@ describe("listTagWhere prostheticsPending", () => {
     expect(parsed?.kind).toBe("prostheticsPending");
     if (parsed?.kind !== "prostheticsPending") return;
     const json = JSON.stringify(listTagWhere(parsed));
-    expect(json).toContain("prostheticsOrdered");
+    expect(json).not.toContain("prostheticsOrdered");
     expect(json).toContain("prostheticsRequests");
     expect(json).toContain("chatInboxItems");
     expect(json).toContain("PROSTHETICS");

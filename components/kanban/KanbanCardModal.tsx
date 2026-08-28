@@ -75,6 +75,7 @@ import {
   applyKanbanCardMembersOnBoard,
   notifyKanbanCardMemberChange,
 } from "@/lib/kanban/kanban-card-members-client";
+import { persistCrmBoardFieldsClient } from "@/lib/kanban/persist-crm-board-fields-client";
 import {
   ensureKanbanCardFilesFromChatImages,
   findCard,
@@ -129,6 +130,7 @@ import {
   extractOrderNumberLabelFromKanbanCardTitle,
   type KanbanMentionTelegramContext,
 } from "@/lib/kanban-mention-telegram-html";
+import { kanbanCardTelegramMemberIds } from "@/lib/telegram-kanban-card-scope";
 import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 import { canSendKanbanChatPtMemo } from "@/lib/auth/permissions";
@@ -191,12 +193,34 @@ function postKanbanCrmTelegramNotify(payload: {
   /** На сервере: достаточно любого из ключей (для @упоминаний — комментарий или упоминание). */
   alternatePrefKeys?: KanbanTelegramPrefKey[];
   parseMode?: "HTML";
+  orderId?: string;
+  cardMembers?: {
+    assignees?: readonly string[] | null;
+    participants?: readonly string[] | null;
+    linkedOrderId?: string | null;
+  };
 }) {
+  const fromCard = payload.cardMembers
+    ? kanbanCardTelegramMemberIds(payload.cardMembers)
+    : [];
+  const targetUserIds = payload.targetUserIds?.length
+    ? payload.targetUserIds
+    : fromCard;
+  const orderId = (
+    payload.orderId ||
+    payload.cardMembers?.linkedOrderId ||
+    ""
+  ).trim();
+  const { cardMembers: _cardMembers, ...rest } = payload;
   void fetch("/api/kanban/telegram-notify", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...rest,
+      ...(targetUserIds.length ? { targetUserIds } : {}),
+      ...(orderId ? { orderId } : {}),
+    }),
   }).catch(() => {});
 }
 
@@ -952,6 +976,7 @@ export function KanbanCardModal({
         postKanbanCrmTelegramNotify({
           kaitenCardId: fc.card.kaitenCardId,
           event: "tg_block_added",
+          cardMembers: fc.card,
           parseMode: "HTML",
           lines: [
             `${who} заблокировал(а) ${linkHtml}`,
@@ -1320,6 +1345,7 @@ export function KanbanCardModal({
       postKanbanCrmTelegramNotify({
         kaitenCardId: card.kaitenCardId,
         event: "tg_comment_added",
+        cardMembers: card,
         parseMode: "HTML",
         lines: [`${who} оставил(а) комментарий к ${linkHtml}\n«${snippet}»`],
         ...(oid
@@ -1686,6 +1712,9 @@ export function KanbanCardModal({
       pushActivity(fc.card, "Изменён срок", b.users[0]?.id, b, act);
     });
     const oid = card.linkedOrderId?.trim() || "";
+    if (oid) {
+      persistCrmBoardFieldsClient({ orderId: oid, stageDueYmd: v || null });
+    }
     if (oid && card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)) {
       rememberOptimisticKanbanStageDue(oid, v);
       void patchOrderKaitenCard(oid, { stageDueDate: v || null }).then((r) => {
@@ -1705,6 +1734,7 @@ export function KanbanCardModal({
       postKanbanCrmTelegramNotify({
         kaitenCardId: card.kaitenCardId,
         event: "tg_due_changed",
+        cardMembers: card,
         parseMode: "HTML",
         lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
         ...(oid
@@ -2142,6 +2172,7 @@ export function KanbanCardModal({
                       postKanbanCrmTelegramNotify({
                         kaitenCardId: fc.card.kaitenCardId,
                         event: "tg_card_unblocked",
+                        cardMembers: fc.card,
                         parseMode: "HTML",
                         lines: [`${who} снял(а) блокировку с ${linkHtml}`],
                         ...(linkedOid
@@ -2459,6 +2490,7 @@ export function KanbanCardModal({
                         postKanbanCrmTelegramNotify({
                           kaitenCardId: card.kaitenCardId,
                           event: "tg_kanban_crm_sync",
+                          cardMembers: card,
                           parseMode: "HTML",
                           lines: [
                             `В ${linkHtml} тип карточки — ${escapeTelegramHtml(typeLabel)}`,
@@ -2601,6 +2633,7 @@ export function KanbanCardModal({
                               postKanbanCrmTelegramNotify({
                                 kaitenCardId: card.kaitenCardId,
                                 event: "tg_description_changed",
+                                cardMembers: card,
                                 parseMode: "HTML",
                                 lines: [`Обновлено описание в ${linkHtml}`],
                                 ...(oid

@@ -9,10 +9,12 @@ import {
   parseKanbanAppState,
 } from "@/lib/kanban/chat-sync";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+import { listCrmStageDueCardsForTelegram } from "@/lib/kanban/crm-board-fields.server";
 import {
   collectKanbanStageDueCards,
   kanbanCardTelegramLabel,
   kanbanStageDlineWindowForCommand,
+  mergeKanbanStageDueCards,
 } from "@/lib/telegram-bot-kanban-stage-dline-helpers";
 import type { TelegramHtmlListItem } from "@/lib/telegram-html-message";
 
@@ -87,21 +89,31 @@ export async function fetchKanbanStageDlineTelegramItems(
   opts?: { crmUserId?: string | null; linkToOrderPage?: boolean },
 ): Promise<{ header: string; items: TelegramHtmlListItem[] }> {
   const window = kanbanStageDlineWindowForCommand(cmd);
-  const state = await loadKanbanAppStateForTenant(tenantId);
-  if (!state) {
-    return { header: window.header, items: [] };
-  }
   const linkToOrderPage = opts?.linkToOrderPage === true;
-  const statusById = kanbanCardStatusById(state);
-  const cards = collectKanbanStageDueCards(state, window, opts);
+  const [fromOrders, state] = await Promise.all([
+    listCrmStageDueCardsForTelegram({
+      tenantId,
+      crmUserId: opts?.crmUserId,
+      startYmd: window.startYmd,
+      endYmd: window.endYmd,
+    }),
+    loadKanbanAppStateForTenant(tenantId),
+  ]);
+  const fromJson = state
+    ? collectKanbanStageDueCards(state, window, opts)
+    : [];
+  const statusById = state ? kanbanCardStatusById(state) : new Map<string, string>();
+  const cards = mergeKanbanStageDueCards(fromOrders.cards, fromJson);
   return {
     header: window.header,
-    items: cards.map((card) =>
-      kanbanCardTelegramItem(
-        card,
-        linkToOrderPage,
-        statusById.get(card.id) ?? "—",
-      ),
-    ),
+    items: cards.map((card) => {
+      const oid = String(card.linkedOrderId || "").trim();
+      const status =
+        statusById.get(card.id) ??
+        (oid ? fromOrders.statusByKey.get(oid) : undefined) ??
+        fromOrders.statusByKey.get(card.id) ??
+        "—";
+      return kanbanCardTelegramItem(card, linkToOrderPage, status);
+    }),
   };
 }

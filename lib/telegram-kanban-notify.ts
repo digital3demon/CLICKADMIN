@@ -9,6 +9,10 @@ import {
   type KanbanTelegramPrefKey,
 } from "@/lib/kanban-telegram-prefs";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
+import {
+  isCardMemberScopedTelegramEvent,
+  uniqTelegramTargetUserIds,
+} from "@/lib/telegram-kanban-card-scope";
 
 /** Две ссылки (канбан + наряд): администратор, старший администратор, руководитель. */
 function linesHtmlForKanbanTelegramRecipient(
@@ -53,6 +57,11 @@ export async function notifyKanbanTelegramSubscribers(
     linesAdmin?: string[];
     /** Если задано — только эти роли (например уведомления производства). */
     onlyRoles?: UserRole[];
+    /**
+     * Карточка/наряд: только эти user id (ответственные и участники).
+     * Для card-scoped события без списка рассылка всем запрещена.
+     */
+    onlyUserIds?: string[];
   },
 ): Promise<void> {
   if (opts.skip) return;
@@ -62,6 +71,15 @@ export async function notifyKanbanTelegramSubscribers(
   const hasAny =
     opts.lines.some(Boolean) || (opts.linesAdmin?.some(Boolean) ?? false);
   if (!hasAny) return;
+
+  const memberIds = uniqTelegramTargetUserIds(opts.onlyUserIds);
+  if (isCardMemberScopedTelegramEvent(opts.event) && memberIds.length === 0) {
+    console.warn(
+      "[telegram-kanban-notify] skip: card-scoped event without members",
+      opts.event,
+    );
+    return;
+  }
 
   const exclude = new Set<string>();
   if (opts.actorUserId) exclude.add(opts.actorUserId);
@@ -74,6 +92,7 @@ export async function notifyKanbanTelegramSubscribers(
     where: {
       isActive: true,
       telegramId: { not: null },
+      ...(memberIds.length ? { id: { in: memberIds } } : {}),
       ...(opts.onlyRoles?.length ? { role: { in: opts.onlyRoles } } : {}),
       ...(excludeIds.length ? { NOT: { id: { in: excludeIds } } } : {}),
     },
@@ -308,6 +327,7 @@ export async function notifyKanbanTelegramSubscribersAndTenantSharedChat(
     linesAdmin?: string[];
     parseMode?: "HTML";
     skip?: boolean;
+    onlyUserIds?: string[];
   },
 ): Promise<void> {
   await notifyKanbanTelegramSubscribers(prisma, {
@@ -317,6 +337,7 @@ export async function notifyKanbanTelegramSubscribersAndTenantSharedChat(
     linesAdmin: opts.linesAdmin,
     parseMode: opts.parseMode,
     skip: opts.skip,
+    onlyUserIds: opts.onlyUserIds,
   });
   await notifyTenantAdminSharedTelegramChat(prisma, {
     tenantId: opts.tenantId,

@@ -20,10 +20,22 @@ const pendingCorrectionsWhere = {
 } satisfies Prisma.OrderWhereInput;
 
 const pendingProstheticsWhere = {
-  prostheticsOrdered: false,
-  prostheticsRequests: {
-    some: { resolvedAt: null, rejectedAt: null },
-  },
+  OR: [
+    {
+      prostheticsRequests: {
+        some: { resolvedAt: null, rejectedAt: null },
+      },
+    },
+    {
+      chatInboxItems: {
+        some: {
+          type: "PROSTHETICS",
+          resolvedAt: null,
+          rejectedAt: null,
+        },
+      },
+    },
+  ],
 } satisfies Prisma.OrderWhereInput;
 
 /** Наряды в окне отгрузки по сроку лаборатории [start, endExclusive). */

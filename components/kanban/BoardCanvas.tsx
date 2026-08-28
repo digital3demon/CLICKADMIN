@@ -8,6 +8,7 @@ import {
 } from "@/lib/kanban/board-visible-cards";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "@/lib/kanban/kanban-card-move-preview";
+import { VirtualizedKanbanColumnCards } from "@/components/kanban/VirtualizedKanbanColumnCards";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   annulKanbanStageTimerOnMemberAdvance,
@@ -42,7 +43,6 @@ import {
   horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
-  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -1557,7 +1557,6 @@ export function BoardCanvas({
                       const col = board.columns.find((c) => c.id === columnId);
                       if (!col) return null;
                       const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
-                      const cardIds = vis.map((c) => c.id);
                       return (
                         <SortableColumnSection
                           key={col.id}
@@ -1570,18 +1569,13 @@ export function BoardCanvas({
                           columnDragDisabled
                           shareBoardWidth={false}
                         >
-                          <SortableContext
-                            id={col.id}
-                            items={cardIds}
-                            strategy={verticalListSortingStrategy}
-                            disabled={dndLocked}
-                          >
-                            <div
+                            <VirtualizedKanbanColumnCards
+                              cards={vis}
+                              columnId={col.id}
+                              laneId={lane.id}
+                              dndLocked={dndLocked}
                               className="cards-container flex min-h-[36px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[42px] sm:gap-1.5 sm:p-1.5"
-                              data-column-id={col.id}
-                              data-lane-id={lane.id}
-                            >
-                              {vis.map((card) => {
+                              renderCard={(card) => {
                                 const home = resolveCardHomeBoard(card);
                                 const foreignBoardLabel =
                                   (appState.search.trim() || aggregateLayoutLocked) &&
@@ -1606,9 +1600,8 @@ export function BoardCanvas({
                                     onPreviewLeave={onPreviewLeave}
                                   />
                                 );
-                              })}
-                            </div>
-                          </SortableContext>
+                              }}
+                            />
                           {!aggregateLayoutLocked ? (
                             <button
                               type="button"
@@ -1634,7 +1627,6 @@ export function BoardCanvas({
               >
                 {board.columns.map((col) => {
                   const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
-                  const cardIds = vis.map((c) => c.id);
                   return (
                     <SortableColumnSection
                       key={col.id}
@@ -1646,17 +1638,12 @@ export function BoardCanvas({
                       layoutLocked={aggregateLayoutLocked}
                       columnDragDisabled={coarsePointer}
                     >
-                      <SortableContext
-                        id={col.id}
-                        items={cardIds}
-                        strategy={verticalListSortingStrategy}
-                        disabled={dndLocked}
-                      >
-                        <div
+                        <VirtualizedKanbanColumnCards
+                          cards={vis}
+                          columnId={col.id}
+                          dndLocked={dndLocked}
                           className="cards-container flex min-h-[36px] flex-1 flex-col gap-1.5 overflow-y-auto p-1.5 sm:min-h-[42px] sm:gap-1.5 sm:p-1.5"
-                          data-column-id={col.id}
-                        >
-                          {vis.map((card) => {
+                          renderCard={(card) => {
                             const home = resolveCardHomeBoard(card);
                             const foreignBoardLabel =
                               (appState.search.trim() || aggregateLayoutLocked) &&
@@ -1681,9 +1668,8 @@ export function BoardCanvas({
                                 onPreviewLeave={onPreviewLeave}
                               />
                             );
-                          })}
-                        </div>
-                      </SortableContext>
+                          }}
+                        />
                       {!aggregateLayoutLocked ? (
                         <button
                           type="button"

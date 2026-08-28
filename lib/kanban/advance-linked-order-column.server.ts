@@ -257,6 +257,7 @@ export async function applyWorkSentKanbanSideEffects(opts: {
       data: {
         labWorkStatus: "TO_ADMINS",
         kaitenColumnTitle: toTitle,
+        kanbanBoardUpdatedAt: new Date(),
       },
     });
   } catch (e) {

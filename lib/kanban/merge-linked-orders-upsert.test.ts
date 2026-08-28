@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import {
+  buildKanbanDisplayView,
   defaultAppState,
   demoKanbanDefaultState,
   KANBAN_BOARD_ORTHODONTICS_ID,
@@ -279,6 +280,29 @@ describe("removeLinkedOrderCardsFromAppState", () => {
     expect(pruned.boards[0]!.stoppedCards?.some((r) => r.card.linkedOrderId === "наряд-стоп")).toBe(
       true,
     );
+  });
+
+  it("дорожка из БД кладёт карточку на ортодонтию на пустую доску — без поиска", () => {
+    const next = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [
+        sampleRow("2607-299", {
+          kaitenTrackLane: "ORTHODONTICS",
+          orderNumber: "2607-299",
+          patientName: "Степанов А.В.",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(next, "2607-299");
+    expect(loc).not.toBeNull();
+    expect(next.boards[loc!.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    const { displayBoard } = buildKanbanDisplayView(
+      { ...next, activeBoardId: KANBAN_BOARD_ORTHODONTICS_ID, search: "" },
+      { sessionUserId: "me", sessionUserRole: "ADMIN" },
+    );
+    const titles = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.title));
+    expect(titles.some((t) => t.includes("2607-299"))).toBe(true);
   });
 
   it("пустой kaitenTrackLane не переносит карточку с ортодонтии на ортопедию", () => {

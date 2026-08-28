@@ -39,6 +39,7 @@ import {
 } from "@/lib/kanban/preserve-kanban-card-head";
 import { overlayMissingLocalLinkedCardsOntoRemote } from "@/lib/kanban/overlay-missing-local-linked-cards";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
+import { stripLinkedOrderCardsForTenantChrome } from "@/lib/kanban/kanban-tenant-chrome";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
@@ -1454,9 +1455,10 @@ export function kanbanStateForPersistenceUnderLimit(
   isDemo = false,
   maxBytes = PERSIST_TARGET_JSON_BYTES,
 ): KanbanAppState {
+  const chrome = isDemo ? state : stripLinkedOrderCardsForTenantChrome(state);
   const base = isDemo
-    ? { ...state, search: "" }
-    : stripPersonalKanbanUiForTenant(state);
+    ? { ...chrome, search: "" }
+    : stripPersonalKanbanUiForTenant(chrome);
 
   let best = slimKanbanStateForClientState(base, 0);
   for (const level of [0, 1, 2, 3] as const) {
@@ -1934,7 +1936,7 @@ function appendArchivedSearchHits(args: {
  * Пустые колонки своей доски не выкидываем — иначе fit-zoom раздувает один столбец.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
-/** «МОИ» / «Ответственный»: участник, поиск по наряду, или только что найденный oid. */
+/** «МОИ» / «Ответственный»: люди на карточке; sticky только пока активен поиск. */
 export function kanbanAggregateKeepsCard(
   card: KanbanCard,
   uid: string,
@@ -1953,7 +1955,8 @@ export function kanbanAggregateKeepsCard(
   const linked = Boolean(card.linkedOrderId?.trim());
   const oid = String(card.linkedOrderId || "").trim();
   const searchLinkedHit = Boolean(opts?.searchActive) && linked;
-  const sticky = Boolean(oid && opts?.stickyOrderIds?.has(oid));
+  const sticky =
+    Boolean(opts?.searchActive) && Boolean(oid && opts?.stickyOrderIds?.has(oid));
   if (mode === "my") {
     const inParts = participants.includes(uid);
     const inAssign = assignees.includes(uid);
@@ -2460,8 +2463,8 @@ function resolveOrderKanbanColumn(
   return queue;
 }
 
-/** Боевой канбан-зеркало: колонка по `Order.kaitenColumnTitle` (как в Kaiten). */
-function resolveOrderKanbanColumnFromKaitenMirrorTitle(
+/** Колонка доски CRM по подписи на наряде (`Order.kaitenColumnTitle`). */
+export function resolveOrderKanbanColumnFromKaitenMirrorTitle(
   board: KanbanBoard,
   kaitenColumnTitle: string | null | undefined,
 ): KanbanColumn {

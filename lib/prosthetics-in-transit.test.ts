@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   collapseProstheticsListTwins,
+  isProstheticsAwaitingAccept,
   prostheticsOpenListTwinKey,
 } from "./prosthetics-in-transit";
+
+describe("isProstheticsAwaitingAccept", () => {
+  it("история «Ожидает» не зависит от галочки наряда", () => {
+    expect(
+      isProstheticsAwaitingAccept({ resolvedAt: null, rejectedAt: null }),
+    ).toBe(true);
+    expect(
+      isProstheticsAwaitingAccept({
+        resolvedAt: "2026-08-28T12:00:00.000Z",
+        rejectedAt: null,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("prostheticsOpenListTwinKey", () => {
   it("inbox с ??? и legacy без префикса — один ключ на наряд", () => {
