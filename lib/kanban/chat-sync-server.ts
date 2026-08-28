@@ -61,6 +61,9 @@ export async function syncKaitenCommentsIntoKanbanState(input: {
       input.comments,
     );
     if (!merged.changed) return { changed: false, skipped: false };
+    if (merged.next.length === 0 && existingStore.length > 0) {
+      return { changed: false, skipped: false };
+    }
 
     try {
       await saveKanbanOrderComments(tenantId, orderId, merged.next);

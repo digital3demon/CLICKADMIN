@@ -39,6 +39,7 @@ import {
   writeClientState,
 } from "@/lib/client-state-client";
 import { adoptRemoteKanbanCards } from "@/lib/kanban/adopt-remote-kanban-cards";
+import { flushLinkedOrderCommentsFromState } from "@/lib/kanban/persist-kanban-comments-client";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
 import {
@@ -168,6 +169,7 @@ export function DirectoryKanbanBoardsClient({
     kanbanStateSaveTimerRef.current = setTimeout(() => {
       kanbanStateSaveTimerRef.current = null;
       void (async () => {
+        if (!isDemo) flushLinkedOrderCommentsFromState(appState);
         let toWrite = payload;
         if (!isDemo) {
           const remote = await readClientState<unknown>("tenant", "kanbanAppStateV3");

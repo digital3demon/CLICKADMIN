@@ -43,7 +43,6 @@ import {
   KANBAN_BOARD_MY_CARDS_ID,
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
-  kanbanStateForPersistence,
   mergeKanbanStatePreservingLocalBoards,
   withActiveBoard,
 } from "@/lib/kanban/model";
@@ -127,6 +126,10 @@ import {
   readClientStateDetailed,
   writeClientState,
 } from "@/lib/client-state-client";
+import {
+  writePersistedKanbanState,
+  writePersistedKanbanStateNow,
+} from "@/lib/kanban/persist-kanban-comments-client";
 import {
   applyKanbanCardHeadsCache,
   collectLinkedOrderIdsFromHeadsCache,
@@ -633,11 +636,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const { state } = applyKaitenRefreshPatchesToState(prev, patches);
         saveKanbanState(state, false);
         if (canPersistTenantKanban(state)) {
-          void writeClientState(
-            "tenant",
-            "kanbanAppStateV3",
-            kanbanStateForPersistence(state, false),
-          );
+          writePersistedKanbanState(state, false);
         }
         return state;
       });
@@ -983,11 +982,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         return merged;
       });
       if (persisted && canPersistTenantKanban(persisted)) {
-        void writeClientState(
-          "tenant",
-          "kanbanAppStateV3",
-          kanbanStateForPersistence(persisted, false),
-        );
+        writePersistedKanbanState(persisted, false);
       }
       if (!isDemo && needCardHead.length > 0) {
         const byOrder: Record<
@@ -1015,11 +1010,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
             saveKanbanState(next, false);
             if (canPersistTenantKanban(next)) {
-              void writeClientState(
-                "tenant",
-                "kanbanAppStateV3",
-                kanbanStateForPersistence(next, false),
-              );
+              writePersistedKanbanState(next, false);
             }
             return next;
           });
@@ -1258,15 +1249,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (!appState || !kanbanStateReady || kanbanPersistPausedRef.current) return;
     saveKanbanState(appState, isDemo);
     if (!canPersistTenantKanban(appState)) return;
-    const key = isDemo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
-    const scope = isDemo ? "user" : "tenant";
-    const payload = kanbanStateForPersistence(appState, isDemo);
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
     }
     kanbanStateSaveTimerRef.current = setTimeout(() => {
       kanbanStateSaveTimerRef.current = null;
-      void writeClientState(scope, key, payload);
+      writePersistedKanbanState(appState, isDemo);
     }, 2000);
     return () => {
       if (kanbanStateSaveTimerRef.current) {
@@ -1287,11 +1275,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         clearTimeout(kanbanStateSaveTimerRef.current);
         kanbanStateSaveTimerRef.current = null;
       }
-      void writeClientState(
-        "tenant",
-        "kanbanAppStateV3",
-        kanbanStateForPersistence(cur, false),
-      );
+      writePersistedKanbanState(cur, false);
     };
     const onPageHide = () => flushKanbanTenantNowRef.current();
     const onVis = () => {
@@ -1343,9 +1327,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       if (kanbanPersistPausedRef.current) return;
       const cur = appStateRef.current;
       if (!cur || !canPersistTenantKanban(cur)) return;
-      const key = demo ? "kanbanAppStateV3Demo" : "kanbanAppStateV3";
-      const scope = demo ? "user" : "tenant";
-      void writeClientState(scope, key, kanbanStateForPersistence(cur, demo));
+      writePersistedKanbanState(cur, demo);
       if (!demo) {
         void writeClientState(
           "user",
@@ -3233,11 +3215,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     kanbanStateSaveTimerRef.current = null;
                   }
                   if (!canPersistTenantKanban(cur)) return;
-                  await writeClientState(
-                    "tenant",
-                    "kanbanAppStateV3",
-                    kanbanStateForPersistence(cur, false),
-                  );
+                  await writePersistedKanbanStateNow(cur, false);
                 }}
                 onRunningChange={(running) => {
                   kanbanPersistPausedRef.current = running;
@@ -3256,11 +3234,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                       );
                       saveKanbanState(state, false);
                       if (!isDemo && canPersistTenantKanban(state)) {
-                        void writeClientState(
-                          "tenant",
-                          "kanbanAppStateV3",
-                          kanbanStateForPersistence(state, false),
-                        );
+                        writePersistedKanbanState(state, false);
                       }
                       return state;
                     });
@@ -3517,11 +3491,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   queueMicrotask(() => {
                     if (isDemo || kanbanPersistPausedRef.current) return;
                     if (!canPersistTenantKanban(next)) return;
-                    void writeClientState(
-                      "tenant",
-                      "kanbanAppStateV3",
-                      kanbanStateForPersistence(next, false),
-                    );
+                    writePersistedKanbanState(next, false);
                   });
                   return next;
                 });

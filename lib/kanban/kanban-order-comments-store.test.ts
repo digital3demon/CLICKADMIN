@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectLinkedOrderCommentsFromState,
   kanbanOrderCommentsStateKey,
   mergeIncomingKaitenIntoKanbanComments,
   mergeKanbanOrderComments,
   parseStoredKanbanOrderComments,
+  resolveKanbanOrderCommentsToPersist,
 } from "@/lib/kanban/kanban-order-comments";
+import { defaultAppState, KANBAN_BOARD_ORTHOPEDICS_ID } from "@/lib/kanban/model";
+import type { KanbanAppState } from "@/lib/kanban/types";
 import type { CardComment } from "@/lib/kanban/types";
 
 function cm(partial: Partial<CardComment> & { id: string; text: string }): CardComment {
@@ -37,6 +41,71 @@ describe("parseStoredKanbanOrderComments", () => {
   it("returns empty for bad payload", () => {
     expect(parseStoredKanbanOrderComments(null)).toEqual([]);
     expect(parseStoredKanbanOrderComments({ comments: "nope" })).toEqual([]);
+  });
+});
+
+describe("resolveKanbanOrderCommentsToPersist", () => {
+  it("пустой incoming не затирает store с кириллицей", () => {
+    const existing = [cm({ id: "cm-1", text: "корректировка занесена Шубина" })];
+    expect(resolveKanbanOrderCommentsToPersist([], existing)).toBe("keep-existing");
+    const merged = resolveKanbanOrderCommentsToPersist(
+      [cm({ id: "cm-2", text: "протетика пришла" })],
+      existing,
+    );
+    expect(merged).not.toBe("keep-existing");
+    if (merged === "keep-existing") return;
+    expect(merged.map((c) => c.text)).toEqual(
+      expect.arrayContaining(["корректировка занесена Шубина", "протетика пришла"]),
+    );
+  });
+});
+
+describe("collectLinkedOrderCommentsFromState", () => {
+  it("собирает чат до slim, кириллица вокруг номера", () => {
+    const state = structuredClone(defaultAppState()) as KanbanAppState;
+    const board = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    board.columns[0]!.cards = [
+      {
+        id: "c1",
+        title: "2607-115 Шубина Т.В.",
+        description: "",
+        cardTypeId: "",
+        assignees: [],
+        participants: [],
+        dueDate: "",
+        urgent: false,
+        checklist: [],
+        files: [],
+        comments: [
+          cm({ id: "cm-sh", text: "!!! Надо глянуть че тут выставляли ранее" }),
+        ],
+        activity: [],
+        blocked: false,
+        blockReason: "",
+        blockedByUserId: "",
+        blockedAt: "",
+        createdByUserId: "",
+        lastMovedAt: null,
+        trackLane: "",
+        createdAt: "2026-08-25T14:00:00.000Z",
+        updatedAt: "2026-08-25T14:00:00.000Z",
+        linkedOrderId: "ord-shubina",
+      },
+    ];
+    const byOrder = collectLinkedOrderCommentsFromState(state);
+    expect(byOrder.get("ord-shubina")?.map((c) => c.text)).toEqual([
+      "!!! Надо глянуть че тут выставляли ранее",
+    ]);
+    expect(collectLinkedOrderCommentsFromState({
+      ...state,
+      boards: state.boards.map((b) => ({
+        ...b,
+        columns: b.columns.map((c) => ({
+          ...c,
+          cards: c.cards.map((card) => ({ ...card, comments: [] })),
+        })),
+      })),
+    }).size).toBe(0);
   });
 });
 

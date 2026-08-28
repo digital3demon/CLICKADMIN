@@ -8,6 +8,10 @@ import { getPrisma } from "@/lib/get-prisma";
 import { KANBAN_CHAT_STATE_KEY, parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import { mergeInboundKaitenMirrorFieldsFromStored } from "@/lib/kanban/merge-inbound-kaiten-card-fields";
 import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
+import {
+  parseStoredKanbanOrderComments,
+  resolveKanbanOrderCommentsToPersist,
+} from "@/lib/kanban/kanban-order-comments";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +168,19 @@ export async function PUT(req: Request) {
       }
 
       let valueToStore = body.value;
+      if (key.startsWith("kanbanCommentsV1:")) {
+        const incoming = parseStoredKanbanOrderComments(body.value);
+        const existingRow = await prisma.tenantClientState.findUnique({
+          where: { tenantId_key: { tenantId, key } },
+          select: { value: true },
+        });
+        const existing = parseStoredKanbanOrderComments(existingRow?.value ?? null);
+        const resolved = resolveKanbanOrderCommentsToPersist(incoming, existing);
+        if (resolved === "keep-existing") {
+          return NextResponse.json({ ok: true, skipped: "keep-comments" });
+        }
+        valueToStore = { comments: resolved };
+      }
       if (key === KANBAN_CHAT_STATE_KEY) {
         const incoming = parseKanbanAppState(body.value);
         if (incoming) {

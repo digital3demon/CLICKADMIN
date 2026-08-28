@@ -7,6 +7,7 @@ import {
   KANBAN_ORDER_COMMENTS_MAX,
   kanbanOrderCommentsStateKey,
   parseStoredKanbanOrderComments,
+  resolveKanbanOrderCommentsToPersist,
 } from "@/lib/kanban/kanban-order-comments";
 
 export {
@@ -14,6 +15,7 @@ export {
   mergeIncomingKaitenIntoKanbanComments,
   mergeKanbanOrderComments,
   parseStoredKanbanOrderComments,
+  resolveKanbanOrderCommentsToPersist,
 } from "@/lib/kanban/kanban-order-comments";
 
 export async function loadKanbanOrderComments(
@@ -39,7 +41,10 @@ export async function saveKanbanOrderComments(
   const tid = tenantId.trim();
   const oid = orderId.trim();
   if (!tid || !oid) return;
-  const compact = compactCardComments(comments).slice(-KANBAN_ORDER_COMMENTS_MAX);
+  const existing = await loadKanbanOrderComments(tid, oid);
+  const resolved = resolveKanbanOrderCommentsToPersist(comments, existing);
+  if (resolved === "keep-existing") return;
+  const compact = compactCardComments(resolved).slice(-KANBAN_ORDER_COMMENTS_MAX);
   const prisma = await getPrisma();
   await prisma.tenantClientState.upsert({
     where: { tenantId_key: { tenantId: tid, key: kanbanOrderCommentsStateKey(oid) } },
