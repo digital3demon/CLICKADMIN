@@ -100,7 +100,7 @@ export function LabTaskMiniChat({
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [comments.length, loading]);
+  }, [comments.length, loaded]);
 
   const send = useCallback(async () => {
     const body = text.trim();
