@@ -32,6 +32,20 @@ describe("normalizeKanbanBoardUiState", () => {
     expect(ui?.viewMode).toBe("calendar");
     expect(ui?.filterTemplates).toHaveLength(1);
     expect(ui?.filterTemplates[0]?.filters.due).toBe("overdue");
+    expect(ui?.filters.peopleJoin).toBe("and");
+  });
+
+  it("сохраняет связку «или» у ответственного и участника", () => {
+    const ui = normalizeKanbanBoardUiState({
+      filters: {
+        assigneeUserId: "u-юля",
+        participantUserId: "u-саша",
+        peopleJoin: "or",
+      },
+    });
+    expect(ui?.filters.peopleJoin).toBe("or");
+    expect(ui?.filters.assigneeUserId).toBe("u-юля");
+    expect(ui?.filters.participantUserId).toBe("u-саша");
   });
 });
 

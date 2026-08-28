@@ -28,7 +28,9 @@ import {
 import {
   applyKanbanCardHeadsCache,
   loadKanbanCardHeadsCache,
+  membersForKanbanAggregateKeep,
   persistKanbanCardHeadsCache,
+  type KanbanCardHeadsCache,
 } from "@/lib/kanban/kanban-card-heads-cache";
 import {
   hasKanbanCardMembers,
@@ -1612,6 +1614,7 @@ export function defaultAppState(): KanbanAppState {
       due: "",
       assigneeUserId: "",
       participantUserId: "",
+      peopleJoin: "and",
     },
     filterTemplates: [],
     hiddenLinkedOrderIds: [],
@@ -1630,6 +1633,7 @@ export function defaultAppState(): KanbanAppState {
       due: "",
       assigneeUserId: "",
       participantUserId: "",
+      peopleJoin: "and",
     },
     filterTemplates: [],
     hiddenLinkedOrderIds: [],
@@ -1697,6 +1701,7 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
     if (merged.filters.due == null) merged.filters.due = "";
     if (merged.filters.assigneeUserId == null) merged.filters.assigneeUserId = "";
     if (merged.filters.participantUserId == null) merged.filters.participantUserId = "";
+    if (merged.filters.peopleJoin !== "or") merged.filters.peopleJoin = "and";
     if (f.userId && !merged.filters.assigneeUserId && !merged.filters.participantUserId) {
       merged.filters.assigneeUserId = String(f.userId);
     }
@@ -1717,6 +1722,7 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
           due: t.filters.due ?? "",
           assigneeUserId: t.filters.assigneeUserId ?? "",
           participantUserId: t.filters.participantUserId ?? "",
+          peopleJoin: t.filters.peopleJoin === "or" ? "or" : "and",
         },
       }));
     if (!merged.viewMode) merged.viewMode = "board";
@@ -1928,11 +1934,17 @@ export function kanbanAggregateKeepsCard(
   card: KanbanCard,
   uid: string,
   mode: KanbanAggregateMode,
-  opts?: { searchActive?: boolean; stickyOrderIds?: ReadonlySet<string> },
+  opts?: {
+    searchActive?: boolean;
+    stickyOrderIds?: ReadonlySet<string>;
+    memberHeads?: KanbanCardHeadsCache | null;
+  },
 ): boolean {
   if (!uid) return false;
-  const assignees = card.assignees || [];
-  const participants = card.participants || [];
+  const { assignees, participants } = membersForKanbanAggregateKeep(
+    card,
+    opts?.memberHeads,
+  );
   const linked = Boolean(card.linkedOrderId?.trim());
   const oid = String(card.linkedOrderId || "").trim();
   const searchLinkedHit = Boolean(opts?.searchActive) && linked;
@@ -1955,6 +1967,7 @@ export function buildKanbanDisplayView(
     sessionUserId?: string | null;
     sessionUserRole?: UserRole | null;
     stickyLinkedOrderIds?: ReadonlySet<string> | readonly string[];
+    memberHeads?: KanbanCardHeadsCache | null;
   },
 ): {
   displayBoard: KanbanBoard;
@@ -1968,6 +1981,10 @@ export function buildKanbanDisplayView(
   const stickyLinkedOrderIds = new Set(
     [...(opts?.stickyLinkedOrderIds ?? [])].map((id) => String(id || "").trim()).filter(Boolean),
   );
+  const memberHeads =
+    opts && Object.prototype.hasOwnProperty.call(opts, "memberHeads")
+      ? opts.memberHeads
+      : loadKanbanCardHeadsCache();
   const accessibleBoards = state.boards.filter((b) =>
     canUserAccessBoard(b, sessionUserId || null, sessionUserRole),
   );
@@ -1977,7 +1994,7 @@ export function buildKanbanDisplayView(
 
   const passesFiltersWithoutSearchText = (card: KanbanCard, home: KanbanBoard) => {
     const st: KanbanAppState = { ...state, search: "" };
-    return cardMatchesFilters(card, home, st);
+    return cardMatchesFilters(card, home, st, { memberHeads });
   };
 
   if (agg) {
@@ -2008,6 +2025,7 @@ export function buildKanbanDisplayView(
             !kanbanAggregateKeepsCard(card, uid, agg, {
               searchActive: Boolean(q),
               stickyOrderIds: stickyLinkedOrderIds,
+              memberHeads,
             })
           ) {
             continue;
@@ -2034,6 +2052,7 @@ export function buildKanbanDisplayView(
           kanbanAggregateKeepsCard(card, uid, agg, {
             searchActive: Boolean(q),
             stickyOrderIds: stickyLinkedOrderIds,
+            memberHeads,
           }),
       });
       /* Пустые колонки шаблона оставляем: иначе fit-zoom раздувает 1–2 столбца. */
@@ -2126,6 +2145,7 @@ export function cardMatchesFilters(
   card: KanbanCard,
   board: KanbanBoard,
   state: KanbanAppState,
+  opts?: { memberHeads?: KanbanCardHeadsCache | null },
 ): boolean {
   const q = (state.search || "").trim();
   if (q && !kanbanCardMatchesSearch(card, q, board)) return false;
@@ -2133,13 +2153,25 @@ export function cardMatchesFilters(
   if (ft) {
     if (String(card.cardTypeId || "") !== String(ft)) return false;
   }
-  const fa = state.filters.assigneeUserId;
-  if (fa) {
-    if (!(card.assignees || []).includes(fa)) return false;
-  }
-  const fp = state.filters.participantUserId;
-  if (fp) {
-    if (!(card.participants || []).includes(fp)) return false;
+  const heads =
+    opts && Object.prototype.hasOwnProperty.call(opts, "memberHeads")
+      ? opts.memberHeads
+      : loadKanbanCardHeadsCache();
+  const members = membersForKanbanAggregateKeep(card, heads);
+  const fa = (state.filters.assigneeUserId || "").trim();
+  const fp = (state.filters.participantUserId || "").trim();
+  if (fa && fp) {
+    const hitA = members.assignees.includes(fa);
+    const hitP = members.participants.includes(fp);
+    if (state.filters.peopleJoin === "or") {
+      if (!hitA && !hitP) return false;
+    } else if (!hitA || !hitP) {
+      return false;
+    }
+  } else if (fa) {
+    if (!members.assignees.includes(fa)) return false;
+  } else if (fp) {
+    if (!members.participants.includes(fp)) return false;
   }
   const fd = state.filters.due;
   if (fd) {

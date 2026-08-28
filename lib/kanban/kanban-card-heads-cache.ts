@@ -140,6 +140,89 @@ export function loadKanbanCardHeadsCache(): KanbanCardHeadsCache | null {
   }
 }
 
+export const KANBAN_STICKY_LINKED_OIDS_KEY = "kanban-sticky-linked-oids-v1";
+const STICKY_LINKED_OIDS_CAP = 400;
+
+export function lookupKanbanCardHead(
+  heads: KanbanCardHeadsCache | null | undefined,
+  card: Pick<KanbanCard, "id" | "linkedOrderId">,
+): KanbanCardHeadCacheRow | null {
+  if (!heads) return null;
+  const oid = String(card.linkedOrderId || "").trim();
+  if (oid) {
+    const row = heads[`oid:${oid}`];
+    if (row) return row;
+  }
+  const id = String(card.id || "").trim();
+  if (!id) return null;
+  return heads[`id:${id}`] ?? null;
+}
+
+function uniqMemberIds(...lists: Array<readonly string[] | undefined>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const raw of list || []) {
+      const id = String(raw || "").trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+/** Живые люди карточки ∪ кэш шапки (F5 / slim часто обнуляют массивы). */
+export function membersForKanbanAggregateKeep(
+  card: Pick<KanbanCard, "id" | "linkedOrderId" | "assignees" | "participants">,
+  heads: KanbanCardHeadsCache | null | undefined,
+): { assignees: string[]; participants: string[] } {
+  const row = lookupKanbanCardHead(heads, card);
+  return {
+    assignees: uniqMemberIds(card.assignees, row?.assignees),
+    participants: uniqMemberIds(card.participants, row?.participants),
+  };
+}
+
+export function loadStickyLinkedOrderIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(KANBAN_STICKY_LINKED_OIDS_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw) as unknown;
+    if (!Array.isArray(data)) return [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const item of data) {
+      const oid = String(item || "").trim();
+      if (!oid || seen.has(oid)) continue;
+      seen.add(oid);
+      out.push(oid);
+      if (out.length >= STICKY_LINKED_OIDS_CAP) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function persistStickyLinkedOrderIds(ids: readonly string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    const next = prependMissingLinkedOrderIds([], ids).slice(0, STICKY_LINKED_OIDS_CAP);
+    window.localStorage.setItem(KANBAN_STICKY_LINKED_OIDS_KEY, JSON.stringify(next));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+export function mergeStickyLinkedOrderIds(
+  current: readonly string[],
+  extra: readonly string[],
+): string[] {
+  return prependMissingLinkedOrderIds(current, extra).slice(0, STICKY_LINKED_OIDS_CAP);
+}
+
 /** Наряды из кэша шапки: для «МОИ» — только где есть session user. */
 export function collectLinkedOrderIdsFromHeadsCache(
   heads: KanbanCardHeadsCache | null,

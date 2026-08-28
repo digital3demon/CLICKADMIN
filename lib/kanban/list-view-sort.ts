@@ -1,6 +1,10 @@
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { cardMatchesFilters } from "@/lib/kanban/model";
+import {
+  loadKanbanCardHeadsCache,
+  type KanbanCardHeadsCache,
+} from "@/lib/kanban/kanban-card-heads-cache";
 
 export type ListSortKey =
   | "title"
@@ -142,18 +146,26 @@ export function buildKanbanListViewRows(
   board: KanbanBoard,
   state: KanbanAppState,
   sort: ListSort,
-  opts?: { cardHomeBoardId?: Map<string, string>; allBoards?: KanbanBoard[] },
+  opts?: {
+    cardHomeBoardId?: Map<string, string>;
+    allBoards?: KanbanBoard[];
+    memberHeads?: KanbanCardHeadsCache | null;
+  },
 ): ListViewRow[] {
   const allBoards = opts?.allBoards ?? [board];
   const homeId = (c: KanbanCard) =>
     opts?.cardHomeBoardId?.get(c.id) ?? board.id;
+  const memberHeads =
+    opts && Object.prototype.hasOwnProperty.call(opts, "memberHeads")
+      ? opts.memberHeads
+      : loadKanbanCardHeadsCache();
 
   const out: ListViewRow[] = [];
   board.columns.forEach((col, columnIndex) => {
     col.cards.forEach((c) => {
       const hbId = homeId(c);
       const hb = allBoards.find((b) => b.id === hbId) ?? board;
-      if (cardMatchesFilters(c, hb, state)) {
+      if (cardMatchesFilters(c, hb, state, { memberHeads })) {
         out.push({
           card: c,
           columnTitle: col.title,

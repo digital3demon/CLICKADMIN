@@ -28,7 +28,16 @@ function emptyFilters(): KanbanFilters {
     due: "",
     assigneeUserId: "",
     participantUserId: "",
+    peopleJoin: "and",
   };
+}
+
+function peopleJoinBtnClass(active: boolean): string {
+  const base =
+    "rounded-md border px-3 py-1 text-[0.75rem] font-bold uppercase tracking-wide transition-colors";
+  return active
+    ? `${base} border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]`
+    : `${base} border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]`;
 }
 
 type KanbanFiltersButtonProps = {
@@ -249,6 +258,42 @@ export function KanbanFiltersButton({
             </div>
 
             <div>
+              <div className="mb-1 font-medium text-[var(--kanban-text-muted)]">
+                Связка людей
+              </div>
+              <div
+                className="flex gap-1.5"
+                role="group"
+                aria-label="Связка ответственного и участника"
+              >
+                <button
+                  type="button"
+                  className={peopleJoinBtnClass((filters.peopleJoin ?? "and") === "and")}
+                  title="Карточка должна подходить под обоих"
+                  onClick={() =>
+                    patchApp((s) => {
+                      s.filters.peopleJoin = "and";
+                    })
+                  }
+                >
+                  и
+                </button>
+                <button
+                  type="button"
+                  className={peopleJoinBtnClass(filters.peopleJoin === "or")}
+                  title="Достаточно одного из двух"
+                  onClick={() =>
+                    patchApp((s) => {
+                      s.filters.peopleJoin = "or";
+                    })
+                  }
+                >
+                  или
+                </button>
+              </div>
+            </div>
+
+            <div>
               <label className="block font-medium text-[var(--kanban-text-muted)]">Участник</label>
               <select
                 className={selectClass}
@@ -269,7 +314,8 @@ export function KanbanFiltersButton({
             </div>
 
             <p className="text-[0.72rem] leading-snug text-[var(--kanban-text-muted)]">
-              Условия суммируются: карточка должна подходить под каждый выбранный фильтр.
+              Тип и срок всегда суммируются. Ответственный и участник — кнопками
+              «и» / «или».
             </p>
 
             <div className="flex flex-wrap gap-2 border-t border-[var(--kanban-border)] pt-3">

@@ -5,7 +5,9 @@ import {
   applyKanbanCardHeadsCache,
   collectKanbanCardHeadsCache,
   collectLinkedOrderIdsFromHeadsCache,
+  membersForKanbanAggregateKeep,
   mergeKanbanCardHeadsCache,
+  mergeStickyLinkedOrderIds,
   prependMissingLinkedOrderIds,
 } from "./kanban-card-heads-cache";
 
@@ -100,5 +102,34 @@ describe("kanban card heads cache", () => {
     expect(
       prependMissingLinkedOrderIds(["ord-на-доске"], ["ord-степанов", "ord-на-доске"]),
     ).toEqual(["ord-степанов", "ord-на-доске"]);
+  });
+
+  it("для фильтра «МОИ» склеивает людей карточки с кэшем (кириллица вокруг id)", () => {
+    const heads = {
+      "oid:ord-степанов": {
+        assignees: [],
+        participants: ["u-всеволод"],
+        fingerprint: null,
+        stageDue: "",
+      },
+    };
+    const members = membersForKanbanAggregateKeep(
+      {
+        id: "карта-степанов",
+        linkedOrderId: "ord-степанов",
+        assignees: [],
+        participants: [],
+      },
+      heads,
+    );
+    expect(members.participants).toEqual(["u-всеволод"]);
+    expect(members.assignees).toEqual([]);
+  });
+
+  it("новые найденные наряды в sticky идут первыми (кириллица в id)", () => {
+    expect(mergeStickyLinkedOrderIds(["ord-на-доске"], ["ord-степанов"])).toEqual([
+      "ord-степанов",
+      "ord-на-доске",
+    ]);
   });
 });

@@ -33,7 +33,12 @@ export function emptyKanbanFilters(): KanbanFilters {
     due: "",
     assigneeUserId: "",
     participantUserId: "",
+    peopleJoin: "and",
   };
+}
+
+function normalizePeopleJoin(raw: unknown): KanbanFilters["peopleJoin"] {
+  return raw === "or" ? "or" : "and";
 }
 
 function normalizeFilters(raw: unknown): KanbanFilters {
@@ -43,6 +48,7 @@ function normalizeFilters(raw: unknown): KanbanFilters {
     due: String(f.due ?? ""),
     assigneeUserId: String(f.assigneeUserId ?? ""),
     participantUserId: String(f.participantUserId ?? ""),
+    peopleJoin: normalizePeopleJoin(f.peopleJoin),
   };
 }
 

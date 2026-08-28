@@ -77,3 +77,30 @@ describe("buildKanbanListViewRows default sort", () => {
     expect(rows.map((r) => r.card.id)).toEqual(["new-a", "only-b", "old-a"]);
   });
 });
+
+describe("buildKanbanListViewRows · фильтр участника", () => {
+  it("без «МОИ» находит карточку по кэшу шапки, даже если participants пустой", () => {
+    const board = boardWithCards();
+    const hit = board.columns[0]!.cards[0]!;
+    hit.title = "2608-371 Кучинский О. Юля";
+    hit.linkedOrderId = "ord-кучинский";
+    hit.participants = [];
+    const state = structuredClone(defaultAppState()) as KanbanAppState;
+    state.filters.participantUserId = "u-юля";
+    const empty = buildKanbanListViewRows(board, state, DEFAULT_LIST_SORT, {
+      memberHeads: null,
+    });
+    expect(empty.map((r) => r.card.id)).not.toContain("old-a");
+    const rows = buildKanbanListViewRows(board, state, DEFAULT_LIST_SORT, {
+      memberHeads: {
+        "oid:ord-кучинский": {
+          assignees: [],
+          participants: ["u-юля"],
+          fingerprint: null,
+          stageDue: "",
+        },
+      },
+    });
+    expect(rows.map((r) => r.card.id)).toContain("old-a");
+  });
+});

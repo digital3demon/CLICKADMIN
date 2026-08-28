@@ -134,6 +134,9 @@ import {
   applyKanbanCardHeadsCache,
   collectLinkedOrderIdsFromHeadsCache,
   loadKanbanCardHeadsCache,
+  loadStickyLinkedOrderIds,
+  mergeStickyLinkedOrderIds,
+  persistStickyLinkedOrderIds,
   prependMissingLinkedOrderIds,
 } from "@/lib/kanban/kanban-card-heads-cache";
 import {
@@ -530,6 +533,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const kanbanSessionUserIdRef = useRef<string | null>(null);
   kanbanSessionUserIdRef.current = kanbanSessionUserId;
   const [stickyLinkedOrderIds, setStickyLinkedOrderIds] = useState<string[]>([]);
+  const stickyHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!stickyHydratedRef.current) {
+      stickyHydratedRef.current = true;
+      const stored = loadStickyLinkedOrderIds();
+      if (stored.length > 0) setStickyLinkedOrderIds(stored);
+      return;
+    }
+    persistStickyLinkedOrderIds(stickyLinkedOrderIds);
+  }, [stickyLinkedOrderIds]);
   const sessionMirrorSyncedForUserRef = useRef<string | null>(null);
   const [kanbanSessionRole, setKanbanSessionRole] = useState<UserRole | null>(null);
   const [kanbanCardPerms, setKanbanCardPerms] = useState({
@@ -973,11 +986,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         persisted = merged;
         const foundOids = rows.map((r) => r.id).filter(Boolean);
         if (foundOids.length > 0) {
-          setStickyLinkedOrderIds((prev) => {
-            const next = new Set(prev);
-            for (const id of foundOids) next.add(id);
-            return [...next];
-          });
+          setStickyLinkedOrderIds((prev) => mergeStickyLinkedOrderIds(prev, foundOids));
         }
         return merged;
       });
@@ -1551,6 +1560,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             sessionUserId: kanbanSessionUserId,
             sessionUserRole: kanbanSessionRole,
             stickyLinkedOrderIds,
+            memberHeads: loadKanbanCardHeadsCache(),
           })
         : null,
     [appState, kanbanSessionUserId, kanbanSessionRole, stickyLinkedOrderIds],
@@ -1632,6 +1642,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           !kanbanAggregateKeepsCard(row.card, uid, agg, {
             searchActive: Boolean(q),
             stickyOrderIds: new Set(stickyLinkedOrderIds),
+            memberHeads: loadKanbanCardHeadsCache(),
           })
         ) {
           continue;
@@ -1674,6 +1685,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           !kanbanAggregateKeepsCard(row.card, uid, agg, {
             searchActive: Boolean(q),
             stickyOrderIds: new Set(stickyLinkedOrderIds),
+            memberHeads: loadKanbanCardHeadsCache(),
           })
         ) {
           continue;
@@ -2047,6 +2059,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           sessionUserId: kanbanSessionUserId,
           sessionUserRole: kanbanSessionRole,
           stickyLinkedOrderIds,
+          memberHeads: loadKanbanCardHeadsCache(),
         });
         const next = structuredClone(s);
         const sid = kanbanSessionUserId?.trim();

@@ -8,6 +8,7 @@ import {
   textOnAccentHex,
 } from "@/lib/kanban/model";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import { loadKanbanCardHeadsCache } from "@/lib/kanban/kanban-card-heads-cache";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 
 type KanbanCalendarProps = {
@@ -68,10 +69,11 @@ export function KanbanCalendar({
   }
 
   const byDate: Record<string, KanbanCard[]> = {};
+  const memberHeads = loadKanbanCardHeadsCache();
   allBoardCards(board).forEach((card) => {
     const hb = resolveCardHomeBoard(card);
     const stageDue = getKanbanStageDue(card);
-    if (!stageDue || !cardMatchesFilters(card, hb, appState)) return;
+    if (!stageDue || !cardMatchesFilters(card, hb, appState, { memberHeads })) return;
     const key = stageDue;
     if (!byDate[key]) byDate[key] = [];
     byDate[key].push(card);

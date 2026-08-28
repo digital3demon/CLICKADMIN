@@ -1,4 +1,5 @@
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
+import { loadKanbanCardHeadsCache } from "@/lib/kanban/kanban-card-heads-cache";
 import { cardMatchesFilters } from "@/lib/kanban/model";
 
 export function visibleCardsInColumn(
@@ -6,8 +7,9 @@ export function visibleCardsInColumn(
   state: KanbanAppState,
   resolveCardHomeBoard: (card: KanbanCard) => KanbanBoard,
 ): KanbanCard[] {
+  const memberHeads = loadKanbanCardHeadsCache();
   return col.cards.filter((c) =>
-    cardMatchesFilters(c, resolveCardHomeBoard(c), state),
+    cardMatchesFilters(c, resolveCardHomeBoard(c), state, { memberHeads }),
   );
 }
 

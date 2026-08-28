@@ -296,6 +296,8 @@ export type KanbanBoard = {
   };
 };
 
+export type KanbanPeopleJoin = "and" | "or";
+
 export type KanbanFilters = {
   cardTypeId: string;
   due: string;
@@ -303,6 +305,8 @@ export type KanbanFilters = {
   assigneeUserId: string;
   /** Только участники (participants), без требования быть ответственным */
   participantUserId: string;
+  /** Связка ответственный + участник. Нет поля = «и». */
+  peopleJoin?: KanbanPeopleJoin;
 };
 
 /** Сохранённый набор фильтров (имя + значения). */

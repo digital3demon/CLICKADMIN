@@ -196,4 +196,108 @@ describe("buildKanbanDisplayView · Мои", () => {
     const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
     expect(allIds).toContain("stepanov-sticky");
   });
+
+  it("без поиска оставляет наряд по кэшу шапки, даже если массивы пустые", () => {
+    const board = orthopedicsMirrorBoard();
+    const prod = board.columns.find((c) => c.title === "Производство")!;
+    prod.cards.push(
+      createCard({
+        id: "степанов-кэш",
+        title: "2607-299 Степанов А.В. Жевлаков",
+        linkedOrderId: "ord-степанов",
+        assignees: [],
+        participants: [],
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [board],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 5 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const memberHeads = {
+      "oid:ord-степанов": {
+        assignees: [],
+        participants: ["u-всеволод"],
+        fingerprint: null,
+        stageDue: "",
+      },
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "u-всеволод",
+      sessionUserRole: "ADMIN",
+      memberHeads,
+    });
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).toContain("степанов-кэш");
+  });
+
+  it("«Ответственный» берёт assignees из кэша, но не participants", () => {
+    const board = orthopedicsMirrorBoard();
+    const queueCol = board.columns.find((c) => c.title === "К исполнению")!;
+    queueCol.cards.push(
+      createCard({
+        id: "только-участник",
+        title: "2608-371 Кучинский О.",
+        linkedOrderId: "ord-кучинский",
+        assignees: [],
+        participants: [],
+      }),
+    );
+    queueCol.cards.push(
+      createCard({
+        id: "я-ответственный",
+        title: "2608-372 Шубина",
+        linkedOrderId: "ord-шубина",
+        assignees: [],
+        participants: [],
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [board],
+      activeBoardId: KANBAN_BOARD_DISTRIBUTE_ID,
+      search: "",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 5 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const memberHeads = {
+      "oid:ord-кучинский": {
+        assignees: [],
+        participants: ["me"],
+        fingerprint: null,
+        stageDue: "",
+      },
+      "oid:ord-шубина": {
+        assignees: ["me"],
+        participants: [],
+        fingerprint: null,
+        stageDue: "",
+      },
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+      memberHeads,
+    });
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).toContain("я-ответственный");
+    expect(allIds).not.toContain("только-участник");
+  });
 });
