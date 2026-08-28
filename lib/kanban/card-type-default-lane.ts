@@ -95,17 +95,37 @@ export function pickPreservedCardTypeLane(
   return defaultTrackLaneForCardTypeName(type.name);
 }
 
-/** Remote-типы как база: явное пространство remote, иначе local, иначе эвристика по имени. */
+/** Remote-типы как база; локальные типы, которых нет в remote по имени/id, оставляем. */
 export function mergeCardTypeDefsKeepingLanes<T extends TypeLaneSource>(
   remoteTypes: T[],
   localTypes: T[],
 ): T[] {
   const localPreserved = collectCardTypeDefaultLanes(localTypes);
-  return remoteTypes.map((t) => {
+  const out = remoteTypes.map((t) => {
     const remoteLane = resolveStoredTrackLane(t.defaultTrackLane);
     return {
       ...t,
       defaultTrackLane: remoteLane ?? pickPreservedCardTypeLane(t, localPreserved),
     };
   });
+  const names = new Set(
+    out.map((t) => normalizeCardTypeNameKey(t.name)).filter(Boolean),
+  );
+  const ids = new Set(out.map((t) => String(t.id || "").trim()).filter(Boolean));
+  for (const loc of localTypes) {
+    const id = String(loc.id || "").trim();
+    const nameKey = normalizeCardTypeNameKey(loc.name);
+    if (id && ids.has(id)) continue;
+    if (nameKey && names.has(nameKey)) continue;
+    if (!id && !nameKey) continue;
+    out.push({
+      ...loc,
+      defaultTrackLane:
+        resolveStoredTrackLane(loc.defaultTrackLane) ??
+        defaultTrackLaneForCardTypeName(loc.name),
+    });
+    if (id) ids.add(id);
+    if (nameKey) names.add(nameKey);
+  }
+  return out;
 }

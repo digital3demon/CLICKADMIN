@@ -15,18 +15,24 @@ export type KanbanStageDlineWindow = {
   header: string;
 };
 
+function stageDueInclusiveHeader(
+  prefix: "Мой срок" | "Срок карточек",
+  startYmd: string,
+  endYmd: string,
+): string {
+  return `${prefix}, по ${endYmd} включительно (${startYmd}…${endYmd}, МСК)`;
+}
+
 export function kanbanStageDlineWindowForCommand(
   cmd: "/cardtd" | "/cardtm" | "/cardw" | "/dlinetd" | "/dlinetm" | "/dlinew",
   todayYmd = moscowTodayYmd(),
 ): KanbanStageDlineWindow {
+  const prefix = cmd.startsWith("/card") ? "Срок карточек" : "Мой срок";
   if (cmd === "/dlinetd" || cmd === "/cardtd") {
     return {
       startYmd: todayYmd,
       endYmd: todayYmd,
-      header:
-        cmd === "/cardtd"
-          ? `Срок карточек на сегодня (${todayYmd}, МСК)`
-          : `Мой срок на сегодня (${todayYmd}, МСК)`,
+      header: stageDueInclusiveHeader(prefix, todayYmd, todayYmd),
     };
   }
   if (cmd === "/dlinetm" || cmd === "/cardtm") {
@@ -34,20 +40,14 @@ export function kanbanStageDlineWindowForCommand(
     return {
       startYmd: todayYmd,
       endYmd,
-      header:
-        cmd === "/cardtm"
-          ? `Срок карточек, по ${endYmd} включительно (${todayYmd}…${endYmd}, МСК)`
-          : `Мой срок, по ${endYmd} включительно (${todayYmd}…${endYmd}, МСК)`,
+      header: stageDueInclusiveHeader(prefix, todayYmd, endYmd),
     };
   }
   const fri = moscowWorkWeekFridayYmd(todayYmd);
   return {
     startYmd: todayYmd,
     endYmd: fri,
-    header:
-      cmd === "/cardw"
-        ? `Срок карточек до конца рабочей недели (${todayYmd}…${fri}, МСК)`
-        : `Мой срок до конца рабочей недели (${todayYmd}…${fri}, МСК)`,
+    header: stageDueInclusiveHeader(prefix, todayYmd, fri),
   };
 }
 
@@ -59,6 +59,22 @@ export function kanbanStageDueYmdInInclusiveRange(
   const s = stageYmd.trim().slice(0, 10);
   if (!s) return false;
   return s >= startYmd && s <= endYmd;
+}
+
+/** Есть этапный срок и он не позже конца окна — просроченные тоже входят. */
+export function kanbanStageDueYmdOnOrBeforeEnd(stageYmd: string, endYmd: string): boolean {
+  const s = stageYmd.trim().slice(0, 10);
+  if (!s) return false;
+  return s <= endYmd;
+}
+
+/** Статус и дата этапного срока под заголовком карточки в «Мой срок». */
+export function formatKanbanStageDueTelegramDetail(
+  statusLabel: string,
+  stageDueYmd: string,
+): string {
+  const due = stageDueYmd.trim().slice(0, 10) || "—";
+  return `Статус: ${statusLabel}\nСрок : ${due}`;
 }
 
 export function kanbanCardTelegramLabel(card: KanbanCard): string {
@@ -84,7 +100,7 @@ export function collectKanbanStageDueCards(
   forEachKanbanCardInState(state, (card) => {
     if (crmUserId && !kanbanCardIncludesCrmUser(card, crmUserId)) return;
     const stageYmd = getKanbanStageDue(card);
-    if (!kanbanStageDueYmdInInclusiveRange(stageYmd, window.startYmd, window.endYmd)) {
+    if (!kanbanStageDueYmdOnOrBeforeEnd(stageYmd, window.endYmd)) {
       return;
     }
     out.push(card);

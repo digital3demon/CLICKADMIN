@@ -1626,6 +1626,8 @@ model Order {
   kanbanStageDueYmd                  String?
   /// CRM-канбан: когда плитка менялась (дельта доски).
   kanbanBoardUpdatedAt               DateTime?
+  /// Колонка до отметки «Работа отправлена» — снятие галочки возвращает карточку сюда.
+  kanbanColumnBeforeShipped          String?
   /// Мягкое архивирование («удаление»): наряд скрыт из списков и канбана; номер YYMM-NNN снимается (плейхолдер `ARCH:id`), чтобы его можно было выдать другому наряду.
   archivedAt                         DateTime?
   createdAt                          DateTime                   @default(now())

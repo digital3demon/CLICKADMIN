@@ -23,6 +23,7 @@ import { buildConstructionCreatesFromInput } from "@/lib/order-construction-inpu
 import { orderConstructionsFingerprint } from "@/lib/order-constructions-fingerprint";
 import { applyOrderListAdminMemo } from "@/lib/order-list-admin-memo.server";
 import { isLabWorkStatus, LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
+import { labWorkStatusFromColumnTitle } from "@/lib/order-status-display";
 import { parseUrgentSelection } from "@/lib/order-urgency";
 import { isOrderStatus } from "@/lib/order-status-labels";
 import {
@@ -34,7 +35,10 @@ import {
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { runSelfCorrectionForOrderInBackground } from "@/lib/llm/self-correction";
 import { syncOrderProstheticsStockTx } from "@/lib/sync-order-prosthetics-stock";
-import { applyWorkSentKanbanSideEffects } from "@/lib/kanban/advance-linked-order-column.server";
+import {
+  applyWorkSentKanbanSideEffects,
+  applyWorkUnsentKanbanSideEffects,
+} from "@/lib/kanban/advance-linked-order-column.server";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
 import { isOrderCorrectionTrack } from "@/lib/order-correction-track";
 import {
@@ -44,6 +48,7 @@ import {
 } from "@/lib/kaiten-push-order-title";
 import { normalizeInvoiceNumberFieldRu } from "@/lib/format-invoice-number-ru";
 import { normalizeManualOrderNumber } from "@/lib/normalize-manual-order-number";
+import { kanbanCardTypeNamesMatch } from "@/lib/kanban/kaiten-card-type-names";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { canEditOrders } from "@/lib/auth/permissions";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
@@ -100,10 +105,6 @@ function legacyKaitenTypeName(id: string): string | null {
   return typeof hit === "string" && hit.trim() ? hit.trim() : null;
 }
 
-function normalizeKaitenTypeName(raw: string): string {
-  return raw.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
 async function findTenantKaitenCardTypeIdByAny(
   prisma: Awaited<ReturnType<typeof getClientsPrisma>>,
   tenantId: string,
@@ -127,13 +128,11 @@ async function findTenantKaitenCardTypeIdByAny(
   }
   const name = typeof rawName === "string" ? rawName.trim() : "";
   if (!name) return null;
-  const needle = normalizeKaitenTypeName(name);
-  if (!needle) return null;
   const candidates = await prisma.kaitenCardType.findMany({
     where: { tenantId, isActive: true },
     select: { id: true, name: true },
   });
-  const hit = candidates.find((x) => normalizeKaitenTypeName(x.name) === needle);
+  const hit = candidates.find((x) => kanbanCardTypeNamesMatch(x.name, name));
   return hit?.id ?? null;
 }
 
@@ -804,6 +803,10 @@ export async function PATCH(
     body.adminShippedOtpr !== undefined &&
     Boolean(body.adminShippedOtpr) &&
     !existing.adminShippedOtpr;
+  const becameWorkUnsent =
+    body.adminShippedOtpr !== undefined &&
+    !Boolean(body.adminShippedOtpr) &&
+    existing.adminShippedOtpr;
 
   if (body.shippedDescription !== undefined) {
     const t =
@@ -1351,6 +1354,26 @@ export async function PATCH(
         order.kaitenColumnTitle = LAB_WORK_STATUS_LABELS.TO_ADMINS;
       } catch (e) {
         console.error("[PATCH order] work-sent kanban", orderId, e);
+      }
+    } else if (becameWorkUnsent) {
+      try {
+        const actorLabel = userActivityDisplayLabel({
+          mentionHandle: null,
+          displayName: session?.name?.trim() || null,
+          email: session?.email || null,
+        });
+        const undone = await applyWorkUnsentKanbanSideEffects({
+          tenantId,
+          orderId,
+          actorUserId: session?.sub ?? null,
+          actorLabel,
+          request: req,
+        });
+        order.kaitenColumnTitle = undone.restoredTitle;
+        const restoredStatus = labWorkStatusFromColumnTitle(undone.restoredTitle);
+        if (restoredStatus) order.labWorkStatus = restoredStatus;
+      } catch (e) {
+        console.error("[PATCH order] work-unsent kanban", orderId, e);
       }
     }
 

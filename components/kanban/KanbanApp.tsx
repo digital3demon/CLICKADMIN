@@ -87,6 +87,12 @@ import {
 import { applyCrmBoardTilesToAppState } from "@/lib/kanban/apply-crm-board-tiles";
 import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
 import {
+  appointmentSnapsFromCrmTiles,
+  loadCrmBoardTilesCache,
+  mergeCrmBoardTilesCache,
+  saveCrmBoardTilesCache,
+} from "@/lib/kanban/crm-board-tiles-cache";
+import {
   autoArchiveReadyProductionChildren,
   expandProductionChecklistFromArchives,
   isProductionChildDone,
@@ -121,8 +127,12 @@ import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
 import { kanbanCardIdFromSearchParams } from "@/lib/kanban-order-card-url";
 import { canUserManageKanbanBlockForCard } from "@/lib/kanban-block-permissions";
 import { postKanbanTelegramNotify } from "@/lib/kanban-crm-telegram-notify-client";
+import { buildKanbanColumnMoveTelegramLines } from "@/lib/kanban/kanban-column-move-telegram";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
-import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
+import {
+  CRM_ORDER_ARCHIVED_EVENT,
+  CRM_ORDER_KANBAN_COLUMN_EVENT,
+} from "@/lib/crm-client-events";
 import { kanbanCardTelegramMemberIds } from "@/lib/telegram-kanban-card-scope";
 import { telegramHtmlLink, escapeTelegramHtml } from "@/lib/telegram-html";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
@@ -161,7 +171,9 @@ import {
   KANBAN_BOARD_UI_KEY,
   applyKanbanBoardUiState,
   extractKanbanBoardUiState,
+  loadKanbanBoardUiLocal,
   normalizeKanbanBoardUiState,
+  saveKanbanBoardUiLocal,
 } from "@/lib/kanban/user-board-ui-state";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
@@ -229,30 +241,47 @@ function kaitenLaneForKanbanBoardId(boardId: string): KaitenTrackLane | undefine
 function notifyKanbanColumnTelegram(
   card: KanbanCard,
   boardId: string,
-  columnTitle: string,
+  fromTitle: string,
+  toTitle: string,
+  actorLabel?: string,
 ) {
+  const from = String(fromTitle || "").trim();
+  const to = String(toTitle || "").trim();
+  if (!to || from.toLocaleLowerCase("ru-RU") === to.toLocaleLowerCase("ru-RU")) {
+    return;
+  }
   const titleLine = (card.title || "").trim() || "Без названия";
   const linkHtml = telegramHtmlLink(
     kanbanCardAbsoluteUrl(card.id, boardId),
     titleLine,
   );
-  const col = escapeTelegramHtml(columnTitle);
   const oid = card.linkedOrderId?.trim() || "";
   const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const built = buildKanbanColumnMoveTelegramLines({
+    cardLinkHtml: linkHtml,
+    fromTitle: from,
+    toTitle: to,
+    actorLabel: actorLabel || "Пользователь",
+    ...(oid
+      ? {
+          cardWord: telegramHtmlLink(kanbanCardAbsoluteUrl(card.id, boardId), "карточке"),
+          orderWord: telegramHtmlLink(
+            `${origin}/orders/${encodeURIComponent(oid)}`,
+            "заказе",
+          ),
+        }
+      : {}),
+  });
   postKanbanTelegramNotify({
     kaitenCardId: card.kaitenCardId,
     event: "tg_kanban_crm_sync",
     parseMode: "HTML",
     targetUserIds: kanbanCardTelegramMemberIds(card),
     orderId: oid || undefined,
-    lines: [`В ${linkHtml} колонка — ${col}`],
-    ...(oid
-      ? {
-          linesAdmin: [
-            `В ${telegramHtmlLink(kanbanCardAbsoluteUrl(card.id, boardId), "карточке")} и ${telegramHtmlLink(`${origin}/orders/${encodeURIComponent(oid)}`, "заказе")} колонка — ${col}`,
-          ],
-        }
-      : {}),
+    lines: built.lines,
+    linesSelf: built.linesSelf,
+    ...(built.linesAdmin ? { linesAdmin: built.linesAdmin } : {}),
+    ...(built.linesSelfAdmin ? { linesSelfAdmin: built.linesSelfAdmin } : {}),
   });
 }
 
@@ -502,6 +531,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const boardTilesAsOfRef = useRef<Record<string, string>>({});
   const boardTilesBoardRef = useRef("");
   const boardTilesInFlightRef = useRef(false);
+  const boardTilesQueuedFullRef = useRef(false);
   const tenantKanbanReadAtRef = useRef(0);
   const lastTenantKanbanRef = useRef<KanbanAppState | null>(null);
   /** F5: не писать default в tenant, пока GET не подтвердил живой снимок. */
@@ -544,7 +574,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     async (opts?: { full?: boolean }) => {
       if (isDemo) return;
       const cur = appStateRef.current;
-      if (!cur || boardTilesInFlightRef.current) return;
+      if (!cur) return;
+      if (boardTilesInFlightRef.current) {
+        if (opts?.full) boardTilesQueuedFullRef.current = true;
+        return;
+      }
       const boardId = cur.activeBoardId;
       boardTilesInFlightRef.current = true;
       try {
@@ -561,15 +595,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         const j = (await r.json()) as { tiles?: CrmBoardTile[]; asOf?: string };
         const tiles = Array.isArray(j.tiles) ? j.tiles : [];
         if (j.asOf) boardTilesAsOfRef.current[boardId] = j.asOf;
+        if (since) mergeCrmBoardTilesCache(boardId, tiles);
+        else saveCrmBoardTilesCache(boardId, tiles);
         setLinkedAppointmentByOrderId((prev) => {
           const next = new Map(prev);
-          for (const t of tiles) {
-            next.set(t.orderId, {
-              orderNumber: t.orderNumber,
-              appointmentDate: t.appointmentDate,
-              dueToAdminsAt: t.dueToAdminsAt,
-              dueToAdminsHasTime: t.dueToAdminsHasTime,
-            });
+          for (const [id, snap] of appointmentSnapsFromCrmTiles(tiles)) {
+            next.set(id, snap);
           }
           return next;
         });
@@ -595,6 +626,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         /* offline */
       } finally {
         boardTilesInFlightRef.current = false;
+        if (boardTilesQueuedFullRef.current) {
+          boardTilesQueuedFullRef.current = false;
+          void syncCrmBoardTiles({ full: true });
+        }
       }
     },
     [isDemo],
@@ -883,7 +918,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const bid = params.get("board");
     let next = isDemo ? normalizeDemoKanbanAppState(loaded) : loaded;
     if (!isDemo) {
-      applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+      const uiLocal = loadKanbanBoardUiLocal();
+      if (uiLocal) next = applyKanbanBoardUiState(next, uiLocal);
     }
     if (
       !isDemo &&
@@ -892,6 +928,20 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     ) {
       next = structuredClone(next);
       next.activeBoardId = bid;
+    }
+    if (!isDemo) {
+      applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+      const cachedTiles = loadCrmBoardTilesCache(next.activeBoardId);
+      if (cachedTiles.length > 0) {
+        const replaceBoardId = isKanbanAggregateBoardId(next.activeBoardId)
+          ? null
+          : next.activeBoardId;
+        next = applyCrmBoardTilesToAppState(next, cachedTiles, { replaceBoardId });
+        const snaps = appointmentSnapsFromCrmTiles(cachedTiles);
+        if (snaps.size > 0) {
+          setLinkedAppointmentByOrderId(snaps);
+        }
+      }
     }
     const c = kanbanCardIdFromSearchParams(params);
     setAppState(applyPendingKanbanColumnMoves(next, listPendingKanbanColumnMoves()));
@@ -960,6 +1010,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (cancelled) return;
         const ui = normalizeKanbanBoardUiState(uiRaw);
         if (ui) {
+          saveKanbanBoardUiLocal(ui);
           setAppState((prev) => {
             if (!prev) return prev;
             const next = applyKanbanBoardUiState(prev, ui);
@@ -1111,6 +1162,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       return;
     }
     const uiPayload = extractKanbanBoardUiState(appState);
+    saveKanbanBoardUiLocal(uiPayload);
     if (kanbanUiSaveTimerRef.current) {
       clearTimeout(kanbanUiSaveTimerRef.current);
     }
@@ -1143,11 +1195,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       if (!cur || !canPersistTenantKanban(cur)) return;
       writePersistedKanbanState(cur, demo);
       if (!demo) {
-        void writeClientState(
-          "user",
-          KANBAN_BOARD_UI_KEY,
-          extractKanbanBoardUiState(cur),
-        );
+        const ui = extractKanbanBoardUiState(cur);
+        saveKanbanBoardUiLocal(ui);
+        void writeClientState("user", KANBAN_BOARD_UI_KEY, ui);
         const lanes = mergeCardTypeLaneSnapshots(
           extractKanbanCardTypeLanes(cur),
           lastCardTypeLanesRef.current,
@@ -1217,6 +1267,21 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const bid = appState.activeBoardId;
     if (boardTilesBoardRef.current !== bid) {
       boardTilesBoardRef.current = bid;
+      const cachedTiles = loadCrmBoardTilesCache(bid);
+      if (cachedTiles.length > 0) {
+        setLinkedAppointmentByOrderId((prev) => {
+          const next = new Map(prev);
+          for (const [id, snap] of appointmentSnapsFromCrmTiles(cachedTiles)) {
+            next.set(id, snap);
+          }
+          return next;
+        });
+        setAppState((prev) => {
+          if (!prev) return prev;
+          const replaceBoardId = isKanbanAggregateBoardId(bid) ? null : bid;
+          return applyCrmBoardTilesToAppState(prev, cachedTiles, { replaceBoardId });
+        });
+      }
       void syncCrmBoardTiles({ full: true });
     }
   }, [appState?.activeBoardId, appState, isDemo, syncCrmBoardTiles]);
@@ -1252,9 +1317,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       void syncKanbanMirrorFromApi();
       void syncCrmBoardTiles({ full: true });
     };
+    const onKanbanColumn = () => {
+      void syncCrmBoardTiles({ full: true });
+    };
     window.addEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
+    window.addEventListener(CRM_ORDER_KANBAN_COLUMN_EVENT, onKanbanColumn);
     return () => {
       window.removeEventListener(CRM_ORDER_ARCHIVED_EVENT, onOrderArchived);
+      window.removeEventListener(CRM_ORDER_KANBAN_COLUMN_EVENT, onKanbanColumn);
     };
   }, [kanbanStateReady, syncKanbanMirrorFromApi, syncCrmBoardTiles]);
 
@@ -1272,30 +1342,39 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     void syncKanbanMirrorFromApi();
   }, [kanbanSessionUserId, isDemo, kanbanStateReady, syncKanbanMirrorFromApi]);
 
+  const pullCatalogCardTypes = useCallback(async () => {
+    if (isDemo) return;
+    try {
+      const res = await fetch("/api/kanban/card-types", {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const rows = (await res.json()) as Array<{
+        id: string;
+        name: string;
+        sortOrder: number;
+      }>;
+      if (!Array.isArray(rows) || rows.length === 0) return;
+      setAppState((prev) => {
+        if (!prev) return prev;
+        const next = applyKaitenApiCardTypesToMirrorBoards(prev, rows);
+        return applyKanbanCardTypeLanes(next, lastCardTypeLanesRef.current);
+      });
+      void syncCrmBoardTiles({ full: true });
+    } catch {
+      /* справочник недоступен — плитки всё равно клеят тип по имени */
+    }
+  }, [isDemo, syncCrmBoardTiles]);
+
+  useEffect(() => {
+    if (isDemo || !kanbanStateReady) return;
+    void pullCatalogCardTypes();
+  }, [isDemo, kanbanStateReady, pullCatalogCardTypes]);
+
   useEffect(() => {
     if (isDemo) return;
     const onKaitenTypesSynced = () => {
-      void (async () => {
-        try {
-          const res = await fetch("/api/kaiten-card-types", {
-            credentials: "include",
-          });
-          if (!res.ok) return;
-          const rows = (await res.json()) as Array<{
-            id: string;
-            name: string;
-            sortOrder: number;
-          }>;
-          if (!Array.isArray(rows) || rows.length === 0) return;
-          setAppState((prev) => {
-            if (!prev) return prev;
-            const next = applyKaitenApiCardTypesToMirrorBoards(prev, rows);
-            return applyKanbanCardTypeLanes(next, lastCardTypeLanesRef.current);
-          });
-        } catch {
-          /* ignore */
-        }
-      })();
+      void pullCatalogCardTypes();
     };
     window.addEventListener(KANBAN_KAITEN_CARD_TYPES_SYNCED_EVENT, onKaitenTypesSynced);
     return () => {
@@ -1304,7 +1383,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         onKaitenTypesSynced,
       );
     };
-  }, [isDemo]);
+  }, [isDemo, pullCatalogCardTypes]);
 
   const openKanbanCard = useCallback((cardId: string) => {
     setCardModalId(cardId);
@@ -1883,6 +1962,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             sortOrder: number;
           }
         | undefined;
+      let moveFromTitle = "";
+      let moveToTitle = "";
       setAppState((s) => {
         if (!s || !isKanbanAggregateBoardId(s.activeBoardId)) return s;
         const view = buildKanbanDisplayView(s, {
@@ -1898,6 +1979,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           getActiveBoard(s).users[0]?.id ||
           s.boards.find((b) => !isKanbanAggregateBoardId(b.id))?.users[0]?.id ||
           "";
+        const fromDisp = view.displayBoard.columns.find(
+          (c) => c.id === drag.fromDisplayColId,
+        );
+        const toDisp = view.displayBoard.columns.find(
+          (c) => c.id === drag.toDisplayColId,
+        );
         const res = applyAggregateCardDrag(
           next,
           view.displayBoard,
@@ -1907,18 +1994,24 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         );
         if (!res.ok) return s;
         if (res.kaiten) kaitenFollowUp = res.kaiten;
+        moveFromTitle = fromDisp?.title || "";
+        moveToTitle = toDisp?.title || res.kaiten?.columnTitle || "";
         return isDemo ? normalizeDemoKanbanAppState(next) : next;
       });
       if (!isDemo && kaitenFollowUp) {
         void syncKaitenMirrorAfterKanbanMove(kaitenFollowUp);
+      }
+      if (!isDemo && moveToTitle) {
         const loc = appState
           ? findCardInAppState(appState, drag.cardId)
           : null;
-        if (loc && kaitenFollowUp.columnTitle) {
+        if (loc) {
           notifyKanbanColumnTelegram(
             loc.card,
             loc.board.id,
-            kaitenFollowUp.columnTitle,
+            moveFromTitle,
+            moveToTitle,
+            activityActorLabel,
           );
         }
       }
@@ -2448,7 +2541,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       });
     }
     if (!isDemo) {
-      notifyKanbanColumnTelegram(cardSnapshot, home.id, nextTitle);
+      notifyKanbanColumnTelegram(
+        cardSnapshot,
+        home.id,
+        found.col.title,
+        nextTitle,
+        activityActorLabel,
+      );
     }
     showToast(`Этап: «${nextTitle}»`);
   };
@@ -2550,7 +2649,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       });
     }
     if (!isDemo) {
-      notifyKanbanColumnTelegram(cardSnapshot, home.id, prevTitle);
+      notifyKanbanColumnTelegram(
+        cardSnapshot,
+        home.id,
+        found.col.title,
+        prevTitle,
+        activityActorLabel,
+      );
     }
     showToast(`Этап: «${prevTitle}»`);
   };
@@ -2673,7 +2778,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
       }
       if (!isDemo) {
-        notifyKanbanColumnTelegram(cardSnapshot, home.id, targetCol.title);
+        notifyKanbanColumnTelegram(
+          cardSnapshot,
+          home.id,
+          found.col.title,
+          targetCol.title,
+          activityActorLabel,
+        );
       }
       showToast(`Этап: «${targetCol.title}»`);
     },
@@ -3277,18 +3388,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                       });
                     }
               }
-              onCardColumnChanged={({ cardId, toColumnId }) => {
+              onCardColumnChanged={({ cardId, fromColumnId, toColumnId }) => {
                 const locNow = appState
                   ? findCardInAppState(appState, cardId)
                   : null;
                 const toColNow = locNow?.board.columns.find(
                   (c) => c.id === toColumnId,
                 );
+                const fromColNow = locNow?.board.columns.find(
+                  (c) => c.id === fromColumnId,
+                );
                 if (!isDemo && locNow && toColNow) {
                   notifyKanbanColumnTelegram(
                     locNow.card,
                     locNow.board.id,
+                    fromColNow?.title || "",
                     toColNow.title,
+                    activityActorLabel,
                   );
                 }
                 let productionTelegramCreates: Array<{

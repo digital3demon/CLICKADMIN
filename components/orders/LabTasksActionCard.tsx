@@ -104,6 +104,16 @@ export function LabTasksActionCard({
     null,
   );
   const [chatOpenId, setChatOpenId] = useState<string | null>(null);
+  const updateTaskChatStats = useCallback(
+    (next: { chatMessageCount: number; hasUnreadChat: boolean }) => {
+      const id = chatOpenId;
+      if (!id) return;
+      setItems((prev) =>
+        prev.map((it) => (it.id === id ? { ...it, ...next } : it)),
+      );
+    },
+    [chatOpenId],
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftFilesRef = useRef(draftFiles);
   draftFilesRef.current = draftFiles;
@@ -445,13 +455,7 @@ export function LabTasksActionCard({
                       {chatOpenId === row.id ? (
                         <LabTaskMiniChat
                           taskId={row.id}
-                          onStats={(next) =>
-                            setItems((prev) =>
-                              prev.map((it) =>
-                                it.id === row.id ? { ...it, ...next } : it,
-                              ),
-                            )
-                          }
+                          onStats={updateTaskChatStats}
                         />
                       ) : null}
                     </li>

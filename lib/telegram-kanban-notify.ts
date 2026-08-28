@@ -211,6 +211,9 @@ export async function notifyKanbanTelegramTargetUsers(
     skip?: boolean;
     parseMode?: "HTML";
     linesAdmin?: string[];
+    /** Автору, если он в targets (своя карточка): «Вы перенесли…». */
+    linesSelf?: string[];
+    linesSelfAdmin?: string[];
     /** Дублирование на общий админский Telegram тенанта (если привязан и включены prefs). */
     tenantId?: string | null;
     /** Не слать в общий админ-чат (личные @упоминания — только в ЛС, иначе дубль «упомянул вас»). */
@@ -226,17 +229,21 @@ export async function notifyKanbanTelegramTargetUsers(
 
   const hasAny =
     opts.lines.some(Boolean) || (opts.linesAdmin?.some(Boolean) ?? false);
-  if (!hasAny) return;
+  const hasSelf =
+    (opts.linesSelf ?? []).some(Boolean) ||
+    (opts.linesSelfAdmin ?? []).some(Boolean);
+  if (!hasAny && !hasSelf) return;
 
-  const want = new Set(opts.targetUserIds.filter(Boolean));
-  if (opts.actorUserId) want.delete(opts.actorUserId);
-  const ids = [...want];
+  const actorId = String(opts.actorUserId || "").trim();
+  const original = new Set(opts.targetUserIds.filter(Boolean));
+  const others = [...original].filter((id) => id !== actorId);
+  const sendSelf = Boolean(hasSelf && actorId && original.has(actorId));
+  const ids = sendSelf && actorId ? [...others, actorId] : others;
   if (!ids.length) {
     console.warn("[telegram-kanban-notify] skip: no targets after excluding actor", {
       event: opts.event,
       actorUserId: opts.actorUserId,
     });
-    return;
   }
 
   const prefKeys: KanbanTelegramPrefKey[] = [
@@ -244,21 +251,23 @@ export async function notifyKanbanTelegramTargetUsers(
     ...(opts.alternatePrefKeys ?? []),
   ];
 
-  const users = await prisma.user.findMany({
-    where: {
-      id: { in: ids },
-      isActive: true,
-      telegramId: { not: null },
-    },
-    select: {
-      id: true,
-      role: true,
-      telegramId: true,
-      telegramKanbanNotifyPrefs: true,
-    },
-  });
+  const users = ids.length
+    ? await prisma.user.findMany({
+        where: {
+          id: { in: ids },
+          isActive: true,
+          telegramId: { not: null },
+        },
+        select: {
+          id: true,
+          role: true,
+          telegramId: true,
+          telegramKanbanNotifyPrefs: true,
+        },
+      })
+    : [];
 
-  if (!users.length) {
+  if (ids.length && !users.length) {
     console.warn("[telegram-kanban-notify] skip: targets have no telegramId", {
       event: opts.event,
       targetUserIds: ids,
@@ -272,10 +281,11 @@ export async function notifyKanbanTelegramTargetUsers(
       console.warn("[telegram-kanban-notify] skip: prefs off", u.id, prefKeys);
       continue;
     }
+    const isSelf = sendSelf && u.id === actorId;
     const mergedLines = linesHtmlForKanbanTelegramRecipient(
       u.role,
-      opts.lines,
-      opts.linesAdmin,
+      isSelf ? (opts.linesSelf ?? opts.lines) : opts.lines,
+      isSelf ? opts.linesSelfAdmin ?? opts.linesAdmin : opts.linesAdmin,
     );
     const text = mergedLines.join("\n").trim();
     if (!text) continue;

@@ -43,6 +43,7 @@ function tile(partial: Partial<CrmBoardTile> & Pick<CrmBoardTile, "orderId">): C
     dueToAdminsAt: null,
     dueToAdminsHasTime: true,
     updatedAt: "2026-08-28T12:00:00.000Z",
+    createdAt: "2026-07-29T10:00:00.000Z",
     ...partial,
   };
 }
@@ -59,6 +60,8 @@ describe("applyCrmBoardTilesToAppState", () => {
       next.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
     expect(card.description).toBe("");
     expect(card.assignees).toEqual(["u-я"]);
+    expect(card.createdAt).toBe("2026-07-29T10:00:00.000Z");
+    expect(card.activity.some((a) => a.text === "Карточка создана")).toBe(true);
   });
 
   it("тип с наряда по имени «Сплинт», не сырой cuid", () => {
@@ -77,6 +80,36 @@ describe("applyCrmBoardTilesToAppState", () => {
     expect(splint?.id).toBeTruthy();
     expect(card.cardTypeId).toBe(splint!.id);
     expect(card.cardTypeId).not.toBe("cuid-из-наряда");
+  });
+
+  it("плитка «Моделировка» добавляет свой тип, не «Модели» и не «Временные»", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    const vremId = odon.cardTypes.find((t) => t.name === "Временные")!.id;
+    const modId = odon.cardTypes.find((t) => t.name === "Модели")!.id;
+    odon.columns[0]!.cards.push(
+      createCard({
+        id: "was-vrem",
+        title: "2607-438 Пехконен",
+        linkedOrderId: "ord-мод",
+        cardTypeId: vremId,
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "ord-мод",
+        cardTypeId: "cuid-из-наряда",
+        cardTypeName: "Моделировка",
+      }),
+    ]);
+    const loc = findCardByLinkedOrderId(state, "ord-мод");
+    const board = state.boards[loc!.boardIndex]!;
+    const card = board.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    const added = board.cardTypes.find((t) => t.name === "Моделировка");
+    expect(added?.id).toBe("cuid-из-наряда");
+    expect(card.cardTypeId).toBe("cuid-из-наряда");
+    expect(card.cardTypeId).not.toBe(modId);
+    expect(card.cardTypeId).not.toBe(vremId);
   });
 
   it("чужой id типа не затирает живой тип на карточке", () => {

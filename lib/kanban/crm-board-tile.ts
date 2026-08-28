@@ -3,6 +3,7 @@
  * Источник: Order (колонка/дорожка/люди), не Kaiten API.
  */
 import { kanbanBoardIdForTrackLane } from "@/lib/kanban/apply-card-track-lane";
+import { legacyKaitenTypeName } from "@/lib/kanban/kaiten-card-type-names";
 import {
   isKanbanAggregateBoardId,
   KANBAN_BOARD_ORTHODONTICS_ID,
@@ -34,6 +35,7 @@ export type CrmBoardTile = {
   dueToAdminsAt: string | null;
   dueToAdminsHasTime: boolean | null;
   updatedAt: string;
+  createdAt: string | null;
 };
 
 export function normalizeCrmUserIds(raw: readonly unknown[] | null | undefined): string[] {
@@ -117,6 +119,7 @@ export function crmBoardTileFromOrderRow(row: {
   kaitenAdminDueHasTime: boolean | null;
   kanbanBoardUpdatedAt?: Date | string | null;
   updatedAt: Date | string;
+  createdAt?: Date | string | null;
 }): CrmBoardTile {
   const toIso = (v: Date | string | null | undefined) => {
     if (!v) return null;
@@ -137,7 +140,10 @@ export function crmBoardTileFromOrderRow(row: {
       titleMirror: row.kaitenCardTitleMirror,
     }),
     cardTypeId: row.kaitenCardTypeId,
-    cardTypeName: (row.kaitenCardTypeName || "").trim() || null,
+    cardTypeName:
+      (row.kaitenCardTypeName || "").trim() ||
+      legacyKaitenTypeName(row.kaitenCardTypeId) ||
+      null,
     assignees: normalizeCrmUserIds(row.kanbanAssigneeIds),
     participants: normalizeCrmUserIds(row.kanbanParticipantIds),
     stageDueYmd: stage,
@@ -155,5 +161,6 @@ export function crmBoardTileFromOrderRow(row: {
     dueToAdminsAt: toIso(row.dueToAdminsAt),
     dueToAdminsHasTime: row.kaitenAdminDueHasTime,
     updatedAt: updated,
+    createdAt: toIso(row.createdAt),
   };
 }

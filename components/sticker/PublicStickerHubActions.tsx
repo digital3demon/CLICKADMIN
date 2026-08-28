@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { AppModule, UserRole } from "@prisma/client";
 import { canEditOrders } from "@/lib/auth/permissions";
+import { dispatchCrmOrderKanbanColumnChanged } from "@/lib/crm-client-events";
 import { PublicStickerSourceEmailsModal } from "@/components/sticker/PublicStickerSourceEmailsModal";
 
 const btnBase =
@@ -212,6 +213,7 @@ export function PublicStickerHubActions({
       }
       setWorkSent(true);
       setShipMsg("Отмечено: работа отправлена.");
+      dispatchCrmOrderKanbanColumnChanged();
     } catch {
       setShipMsg("Сеть недоступна. Попробуйте ещё раз.");
     } finally {

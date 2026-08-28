@@ -7,13 +7,18 @@ import type { UserRole } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import {
-  backfillCrmBoardPeopleFromTenant,
   listCrmBoardTiles,
   listCrmMyTiles,
 } from "@/lib/kanban/crm-board-fields.server";
 import { isCrmAggregateMyQuery } from "@/lib/kanban/crm-board-tile";
 import { loadKanbanTenantState } from "@/lib/kanban/kanban-tenant-state-write.server";
-import { canUserAccessBoard, kanbanAggregateMode } from "@/lib/kanban/model";
+import {
+  canUserAccessBoard,
+  KANBAN_BOARD_ORTHODONTICS_ID,
+  KANBAN_BOARD_ORTHOPEDICS_ID,
+  KANBAN_BOARD_PRODUCTION_ID,
+  kanbanAggregateMode,
+} from "@/lib/kanban/model";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +45,11 @@ export async function GET(request: Request) {
   }
   const since = parseSince(url.searchParams.get("since"));
   try {
-    if (!isCrmAggregateMyQuery(boardId)) {
+    const systemBoard =
+      boardId === KANBAN_BOARD_ORTHOPEDICS_ID ||
+      boardId === KANBAN_BOARD_ORTHODONTICS_ID ||
+      boardId === KANBAN_BOARD_PRODUCTION_ID;
+    if (!isCrmAggregateMyQuery(boardId) && !systemBoard) {
       const { state } = await loadKanbanTenantState(tenantId);
       const board = state?.boards.find((b) => b.id === boardId);
       if (
@@ -49,9 +58,6 @@ export async function GET(request: Request) {
       ) {
         return NextResponse.json({ error: "Нет доступа к доске" }, { status: 403 });
       }
-    }
-    if (!since) {
-      await backfillCrmBoardPeopleFromTenant(tenantId, boardId);
     }
     if (isCrmAggregateMyQuery(boardId)) {
       const mode = kanbanAggregateMode(boardId) ?? "my";

@@ -2,6 +2,7 @@
  * Кладёт плитки CRM на колонки доски. Не пишет description/files.
  */
 import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
+import { seedKanbanCreatedActivity } from "@/lib/kanban/kanban-order-activity";
 import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   createCard,
@@ -14,7 +15,7 @@ import {
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
-import { resolveKanbanBoardCardTypeId } from "@/lib/kanban/resolve-kanban-card-type";
+import { ensureKanbanBoardCardType } from "@/lib/kanban/resolve-kanban-card-type";
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 
 function findLinkedOnBoard(
@@ -53,7 +54,7 @@ function applyTileToCard(
   card.title = tile.title;
   card.linkedOrderId = tile.orderId;
   card.linkedOrderNumber = tile.orderNumber;
-  const typeId = resolveKanbanBoardCardTypeId(board, tile);
+  const typeId = ensureKanbanBoardCardType(board, tile);
   if (typeId) card.cardTypeId = typeId;
   if (
     !shouldKeepLocalKanbanMembers(card, {
@@ -73,7 +74,11 @@ function applyTileToCard(
   card.blockReason = tile.blockReason;
   card.kaitenCardSortOrder = tile.sortOrder;
   card.trackLane = tile.trackLane || card.trackLane || "";
+  if (tile.createdAt && (!card.createdAt || tile.createdAt < card.createdAt)) {
+    card.createdAt = tile.createdAt;
+  }
   card.updatedAt = tile.updatedAt;
+  card.activity = seedKanbanCreatedActivity(card);
 }
 
 function sortColumnByCrmOrder(cards: KanbanCard[]): void {
@@ -121,7 +126,7 @@ export function applyCrmBoardTilesToAppState(
         id: crmKanbanLinkedCardId(tile.orderId),
         title: tile.title,
         description: "",
-        cardTypeId: resolveKanbanBoardCardTypeId(board, tile),
+        cardTypeId: ensureKanbanBoardCardType(board, tile),
         linkedOrderId: tile.orderId,
         linkedOrderNumber: tile.orderNumber,
         assignees: tile.assignees,
@@ -131,8 +136,10 @@ export function applyCrmBoardTilesToAppState(
         blockReason: tile.blockReason,
         kaitenCardSortOrder: tile.sortOrder,
         trackLane: tile.trackLane || "",
+        createdAt: tile.createdAt || undefined,
       });
       if (tile.stageDueYmd) setKanbanStageDue(card, tile.stageDueYmd);
+      card.activity = seedKanbanCreatedActivity(card);
       targetCol.cards.push(card);
     }
     const set = seenOnBoard.get(board.id) ?? new Set<string>();

@@ -143,7 +143,10 @@ import {
   formatInvoiceTotalRubRuDisplayNullable,
   parseInvoiceTotalRubRuInput,
 } from "@/lib/format-invoice-total-rub-display";
-import { CRM_ORDER_ARCHIVED_EVENT } from "@/lib/crm-client-events";
+import {
+  CRM_ORDER_ARCHIVED_EVENT,
+  dispatchCrmOrderKanbanColumnChanged,
+} from "@/lib/crm-client-events";
 import {
   CRM_UPLOAD_MAX_BYTES,
   formatCrmUploadMaxShortRu,
@@ -2545,6 +2548,9 @@ export function OrderEditForm({
       } else {
         toast.success("Наряд сохранён");
       }
+      if (adminShippedOtpr !== initial.adminShippedOtpr) {
+        dispatchCrmOrderKanbanColumnChanged();
+      }
       router.refresh();
     } catch {
       const msg = "Сеть или сервер недоступны";
@@ -2556,6 +2562,7 @@ export function OrderEditForm({
   }, [
     initial.id,
     initial.orderNumber,
+    initial.adminShippedOtpr,
     isOrderPageFramed,
     orderNumberDraft,
     clinicId,

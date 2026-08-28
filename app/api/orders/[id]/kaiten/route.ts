@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { kanbanCardTypeNamesMatch } from "@/lib/kanban/kaiten-card-type-names";
 import type { KaitenTrackLane, Prisma } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
@@ -108,10 +109,6 @@ type PatchBody = {
   stageDueDate?: string | null;
 };
 
-function normalizeKaitenTypeName(raw: string): string {
-  return raw.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
 async function findTenantKaitenCardTypeByIdOrName(
   prisma: Awaited<ReturnType<typeof getClientsPrisma>>,
   tenantId: string,
@@ -135,13 +132,11 @@ async function findTenantKaitenCardTypeByIdOrName(
   }
   const name = typeof rawName === "string" ? rawName.trim() : "";
   if (!name) return null;
-  const needle = normalizeKaitenTypeName(name);
-  if (!needle) return null;
   const candidates = await prisma.kaitenCardType.findMany({
     where: { tenantId, isActive: true },
     select: { id: true, name: true, externalTypeId: true },
   });
-  const hit = candidates.find((x) => normalizeKaitenTypeName(x.name) === needle);
+  const hit = candidates.find((x) => kanbanCardTypeNamesMatch(x.name, name));
   return hit ? { id: hit.id, externalTypeId: hit.externalTypeId } : null;
 }
 

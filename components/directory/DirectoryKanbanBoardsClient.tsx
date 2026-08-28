@@ -19,6 +19,7 @@ import {
   kanbanStateForPersistence,
   mergeKanbanStatePreservingLocalBoards,
   migrateBoard,
+  applyKaitenApiCardTypesToMirrorBoards,
   normalizeBoardCardTypes,
   normalizeDemoKanbanAppState,
   saveKanbanState,
@@ -54,6 +55,7 @@ import {
   KANBAN_CARD_TYPE_LANES_KEY,
   type KanbanCardTypeLanesSnapshot,
 } from "@/lib/kanban/card-type-lanes-sync";
+import { persistKanbanCatalogCardTypes } from "@/lib/kanban/persist-kanban-catalog-card-types";
 
 const KanbanAutomationsForm = dynamic(
   () => import("@/components/kanban/KanbanAutomationsForm").then((m) => m.KanbanAutomationsForm),
@@ -227,6 +229,32 @@ export function DirectoryKanbanBoardsClient({
       cancelled = true;
     };
   }, [isDemo]);
+
+  useEffect(() => {
+    if (isDemo || !kanbanStateReady) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/kanban/card-types", { credentials: "include" });
+        if (!res.ok || cancelled) return;
+        const rows = (await res.json()) as Array<{
+          id: string;
+          name: string;
+          sortOrder: number;
+        }>;
+        if (!Array.isArray(rows) || rows.length === 0 || cancelled) return;
+        setAppState((prev) => {
+          const next = applyKaitenApiCardTypesToMirrorBoards(prev, rows);
+          return applyKanbanCardTypeLanes(next, lastCardTypeLanesRef.current);
+        });
+      } catch {
+        /* справочник недоступен — локальные типы не трогаем */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo, kanbanStateReady]);
 
   useEffect(() => {
     if (isDemo) {
@@ -491,8 +519,26 @@ export function DirectoryKanbanBoardsClient({
   };
 
   const saveNormalized = () => {
-    applyToAllBoards((b) => normalizeBoardCardTypes(b));
-    showToast("Типы карточек сохранены для всех досок");
+    let typesToPersist: Array<{ id?: string; name?: string; sortOrder?: number }> =
+      [];
+    setAppState((s) => {
+      const next = structuredClone(s);
+      for (const b of next.boards) normalizeBoardCardTypes(b);
+      typesToPersist = [...(getActiveBoard(next).cardTypes || [])];
+      return next;
+    });
+    void (async () => {
+      const saved = await persistKanbanCatalogCardTypes(typesToPersist);
+      if (!saved) {
+        showToast("Типы на досках записаны, в справочник нарядов не удалось", true);
+        return;
+      }
+      setAppState((prev) => {
+        const next = applyKaitenApiCardTypesToMirrorBoards(prev, saved);
+        return applyKanbanCardTypeLanes(next, lastCardTypeLanesRef.current);
+      });
+      showToast("Типы карточек сохранены в справочник и на все доски");
+    })();
   };
 
   const ensureProductionBoardNow = useCallback(() => {
@@ -1067,7 +1113,7 @@ export function DirectoryKanbanBoardsClient({
               className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-medium text-white hover:opacity-95 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
               onClick={saveNormalized}
             >
-              Сохранить порядок типов
+              Сохранить типы
             </button>
           </div>
         </section>

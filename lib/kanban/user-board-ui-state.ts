@@ -16,6 +16,47 @@ const AGGREGATE_BOARD_IDS = new Set([
 ]);
 
 export const KANBAN_BOARD_UI_KEY = "kanbanBoardUiV1" as const;
+/** Синхронная копия UI — F5 сразу знает активную доску, не ждёт GET client-state. */
+export const KANBAN_BOARD_UI_LOCAL_KEY = "kanban-board-ui-local-v1";
+let uiMemoryFallback: string | null = null;
+
+function uiStorageGet(): string | null {
+  if (typeof window === "undefined") return uiMemoryFallback;
+  return window.localStorage.getItem(KANBAN_BOARD_UI_LOCAL_KEY);
+}
+
+function uiStorageSet(value: string): void {
+  if (typeof window === "undefined") {
+    uiMemoryFallback = value;
+    return;
+  }
+  window.localStorage.setItem(KANBAN_BOARD_UI_LOCAL_KEY, value);
+}
+
+export function loadKanbanBoardUiLocal(): KanbanBoardUiState | null {
+  try {
+    const raw = uiStorageGet();
+    if (!raw) return null;
+    return normalizeKanbanBoardUiState(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function saveKanbanBoardUiLocal(ui: KanbanBoardUiState): void {
+  try {
+    uiStorageSet(JSON.stringify(ui));
+  } catch {
+    /* квота */
+  }
+}
+
+export function clearKanbanBoardUiLocalForTests(): void {
+  uiMemoryFallback = null;
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(KANBAN_BOARD_UI_LOCAL_KEY);
+  }
+}
 
 export type KanbanBoardUiState = {
   version: 1;

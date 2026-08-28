@@ -1,6 +1,7 @@
 "use client";
 
 import type { KanbanBoard } from "@/lib/kanban/types";
+import { defaultTrackLaneForCardTypeName } from "@/lib/kanban/card-type-default-lane";
 import { generateId, trackLanes } from "@/lib/kanban/model";
 import { memo } from "react";
 import { IconTrash } from "./kanban-icons";
@@ -47,7 +48,13 @@ function KanbanBoardSettingsFormImpl({
                     onChange={(e) =>
                       patchCardTypes((b) => {
                         const x = (b.cardTypes || []).find((y) => y.id === t.id);
-                        if (x) x.name = e.target.value;
+                        if (!x) return;
+                        x.name = e.target.value;
+                        if (!x.defaultTrackLane) {
+                          x.defaultTrackLane = defaultTrackLaneForCardTypeName(
+                            x.name,
+                          );
+                        }
                       })
                     }
                     className="w-full rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-45"
@@ -145,6 +152,7 @@ function KanbanBoardSettingsFormImpl({
                 name: "Новый тип",
                 color: "#94a3b8",
                 sortOrder: maxO + 10,
+                defaultTrackLane: defaultTrackLaneForCardTypeName("Новый тип"),
               });
             })
           }

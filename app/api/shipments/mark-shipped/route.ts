@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
-import { applyWorkSentKanbanSideEffects } from "@/lib/kanban/advance-linked-order-column.server";
+import {
+  applyWorkSentKanbanSideEffects,
+  applyWorkUnsentKanbanSideEffects,
+} from "@/lib/kanban/advance-linked-order-column.server";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import { userActivityDisplayLabel } from "@/lib/user-activity-display-label";
@@ -70,24 +73,30 @@ export async function POST(req: Request) {
       changedIds.map((id) => recordOrderRevision(id, { kind: "SAVE" })),
     );
 
-    if (shipped) {
-      const actorLabel = userActivityDisplayLabel({
-        mentionHandle: null,
-        displayName: session?.name?.trim() || null,
-        email: session?.email || null,
-      });
-      await Promise.allSettled(
-        changedIds.map((id) =>
-          applyWorkSentKanbanSideEffects({
-            tenantId,
-            orderId: id,
-            actorUserId: session?.sub ?? null,
-            actorLabel,
-            request: req,
-          }),
-        ),
-      );
-    }
+    const actorLabel = userActivityDisplayLabel({
+      mentionHandle: null,
+      displayName: session?.name?.trim() || null,
+      email: session?.email || null,
+    });
+    await Promise.allSettled(
+      changedIds.map((id) =>
+        shipped
+          ? applyWorkSentKanbanSideEffects({
+              tenantId,
+              orderId: id,
+              actorUserId: session?.sub ?? null,
+              actorLabel,
+              request: req,
+            })
+          : applyWorkUnsentKanbanSideEffects({
+              tenantId,
+              orderId: id,
+              actorUserId: session?.sub ?? null,
+              actorLabel,
+              request: req,
+            }),
+      ),
+    );
   }
 
   return NextResponse.json({

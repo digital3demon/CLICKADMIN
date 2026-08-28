@@ -76,6 +76,13 @@ import {
   notifyKanbanCardMemberChange,
 } from "@/lib/kanban/kanban-card-members-client";
 import { persistCrmBoardFieldsClient } from "@/lib/kanban/persist-crm-board-fields-client";
+import { readClientState } from "@/lib/client-state-client";
+import {
+  kanbanOrderActivityStateKey,
+  mergeKanbanOrderActivity,
+  parseStoredKanbanOrderActivity,
+  seedKanbanCreatedActivity,
+} from "@/lib/kanban/kanban-order-activity";
 import {
   ensureKanbanCardFilesFromChatImages,
   findCard,
@@ -83,6 +90,7 @@ import {
   formatDate,
   formatDateTimeRu,
   generateId,
+  getCardTypeDef,
   isCardBlocked,
   kaitenCardTypes,
   performUnblock,
@@ -786,6 +794,18 @@ export function KanbanCardModal({
     if (alreadyLinked) setKaitenChatLoading(true);
 
     void (async () => {
+      const storedAct = await readClientState("tenant", kanbanOrderActivityStateKey(linkedOrderId));
+      if (!cancelled) {
+        const fromStore = parseStoredKanbanOrderActivity(storedAct);
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          fc.card.activity = seedKanbanCreatedActivity({
+            ...fc.card,
+            activity: mergeKanbanOrderActivity(fc.card.activity, fromStore),
+          });
+        });
+      }
       const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
       if (cancelled) return;
       const closedFlags = snap.ok ? snap.comments : [];
@@ -2331,9 +2351,7 @@ export function KanbanCardModal({
                         {String(currentColumnTitle || "—").slice(0, 16)}
                         {" · "}
                         {(
-                          (board.cardTypes || kaitenCardTypes()).find(
-                            (t) => t.id === card.cardTypeId,
-                          )?.name || "—"
+                          getCardTypeDef(board, card.cardTypeId)?.name || "—"
                         ).slice(0, 14)}
                       </span>
                     ) : null}
@@ -2441,7 +2459,7 @@ export function KanbanCardModal({
                               toast(r.error, true);
                               return;
                             }
-                          } else if (isDemo) {
+                          } else {
                             const res = await fetch(
                               `/api/orders/${card.linkedOrderId}`,
                               {
@@ -2454,10 +2472,10 @@ export function KanbanCardModal({
                                 }),
                               },
                             );
-                            const data = (await res.json().catch(() => ({}))) as {
-                              error?: string;
-                            };
-                            if (!res.ok) {
+                            if (isDemo && !res.ok) {
+                              const data = (await res.json().catch(() => ({}))) as {
+                                error?: string;
+                              };
                               toast(
                                 typeof data.error === "string"
                                   ? data.error
@@ -2507,6 +2525,15 @@ export function KanbanCardModal({
                     }}
                   >
                     <option value="">— не выбран —</option>
+                    {card.cardTypeId &&
+                    !(board.cardTypes || kaitenCardTypes()).some(
+                      (t) => t.id === card.cardTypeId,
+                    ) ? (
+                      <option value={card.cardTypeId}>
+                        {getCardTypeDef(board, card.cardTypeId)?.name ||
+                          "Тип с наряда"}
+                      </option>
+                    ) : null}
                     {(board.cardTypes || kaitenCardTypes()).map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -2950,6 +2977,12 @@ export function KanbanCardModal({
                 </div>
               ) : rightTab === "act" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 text-[0.8125rem]">
+                  {(card.activity || []).length === 0 ? (
+                    <p className="text-[var(--kaiten-modal-muted)]">
+                      Журнал пуст. Дата создания — в шапке карточки. Переносы
+                      появятся здесь после следующих перемещений.
+                    </p>
+                  ) : null}
                   {(card.activity || []).slice(0, 40).map((a) => {
                     const u = board.users.find((x) => x.id === a.userId);
                     const name =
@@ -2966,7 +2999,8 @@ export function KanbanCardModal({
                           {relativeTimeRu(a.at)}
                         </span>
                         {" · "}
-                        {name}: {a.text}
+                        {name !== "—" ? `${name}: ` : ""}
+                        {a.text}
                       </div>
                     );
                   })}

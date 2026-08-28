@@ -64,4 +64,13 @@ describe("mergeCardTypeDefsKeepingLanes", () => {
     );
     expect(merged[0]?.defaultTrackLane).toBe("TEST");
   });
+
+  it("локальная «Моделировка» не пропадает, если в remote только «Модели»", () => {
+    const merged = mergeCardTypeDefsKeepingLanes(
+      [{ id: "cuid-модели", name: "Модели", defaultTrackLane: "ORTHOPEDICS" }],
+      [{ id: "kt_local", name: "Моделировка", defaultTrackLane: "ORTHOPEDICS" }],
+    );
+    expect(merged.some((t) => t.name === "Модели")).toBe(true);
+    expect(merged.some((t) => t.name === "Моделировка")).toBe(true);
+  });
 });

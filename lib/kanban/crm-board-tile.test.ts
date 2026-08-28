@@ -64,8 +64,10 @@ describe("crm-board-tile", () => {
       dueToAdminsAt: null,
       kaitenAdminDueHasTime: true,
       updatedAt: "2026-08-28T10:00:00.000Z",
+      createdAt: "2026-07-29T10:00:00.000Z",
     });
     expect(tile.boardId).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(tile.createdAt).toBe("2026-07-29T10:00:00.000Z");
     expect(tile.cardTypeId).toBe("t1");
     expect(tile.assignees).toEqual(["u-я"]);
     expect(tile.stageDueYmd).toBe("2026-09-01");

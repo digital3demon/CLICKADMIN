@@ -1,5 +1,8 @@
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
+import { isKanbanAggregateBoardId } from "@/lib/kanban/model";
 import type { KanbanAppState } from "@/lib/kanban/types";
+import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
+import { LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
 import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
 
 export type LinkedOrderColumnNeighbor = {
@@ -54,6 +57,29 @@ export function peekLinkedOrderColumnNeighbor(
   };
 }
 
+/** Карточка наряда на реальной доске, не на «Мои» / «Ответственный». */
+export function findLinkedOrderCardOnSourceBoard(
+  state: KanbanAppState,
+  orderId: string,
+): ReturnType<typeof findCardByLinkedOrderId> {
+  const orderIdTrim = String(orderId || "").trim();
+  if (!orderIdTrim) return null;
+  for (let bi = 0; bi < state.boards.length; bi += 1) {
+    const board = state.boards[bi]!;
+    if (isKanbanAggregateBoardId(board.id)) continue;
+    for (let ci = 0; ci < board.columns.length; ci += 1) {
+      const col = board.columns[ci]!;
+      for (let i = 0; i < col.cards.length; i += 1) {
+        if (String(col.cards[i]!.linkedOrderId || "").trim() !== orderIdTrim) {
+          continue;
+        }
+        return { boardIndex: bi, columnIndex: ci, cardIndex: i };
+      }
+    }
+  }
+  return findCardByLinkedOrderId(state, orderId);
+}
+
 /** Индекс колонки «Сдана админам» (title / idSuffix col_shipped). */
 export function findHandedToAdminsColumnIndex(
   columns: Array<{ id?: string; title?: string | null }>,
@@ -65,4 +91,46 @@ export function findHandedToAdminsColumnIndex(
     if (isHandedToAdminsKaitenColumnTitle(col.title)) return i;
   }
   return -1;
+}
+
+/** Индекс колонки по подписи (в т.ч. «Сдана админам»). */
+export function findKanbanColumnIndexByTitle(
+  columns: Array<{ id?: string; title?: string | null }>,
+  title: string,
+): number {
+  const want = String(title || "").trim();
+  if (!want) return -1;
+  if (isHandedToAdminsKaitenColumnTitle(want)) {
+    const handed = findHandedToAdminsColumnIndex(columns);
+    if (handed >= 0) return handed;
+  }
+  const wantNorm = normalizeKanbanColumnTitle(want);
+  for (let i = 0; i < columns.length; i += 1) {
+    const t = normalizeKanbanColumnTitle(String(columns[i]!.title ?? ""));
+    if (t && t === wantNorm) return i;
+  }
+  return -1;
+}
+
+/** Запомнить колонку до «Работа отправлена», не затирая уже сохранённый откат. */
+export function snapshotColumnBeforeWorkSent(
+  currentTitle: string | null | undefined,
+  existingSnapshot: string | null | undefined,
+): string | null {
+  const current = String(currentTitle || "").trim();
+  const prev = String(existingSnapshot || "").trim();
+  if (current && !isHandedToAdminsKaitenColumnTitle(current)) return current;
+  return prev || null;
+}
+
+/** Куда вернуть карточку после снятия «Работа отправлена». */
+export function columnTitleAfterWorkUnsent(
+  snapshot: string | null | undefined,
+  currentTitle: string | null | undefined,
+): string {
+  const snap = String(snapshot || "").trim();
+  if (snap && !isHandedToAdminsKaitenColumnTitle(snap)) return snap;
+  const current = String(currentTitle || "").trim();
+  if (current && !isHandedToAdminsKaitenColumnTitle(current)) return current;
+  return LAB_WORK_STATUS_LABELS.TO_EXECUTION;
 }

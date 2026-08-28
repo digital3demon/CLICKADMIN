@@ -12,6 +12,10 @@ import {
   parseStoredKanbanOrderComments,
   resolveKanbanOrderCommentsToPersist,
 } from "@/lib/kanban/kanban-order-comments";
+import {
+  parseStoredKanbanOrderActivity,
+  resolveKanbanOrderActivityToPersist,
+} from "@/lib/kanban/kanban-order-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +38,8 @@ function isProtectedTenantKanbanStateKey(key: string): boolean {
   return (
     key === KANBAN_CHAT_STATE_KEY ||
     key === "kanbanAppStateV3Demo" ||
-    key.startsWith("kanbanCommentsV1:")
+    key.startsWith("kanbanCommentsV1:") ||
+    key.startsWith("kanbanActivityV1:")
   );
 }
 
@@ -168,6 +173,19 @@ export async function PUT(req: Request) {
       }
 
       let valueToStore = body.value;
+      if (key.startsWith("kanbanActivityV1:")) {
+        const incoming = parseStoredKanbanOrderActivity(body.value);
+        const existingRow = await prisma.tenantClientState.findUnique({
+          where: { tenantId_key: { tenantId, key } },
+          select: { value: true },
+        });
+        const existing = parseStoredKanbanOrderActivity(existingRow?.value ?? null);
+        const resolved = resolveKanbanOrderActivityToPersist(incoming, existing);
+        if (resolved === "keep-existing") {
+          return NextResponse.json({ ok: true, skipped: "keep-activity" });
+        }
+        valueToStore = { activity: resolved };
+      }
       if (key.startsWith("kanbanCommentsV1:")) {
         const incoming = parseStoredKanbanOrderComments(body.value);
         const existingRow = await prisma.tenantClientState.findUnique({

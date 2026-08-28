@@ -13,6 +13,7 @@ import {
   normalizeCrmUserIds,
   trackLaneForKanbanBoardId,
 } from "@/lib/kanban/crm-board-tile";
+import { legacyKaitenTypeName } from "@/lib/kanban/kaiten-card-type-names";
 import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { loadKanbanTenantState } from "@/lib/kanban/kanban-tenant-state-write.server";
 import {
@@ -46,6 +47,7 @@ const TILE_SELECT = {
   kaitenAdminDueHasTime: true,
   kanbanBoardUpdatedAt: true,
   updatedAt: true,
+  createdAt: true,
 } as const;
 
 function hydrateWhere(
@@ -73,7 +75,13 @@ async function attachCardTypeNames(
     where: { id: { in: ids } },
     select: { id: true, name: true },
   });
-  return new Map(types.map((t) => [t.id, (t.name || "").trim()]));
+  const out = new Map(types.map((t) => [t.id, (t.name || "").trim()]));
+  for (const id of ids) {
+    if (String(out.get(id) || "").trim()) continue;
+    const legacy = legacyKaitenTypeName(id);
+    if (legacy) out.set(id, legacy);
+  }
+  return out;
 }
 
 async function attachDoctorNames(
@@ -358,12 +366,13 @@ export async function listCrmStageDueCardsForTelegram(input: {
   const start = input.startYmd.trim().slice(0, 10);
   const end = input.endYmd.trim().slice(0, 10);
   if (!start || !end) return { cards: [], statusByKey: new Map() };
+  // Окно в заголовке — start…end; в выборку входят и просроченные (due < start).
   const where: Prisma.OrderWhereInput = {
     tenantId: input.tenantId,
     archivedAt: null,
     status: { not: OrderStatus.CANCELLED },
     isTestOrder: false,
-    kanbanStageDueYmd: { gte: start, lte: end },
+    kanbanStageDueYmd: { lte: end },
     AND: [
       ...(uid ? [crmMyTilesPeopleWhere("my", uid)] : []),
       {
@@ -376,7 +385,8 @@ export async function listCrmStageDueCardsForTelegram(input: {
   };
   const rows = await prisma.order.findMany({
     where,
-    orderBy: [{ kanbanStageDueYmd: "asc" }, { orderNumber: "asc" }],
+    // Сначала поздние сроки: при лимите 200 не вытесняем окно старой просрочкой.
+    orderBy: [{ kanbanStageDueYmd: "desc" }, { orderNumber: "asc" }],
     take: TELEGRAM_STAGE_DUE_CAP,
     select: {
       id: true,
@@ -420,6 +430,15 @@ export async function listCrmStageDueCardsForTelegram(input: {
     statusByKey.set(row.id, status);
     statusByKey.set(card.id, status);
     return card;
+  });
+  cards.sort((a, b) => {
+    const da = String(a.stageDueDate || "").trim();
+    const db = String(b.stageDueDate || "").trim();
+    if (da !== db) return da.localeCompare(db);
+    return String(a.linkedOrderNumber || a.title).localeCompare(
+      String(b.linkedOrderNumber || b.title),
+      "ru",
+    );
   });
   return { cards, statusByKey };
 }

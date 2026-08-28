@@ -50,6 +50,21 @@ function sampleRow(
 }
 
 describe("mergeKaitenLinkedOrdersIntoAppState upsertOnly", () => {
+  it("без типа наряда не ставит первый тип доски («Временные»)", () => {
+    const merged = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [sampleRow("order-без-типа", { kaitenCardTypeId: null, kaitenCardTypeName: null })],
+      { mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(merged, "order-без-типа")!;
+    const card =
+      merged.boards[loc.boardIndex]!.columns[loc.columnIndex]!.cards[loc.cardIndex]!;
+    const first = merged.boards[loc.boardIndex]!.cardTypes[0]!;
+    expect(first.name).toBe("Временные");
+    expect(card.cardTypeId).not.toBe(first.id);
+    expect(card.cardTypeId).toBe("");
+  });
+
   it("does not remove other linked cards when upserting one row", () => {
     const base = defaultAppState();
     const withTwo = mergeKaitenLinkedOrdersIntoAppState(

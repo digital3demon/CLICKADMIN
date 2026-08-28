@@ -111,6 +111,8 @@ export async function POST(req: Request) {
 
   let effectiveLines: string[];
   let effectiveLinesAdmin: string[] | undefined;
+  let effectiveLinesSelf: string[] | undefined = undefined;
+  let effectiveLinesSelfAdmin: string[] | undefined = undefined;
   let parseMode: "HTML" | undefined;
 
   if (
@@ -126,12 +128,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "lines: массив строк" }, { status: 400 });
     }
     effectiveLines = lines as string[];
-    const linesAdminRaw = o.linesAdmin;
-    effectiveLinesAdmin =
-      Array.isArray(linesAdminRaw) &&
-      linesAdminRaw.every((x) => typeof x === "string")
-        ? (linesAdminRaw as string[])
+    const asStrArr = (raw: unknown): string[] | undefined =>
+      Array.isArray(raw) && raw.every((x) => typeof x === "string")
+        ? (raw as string[])
         : undefined;
+    effectiveLinesAdmin = asStrArr(o.linesAdmin);
+    effectiveLinesSelf = asStrArr(o.linesSelf);
+    effectiveLinesSelfAdmin = asStrArr(o.linesSelfAdmin);
     parseMode = o.parseMode === "HTML" ? ("HTML" as const) : undefined;
   }
 
@@ -184,6 +187,8 @@ export async function POST(req: Request) {
         lines: effectiveLines,
         parseMode,
         linesAdmin: effectiveLinesAdmin,
+        linesSelf: effectiveLinesSelf,
+        linesSelfAdmin: effectiveLinesSelfAdmin,
         tenantId: tenantId ?? undefined,
       });
     } else if (isCardMemberScopedTelegramEvent(event)) {

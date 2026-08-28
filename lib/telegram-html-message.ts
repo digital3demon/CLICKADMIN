@@ -9,6 +9,8 @@ export type TelegramHtmlListItem = {
   label: string;
   /** Строка под ссылкой (например актуальный статус / колонка). */
   detail?: string | null;
+  /** Показать URL текстом в скобках («Мой срок»). */
+  showUrl?: boolean;
 };
 
 export function telegramEscapeHtmlText(s: string): string {
@@ -40,10 +42,14 @@ export function truncateTelegramHtmlMessage(text: string, maxLen = TELEGRAM_MESS
 function formatTelegramListItemBlock(item: TelegramHtmlListItem): string | null {
   const url = item.url.trim();
   if (!/^https?:\/\//i.test(url)) return null;
-  const link = `<a href="${telegramEscapeHtmlAttr(url)}">${telegramEscapeHtmlText(item.label)}</a>`;
+  const href = telegramEscapeHtmlAttr(url);
+  const label = telegramEscapeHtmlText(item.label);
+  const titleLine = item.showUrl
+    ? `${label} (<a href="${href}">${telegramEscapeHtmlText(url)}</a>)`
+    : `<a href="${href}">${label}</a>`;
   const detail = String(item.detail ?? "").trim();
-  if (!detail) return link;
-  return `${link}\n${telegramEscapeHtmlText(detail)}`;
+  if (!detail) return titleLine;
+  return `${titleLine}\n${telegramEscapeHtmlText(detail)}`;
 }
 
 /**

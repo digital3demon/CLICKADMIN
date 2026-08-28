@@ -10,7 +10,10 @@ import {
   applyKanbanBoardUiState,
   extractKanbanBoardUiState,
   hasNonDefaultKanbanBoardUi,
+  clearKanbanBoardUiLocalForTests,
+  loadKanbanBoardUiLocal,
   normalizeKanbanBoardUiState,
+  saveKanbanBoardUiLocal,
   stripPersonalKanbanUiForTenant,
 } from "@/lib/kanban/user-board-ui-state";
 
@@ -119,5 +122,16 @@ describe("apply / extract", () => {
     expect(next.viewMode).toBe("list");
     expect(next.activeBoardId).toBe(KANBAN_BOARD_MY_CARDS_ID);
     expect(hasNonDefaultKanbanBoardUi(ui)).toBe(true);
+  });
+
+  it("localStorage UI переживает F5 (кириллица в search)", () => {
+    const ui = extractKanbanBoardUiState(defaultAppState());
+    ui.search = "Крупышева";
+    ui.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
+    saveKanbanBoardUiLocal(ui);
+    const loaded = loadKanbanBoardUiLocal();
+    expect(loaded?.search).toBe("Крупышева");
+    expect(loaded?.activeBoardId).toBe(KANBAN_BOARD_MY_CARDS_ID);
+    clearKanbanBoardUiLocalForTests();
   });
 });

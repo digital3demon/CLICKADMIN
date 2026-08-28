@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   collectKanbanStageDueCards,
+  formatKanbanStageDueTelegramDetail,
+  kanbanStageDlineWindowForCommand,
   kanbanStageDueYmdInInclusiveRange,
+  kanbanStageDueYmdOnOrBeforeEnd,
   mergeKanbanStageDueCards,
 } from "@/lib/telegram-bot-kanban-stage-dline-helpers";
 import { createCard } from "@/lib/kanban/model";
 import type { KanbanAppState } from "@/lib/kanban/types";
+
+describe("kanbanStageDlineWindowForCommand", () => {
+  it("мой срок — заголовок «по дату включительно»", () => {
+    expect(kanbanStageDlineWindowForCommand("/dlinetd", "2026-08-28").header).toBe(
+      "Мой срок, по 2026-08-28 включительно (2026-08-28…2026-08-28, МСК)",
+    );
+    expect(kanbanStageDlineWindowForCommand("/dlinew", "2026-08-24").header).toBe(
+      "Мой срок, по 2026-08-28 включительно (2026-08-24…2026-08-28, МСК)",
+    );
+    expect(kanbanStageDlineWindowForCommand("/dlinetm", "2026-08-28").header).toBe(
+      "Мой срок, по 2026-08-31 включительно (2026-08-28…2026-08-31, МСК)",
+    );
+  });
+});
 
 describe("kanbanStageDueYmdInInclusiveRange", () => {
   it("включает границы диапазона YMD", () => {
@@ -17,6 +34,23 @@ describe("kanbanStageDueYmdInInclusiveRange", () => {
     );
     expect(kanbanStageDueYmdInInclusiveRange("2026-07-09", "2026-07-10", "2026-07-12")).toBe(
       false,
+    );
+  });
+});
+
+describe("kanbanStageDueYmdOnOrBeforeEnd", () => {
+  it("берёт просроченные и границу, отсекает срок после окна", () => {
+    expect(kanbanStageDueYmdOnOrBeforeEnd("2026-07-09", "2026-07-10")).toBe(true);
+    expect(kanbanStageDueYmdOnOrBeforeEnd("2026-07-10", "2026-07-10")).toBe(true);
+    expect(kanbanStageDueYmdOnOrBeforeEnd("2026-07-11", "2026-07-10")).toBe(false);
+    expect(kanbanStageDueYmdOnOrBeforeEnd("", "2026-07-10")).toBe(false);
+  });
+});
+
+describe("formatKanbanStageDueTelegramDetail", () => {
+  it("статус и срок с кириллицей вокруг даты", () => {
+    expect(formatKanbanStageDueTelegramDetail("К исполнению", "2026-08-27")).toBe(
+      "Статус: К исполнению\nСрок : 2026-08-27",
     );
   });
 });
@@ -34,6 +68,12 @@ describe("collectKanbanStageDueCards", () => {
             title: "Колонка",
             cards: [
               createCard({
+                id: "mine-overdue",
+                title: "2607-099 Просрочка Иванова",
+                assignees: ["user-a"],
+                stageDueDate: "2026-07-09",
+              }),
+              createCard({
                 id: "mine-today",
                 title: "2607-100 Моя",
                 assignees: ["user-a"],
@@ -49,6 +89,12 @@ describe("collectKanbanStageDueCards", () => {
                 id: "mine-no-due",
                 title: "2607-102 Без срока",
                 assignees: ["user-a"],
+              }),
+              createCard({
+                id: "mine-later",
+                title: "2607-103 Позже окна",
+                assignees: ["user-a"],
+                stageDueDate: "2026-07-12",
               }),
             ],
           },
@@ -70,13 +116,13 @@ describe("collectKanbanStageDueCards", () => {
     filterTemplates: [],
   };
 
-  it("фильтрует по ответственному и этапному сроку", () => {
+  it("фильтрует по ответственному и включает просроченные до конца окна", () => {
     const cards = collectKanbanStageDueCards(
       state,
       { startYmd: "2026-07-10", endYmd: "2026-07-10", header: "x" },
       { crmUserId: "user-a" },
     );
-    expect(cards.map((c) => c.id)).toEqual(["mine-today"]);
+    expect(cards.map((c) => c.id)).toEqual(["mine-overdue", "mine-today"]);
   });
 
   it("включает карточки, где пользователь только участник", () => {
@@ -114,7 +160,7 @@ describe("collectKanbanStageDueCards", () => {
       state,
       { startYmd: "2026-07-10", endYmd: "2026-07-10", header: "x" },
     );
-    expect(cards.map((c) => c.id)).toEqual(["mine-today", "other-today"]);
+    expect(cards.map((c) => c.id)).toEqual(["mine-overdue", "mine-today", "other-today"]);
   });
 });
 

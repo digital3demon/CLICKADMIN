@@ -10,8 +10,10 @@ import {
 } from "@/lib/kanban/chat-sync";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 import { listCrmStageDueCardsForTelegram } from "@/lib/kanban/crm-board-fields.server";
+import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   collectKanbanStageDueCards,
+  formatKanbanStageDueTelegramDetail,
   kanbanCardTelegramLabel,
   kanbanStageDlineWindowForCommand,
   mergeKanbanStageDueCards,
@@ -48,7 +50,8 @@ function kanbanCardTelegramItem(
   return {
     url: kanbanCardTelegramHref(card, linkToOrderPage),
     label: kanbanCardTelegramLabel(card),
-    detail: `Статус: ${statusLabel}`,
+    detail: formatKanbanStageDueTelegramDetail(statusLabel, getKanbanStageDue(card)),
+    showUrl: true,
   };
 }
 

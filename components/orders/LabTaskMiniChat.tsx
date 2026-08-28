@@ -51,27 +51,25 @@ export function LabTaskMiniChat({
   onStats: (next: { chatMessageCount: number; hasUnreadChat: boolean }) => void;
 }) {
   const [comments, setComments] = useState<LabTaskChatCommentJson[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<LabTaskChatCommentJson | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const onStatsRef = useRef(onStats);
+  onStatsRef.current = onStats;
 
-  const applyList = useCallback(
-    (rows: LabTaskChatCommentJson[]) => {
-      setComments(rows);
-      const visible = rows.filter((c) => !c.deletedAt).length;
-      onStats({ chatMessageCount: visible, hasUnreadChat: false });
-    },
-    [onStats],
-  );
+  const applyList = useCallback((rows: LabTaskChatCommentJson[]) => {
+    setComments(rows);
+    const visible = rows.filter((c) => !c.deletedAt).length;
+    onStatsRef.current({ chatMessageCount: visible, hasUnreadChat: false });
+  }, []);
 
   useEffect(() => {
     const ac = new AbortController();
     void (async () => {
-      setLoading(true);
       setErr(null);
       try {
         const res = await fetch(
@@ -82,6 +80,7 @@ export function LabTaskMiniChat({
           comments?: LabTaskChatCommentJson[];
           error?: string;
         };
+        if (ac.signal.aborted) return;
         if (!res.ok) {
           setErr(j.error ?? "Не удалось загрузить чат");
           return;
@@ -89,9 +88,10 @@ export function LabTaskMiniChat({
         applyList(Array.isArray(j.comments) ? j.comments : []);
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
+        if (ac.signal.aborted) return;
         setErr("Сеть недоступна");
       } finally {
-        setLoading(false);
+        if (!ac.signal.aborted) setLoaded(true);
       }
     })();
     return () => ac.abort();
@@ -201,7 +201,7 @@ export function LabTaskMiniChat({
             {err}
           </p>
         ) : null}
-        {loading ? (
+        {!loaded && comments.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">Загрузка чата…</p>
         ) : comments.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">Пока нет сообщений</p>

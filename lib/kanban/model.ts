@@ -37,8 +37,10 @@ import {
   overlayLocalKanbanCardHeadOntoRemote,
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
+import { persistKanbanOrderActivityClient } from "@/lib/kanban/persist-kanban-activity-client";
 import { overlayMissingLocalLinkedCardsOntoRemote } from "@/lib/kanban/overlay-missing-local-linked-cards";
-import { resolveKanbanBoardCardTypeId } from "@/lib/kanban/resolve-kanban-card-type";
+import { canonicalKanbanCardTypeNameKey } from "@/lib/kanban/kaiten-card-type-names";
+import { ensureKanbanBoardCardType } from "@/lib/kanban/resolve-kanban-card-type";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 import { stripLinkedOrderCardsForTenantChrome } from "@/lib/kanban/kanban-tenant-chrome";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
@@ -47,6 +49,7 @@ import {
   collectCardTypeDefaultLanes,
   defaultTrackLaneForCardTypeName,
   mergeCardTypeDefsKeepingLanes,
+  normalizeCardTypeNameKey,
   pickPreservedCardTypeLane,
 } from "@/lib/kanban/card-type-default-lane";
 
@@ -319,10 +322,10 @@ export function cardTypeDefsFromKaitenApiRows(
     "#eab308",
   ];
   const staticByName = new Map(
-    kaitenCardTypes().map((d) => [d.name.trim().toLowerCase(), d]),
+    kaitenCardTypes().map((d) => [canonicalKanbanCardTypeNameKey(d.name), d]),
   );
   return rows.map((r, i) => {
-    const base = staticByName.get(String(r.name || "").trim().toLowerCase());
+    const base = staticByName.get(canonicalKanbanCardTypeNameKey(r.name));
     const so = Number.isFinite(r.sortOrder) ? r.sortOrder : (i + 1) * 10;
     return {
       id: r.id,
@@ -334,41 +337,72 @@ export function cardTypeDefsFromKaitenApiRows(
 }
 
 /**
- * Подставляет типы с сервера на зеркальные доски Kaiten и перепривязывает cardTypeId карточек по имени типа.
+ * Справочник наряда → доски: добавляет недостающие типы, не выкидывает
+ * локально добавленные («Моделировка» рядом с «Модели»).
  */
 export function applyKaitenApiCardTypesToMirrorBoards(
   state: KanbanAppState,
   rows: Array<{ id: string; name: string; sortOrder: number }>,
 ): KanbanAppState {
   const next = structuredClone(state);
-  const newTypes = cardTypeDefsFromKaitenApiRows(rows);
-  if (newTypes.length === 0) return next;
-  const newIds = new Set(newTypes.map((t) => t.id));
-  const mirrorIds = [KANBAN_BOARD_ORTHOPEDICS_ID, KANBAN_BOARD_ORTHODONTICS_ID];
-  const preserved = collectCardTypeDefaultLanes(
-    mirrorIds.flatMap((bid) => {
-      const b = next.boards.find((x) => x.id === bid);
-      return b?.cardTypes ?? [];
-    }),
+  const catalog = cardTypeDefsFromKaitenApiRows(rows);
+  if (catalog.length === 0) return next;
+  const catalogByName = new Map(
+    catalog
+      .map((t) => [normalizeCardTypeNameKey(t.name), t] as const)
+      .filter(([key]) => Boolean(key)),
   );
-  for (const bid of mirrorIds) {
-    const b = next.boards.find((x) => x.id === bid);
-    if (!b) continue;
+  const preserved = collectCardTypeDefaultLanes(
+    next.boards.flatMap((b) => b.cardTypes ?? []).concat(catalog),
+  );
+  for (const b of next.boards) {
+    if (isKanbanAggregateBoardId(b.id)) continue;
     const oldTypes = b.cardTypes ? [...b.cardTypes] : [];
-    b.cardTypes = newTypes.map((t) => ({
-      ...t,
-      defaultTrackLane: pickPreservedCardTypeLane(t, preserved),
-    }));
+    const usedNames = new Set<string>();
+    const merged: CardTypeDef[] = [];
+    const idMap = new Map<string, string>();
+    for (const old of oldTypes) {
+      const key = normalizeCardTypeNameKey(old.name);
+      const cat = key ? catalogByName.get(key) : undefined;
+      if (cat) {
+        usedNames.add(key);
+        merged.push({
+          ...old,
+          id: cat.id,
+          name: cat.name,
+          sortOrder: cat.sortOrder,
+          color: old.color || cat.color,
+          defaultTrackLane:
+            pickPreservedCardTypeLane({ ...old, id: cat.id, name: cat.name }, preserved) ||
+            defaultTrackLaneForCardTypeName(cat.name),
+        });
+        if (old.id && old.id !== cat.id) idMap.set(old.id, cat.id);
+      } else {
+        merged.push({
+          ...old,
+          defaultTrackLane:
+            old.defaultTrackLane || defaultTrackLaneForCardTypeName(old.name),
+        });
+      }
+    }
+    for (const cat of catalog) {
+      const key = normalizeCardTypeNameKey(cat.name);
+      if (!key || usedNames.has(key)) continue;
+      usedNames.add(key);
+      merged.push({
+        ...cat,
+        defaultTrackLane:
+          pickPreservedCardTypeLane(cat, preserved) ||
+          defaultTrackLaneForCardTypeName(cat.name),
+      });
+    }
+    merged.sort((a, c) => (a.sortOrder || 0) - (c.sortOrder || 0));
+    b.cardTypes = merged;
     for (const col of b.columns) {
       for (const c of col.cards) {
         if (!c.cardTypeId) continue;
-        if (newIds.has(c.cardTypeId)) continue;
-        const oldT = oldTypes.find((x) => x.id === c.cardTypeId);
-        const nameKey = (oldT?.name || "").trim().toLowerCase();
-        const hit = nameKey
-          ? newTypes.find((x) => x.name.trim().toLowerCase() === nameKey)
-          : undefined;
-        c.cardTypeId = hit?.id ?? "";
+        const mapped = idMap.get(c.cardTypeId);
+        if (mapped) c.cardTypeId = mapped;
       }
     }
   }
@@ -1821,6 +1855,8 @@ export function pushActivity(
   card.activity = card.activity || [];
   card.activity.unshift(entry);
   card.updatedAt = entry.at;
+  const oid = String(card.linkedOrderId || "").trim();
+  if (oid) persistKanbanOrderActivityClient(oid, card.activity);
 }
 
 /** Сброс этапного таймера, если ответственный/участник перенёс карточку на следующую колонку. */
@@ -2776,7 +2812,7 @@ function resolveLinkedOrderCardTypeId(
     );
     if (hit?.id) return hit.id;
   }
-  return resolveKanbanBoardCardTypeId(board, {
+  return ensureKanbanBoardCardType(board, {
     cardTypeId: row.kaitenCardTypeId,
     cardTypeName: row.kaitenCardTypeName,
   });
@@ -2898,7 +2934,6 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     const title = resolveLinkedOrderKanbanTitle(row, titleFromOrder);
     const desc = linkedOrderKanbanDescription(row, demo);
     const effType = resolveLinkedOrderCardTypeId(targetBoard, row, demo);
-    const fallbackTypeId = effType || (targetBoard.cardTypes?.[0]?.id ?? "");
     const lane =
       normalizeKaitenTrackLaneForBoard(row.kaitenTrackLane) ||
       reuseCard?.trackLane ||
@@ -2933,7 +2968,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       foundEff.card.kaitenCardId = row.kaitenCardId ?? null;
       foundEff.card.linkedOrderId = row.id;
       foundEff.card.linkedOrderNumber = row.orderNumber;
-      foundEff.card.cardTypeId = fallbackTypeId;
+      if (effType) foundEff.card.cardTypeId = effType;
       foundEff.card.trackLane = lane;
       foundEff.card.blocked = !!row.kaitenBlocked;
       foundEff.card.blockReason = (row.kaitenBlockReason || "").trim();
@@ -2951,7 +2986,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         id: cardDbId,
         title,
         description: desc,
-        cardTypeId: fallbackTypeId,
+        cardTypeId: effType,
         dueDate: "",
         urgent: false,
         linkedOrderId: row.id,

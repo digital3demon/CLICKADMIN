@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { dispatchCrmOrderKanbanColumnChanged } from "@/lib/crm-client-events";
 
 function formatShippedCompact(iso: string | null | undefined): {
   date: string;
@@ -69,6 +70,7 @@ export function OrderShippedToggle({
         setLocalAt(shippedAtIso);
         return;
       }
+      dispatchCrmOrderKanbanColumnChanged();
       router.refresh();
     } catch {
       setValue(!next);
