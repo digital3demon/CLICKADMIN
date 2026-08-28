@@ -4,6 +4,10 @@ import {
   demoAccessCodeStatus,
   formatDemoAccessCodePrefixForUi,
 } from "@/lib/auth/demo-access-code";
+import {
+  demoAccessSessionExpiresAt,
+  isDemoAccessSessionExpired,
+} from "@/lib/auth/demo-access-session-policy";
 import { createDemoAccessCode } from "@/lib/demo-access-consume";
 import { getDemoAccessPrisma } from "@/lib/prisma-demo-access";
 import { isCrmStandaloneDemo } from "@/lib/crm-standalone-demo";
@@ -42,6 +46,15 @@ export async function GET() {
   return NextResponse.json({
     codes: rows.map((r) => {
       const status = demoAccessCodeStatus(r);
+      const expiresAt = r.consumedAt
+        ? demoAccessSessionExpiresAt(r.consumedAt).toISOString()
+        : null;
+      const sessionActive =
+        Boolean(r.consumedAt) &&
+        !isDemoAccessSessionExpired({
+          consumedAt: r.consumedAt,
+          revokedAt: r.revokedAt,
+        });
       return {
         id: r.id,
         label: r.label,
@@ -49,13 +62,15 @@ export async function GET() {
         createdAt: r.createdAt.toISOString(),
         revokedAt: r.revokedAt?.toISOString() ?? null,
         consumedAt: r.consumedAt?.toISOString() ?? null,
+        expiresAt,
+        sessionActive,
         boundHint: r.consumedAt
           ? [r.boundIpAddress, r.boundUserAgent?.slice(0, 48)]
               .filter(Boolean)
               .join(" · ") || "использован"
           : null,
         status,
-        active: status === "unused",
+        active: status === "unused" || sessionActive,
       };
     }),
   });

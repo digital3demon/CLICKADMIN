@@ -12,6 +12,8 @@ import {
   OrderChatInboxItemType,
   OrderChatInboxSyncState,
   OrderStatus,
+  PayrollUserTrack,
+  PayrollWorkKind,
   ReconciliationFrequency,
   ReconciliationSnapshotPaymentStatus,
   ReconciliationSnapshotSlot,
@@ -29,6 +31,11 @@ import { DEFAULT_TENANT_ID } from "@/lib/tenant-constants";
 import { KAITEN_MIRROR_KANBAN_COLUMNS } from "@/lib/kanban/model";
 import { UI_DESIGN_CLIENT_STATE_KEY } from "@/lib/ui-design";
 import { kanbanOrderCommentsStateKey } from "@/lib/kanban/kanban-order-comments";
+import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
+import {
+  DEFAULT_PAYROLL_KIND_TRACK_MAP,
+  PAYROLL_KIND_TRACK_MAP_KEY,
+} from "@/lib/payroll-tracks";
 import { foReconciliationGroupKey } from "@/lib/clinic-inn-key";
 import {
   formatReconciliationPeriodLabelRu,
@@ -44,11 +51,62 @@ const OWNER_EMAIL = "owner@demo.crm";
 const DEMO_MAILBOX = "lab@demo.crm";
 const DEMO_AUTHOR = "Владелец (демо)";
 
+const TECH_DIGITAL_1 = "cm_demo_user_tech_d1";
+const TECH_DIGITAL_2 = "cm_demo_user_tech_d2";
+const TECH_MANUAL_1 = "cm_demo_user_tech_m1";
+const TECH_MANUAL_2 = "cm_demo_user_tech_m2";
+const DEMO_TECH_IDS = [
+  TECH_DIGITAL_1,
+  TECH_DIGITAL_2,
+  TECH_MANUAL_1,
+  TECH_MANUAL_2,
+] as const;
+
+const DEMO_TECH_TRACK_BY_ID = new Map<string, PayrollUserTrack>([
+  [TECH_DIGITAL_1, PayrollUserTrack.DIGITAL],
+  [TECH_DIGITAL_2, PayrollUserTrack.DIGITAL],
+  [TECH_MANUAL_1, PayrollUserTrack.MANUAL],
+  [TECH_MANUAL_2, PayrollUserTrack.MANUAL],
+]);
+
+type DemoPayrollConfigRow = {
+  id: string;
+  kind: PayrollWorkKind;
+  amountRub: number;
+};
+
+function demoPickPayrollConfigForTrack(
+  configs: DemoPayrollConfigRow[],
+  track: PayrollUserTrack,
+): DemoPayrollConfigRow | null {
+  const prefer: PayrollWorkKind[] =
+    track === PayrollUserTrack.DIGITAL
+      ? [
+          PayrollWorkKind.CAD,
+          PayrollWorkKind.CAD_SURGERY,
+          PayrollWorkKind.UNCATEGORIZED,
+        ]
+      : track === PayrollUserTrack.MANUAL
+        ? [PayrollWorkKind.MANUAL, PayrollWorkKind.UNCATEGORIZED]
+        : track === PayrollUserTrack.SHOP_FLOOR
+          ? [PayrollWorkKind.PROCESSING, PayrollWorkKind.UNCATEGORIZED]
+          : [
+              PayrollWorkKind.CAD,
+              PayrollWorkKind.MANUAL,
+              PayrollWorkKind.UNCATEGORIZED,
+            ];
+  for (const kind of prefer) {
+    const hit = configs.find((c) => c.kind === kind);
+    if (hit) return hit;
+  }
+  return configs[0] ?? null;
+}
+
 /**
  * Бамп → при входе в демо (в т.ч. DEMO_RESEED_ON_START=0) старая выгрузка
  * считается «не сиднутой» и пересоздаётся. См. isDemoDatabaseSeeded.
  */
-export const DEMO_SEED_REVISION = 11;
+export const DEMO_SEED_REVISION = 12;
 const DEMO_SEED_REVISION_KEY = "demo-seed-revision";
 /** Минимум нарядов в актуальном сиде (ниже = устаревшая выгрузка на 4 заказа). */
 const DEMO_ORDER_COUNT_MIN = 50;
@@ -149,6 +207,8 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     await tx.warehouse.deleteMany();
     await tx.orderRevision.deleteMany();
     await tx.orderConstruction.deleteMany();
+    await tx.payrollWorkEntry.deleteMany();
+    await tx.payrollPriceItemConfig.deleteMany();
     await tx.order.deleteMany();
     await tx.priceListWorkspaceSettings.deleteMany();
     await tx.priceListItem.deleteMany();
@@ -199,6 +259,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
       email: string;
       displayName: string;
       role: (typeof UserRole)[keyof typeof UserRole];
+      payrollTrack?: PayrollUserTrack;
     }> = [
       {
         id: "cm_demo_user_admin_v1",
@@ -236,6 +297,34 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         displayName: "Пользователь · Бухгалтер",
         role: UserRole.ACCOUNTANT,
       },
+      {
+        id: TECH_DIGITAL_1,
+        email: "tech-digital-1@demo.crm",
+        displayName: "Техник · Цифра (Алексей)",
+        role: UserRole.USER,
+        payrollTrack: PayrollUserTrack.DIGITAL,
+      },
+      {
+        id: TECH_DIGITAL_2,
+        email: "tech-digital-2@demo.crm",
+        displayName: "Техник · Цифра (Марина)",
+        role: UserRole.USER,
+        payrollTrack: PayrollUserTrack.DIGITAL,
+      },
+      {
+        id: TECH_MANUAL_1,
+        email: "tech-manual-1@demo.crm",
+        displayName: "Техник · Мануал (Игорь)",
+        role: UserRole.USER,
+        payrollTrack: PayrollUserTrack.MANUAL,
+      },
+      {
+        id: TECH_MANUAL_2,
+        email: "tech-manual-2@demo.crm",
+        displayName: "Техник · Мануал (Ольга)",
+        role: UserRole.USER,
+        payrollTrack: PayrollUserTrack.MANUAL,
+      },
     ];
     for (let si = 0; si < staffSeeds.length; si++) {
       const u = staffSeeds[si]!;
@@ -248,6 +337,7 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           role: u.role,
           passwordHash: demoStaffPasswordHash,
           isActive: true,
+          payrollTrack: u.payrollTrack ?? null,
           lastLoginAt: hoursAgo(12 + si),
         },
       });
@@ -367,6 +457,167 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         }),
       ),
     );
+
+    /** ФОТ на каждую позицию прайса — для «Что сделано» и страницы зарплаты. */
+    const demoPayrollByCode: Record<
+      string,
+      Array<{ kind: PayrollWorkKind; amountRub: number; description: string }>
+    > = {
+      DM01: [
+        {
+          kind: PayrollWorkKind.CAD,
+          amountRub: 420,
+          description: "CAD · диагностика модели",
+        },
+      ],
+      DM02: [
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 380,
+          description: "Мануал · временная коронка",
+        },
+      ],
+      DM03: [
+        {
+          kind: PayrollWorkKind.CAD,
+          amountRub: 1450,
+          description: "CAD · коронка Zr",
+        },
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 920,
+          description: "Мануал · коронка Zr",
+        },
+        {
+          kind: PayrollWorkKind.PROCESSING,
+          amountRub: 480,
+          description: "Обработка · коронка Zr",
+        },
+      ],
+      DM04: [
+        {
+          kind: PayrollWorkKind.CAD,
+          amountRub: 1180,
+          description: "CAD · коронка МК",
+        },
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 860,
+          description: "Мануал · коронка МК",
+        },
+      ],
+      DM05: [
+        {
+          kind: PayrollWorkKind.CAD,
+          amountRub: 640,
+          description: "CAD · вкладка",
+        },
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 510,
+          description: "Мануал · вкладка",
+        },
+      ],
+      DM06: [
+        {
+          kind: PayrollWorkKind.CAD,
+          amountRub: 1320,
+          description: "CAD · винир",
+        },
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 980,
+          description: "Мануал · винир",
+        },
+      ],
+      DM07: [
+        {
+          kind: PayrollWorkKind.CAD_SURGERY,
+          amountRub: 760,
+          description: "CAD хирургия · абатмент",
+        },
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 540,
+          description: "Мануал · абатмент",
+        },
+      ],
+      DM08: [
+        {
+          kind: PayrollWorkKind.CAD,
+          amountRub: 2280,
+          description: "CAD · мост 3 ед.",
+        },
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 1640,
+          description: "Мануал · мост 3 ед.",
+        },
+        {
+          kind: PayrollWorkKind.PROCESSING,
+          amountRub: 720,
+          description: "Обработка · мост",
+        },
+      ],
+      DM09: [
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 1890,
+          description: "Мануал · съёмный частичный",
+        },
+        {
+          kind: PayrollWorkKind.PROCESSING,
+          amountRub: 620,
+          description: "Обработка · съёмный",
+        },
+      ],
+      DM10: [
+        {
+          kind: PayrollWorkKind.CAD,
+          amountRub: 580,
+          description: "CAD · каппа",
+        },
+        {
+          kind: PayrollWorkKind.MANUAL,
+          amountRub: 430,
+          description: "Мануал · каппа",
+        },
+      ],
+    };
+    const payrollConfigsByItemId = new Map<string, DemoPayrollConfigRow[]>();
+    for (const pi of priceItems) {
+      const rows = demoPayrollByCode[pi.code] ?? [
+        {
+          kind: PayrollWorkKind.UNCATEGORIZED,
+          amountRub: 500,
+          description: `ФОТ · ${pi.name}`,
+        },
+      ];
+      const seeded: DemoPayrollConfigRow[] = [];
+      for (let ri = 0; ri < rows.length; ri++) {
+        const row = rows[ri]!;
+        const cfg = await tx.payrollPriceItemConfig.create({
+          data: {
+            tenantId: DEFAULT_TENANT_ID,
+            priceListItemId: pi.id,
+            kind: row.kind,
+            amountRub: row.amountRub,
+            description: row.description,
+            sortOrder: ri,
+          },
+        });
+        seeded.push({ id: cfg.id, kind: cfg.kind, amountRub: cfg.amountRub });
+      }
+      payrollConfigsByItemId.set(pi.id, seeded);
+    }
+
+    await tx.tenantClientState.create({
+      data: {
+        tenantId: DEFAULT_TENANT_ID,
+        key: PAYROLL_KIND_TRACK_MAP_KEY,
+        value: DEFAULT_PAYROLL_KIND_TRACK_MAP,
+      },
+    });
 
     const whMat = await tx.warehouse.create({
       data: {
@@ -824,7 +1075,15 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
     const shadePool = ["A1", "A2", "A3", "B1", "BL2", "C2"] as const;
 
     const seqByYymm = new Map<string, number>();
-    const createdOrders: { id: string; orderNumber: string }[] = [];
+    const createdOrders: Array<{
+      id: string;
+      orderNumber: string;
+      status: OrderStatus;
+      createdAt: Date;
+      assigneeId: string | null;
+      participantIds: string[];
+      constructions: Array<{ priceListItemId: string; quantity: number }>;
+    }> = [];
 
     for (let ix = 0; ix < DEMO_ORDER_COUNT; ix++) {
       /** Равномерно по дням: 0 = сегодня МСК … SPAN-1 = самый старый. */
@@ -934,6 +1193,21 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           ? KaitenTrackLane.ORTHODONTICS
           : KaitenTrackLane.ORTHOPEDICS;
 
+      const assigneeId =
+        status === OrderStatus.CANCELLED
+          ? null
+          : DEMO_TECH_IDS[ix % DEMO_TECH_IDS.length]!;
+      const participantIds =
+        status === OrderStatus.CANCELLED || !assigneeId
+          ? []
+          : ix % 4 === 0
+            ? DEMO_TECH_IDS.filter((id) => id !== assigneeId).slice(0, 2)
+            : ix % 3 === 0
+              ? [
+                  DEMO_TECH_IDS[(ix + 2) % DEMO_TECH_IDS.length]!,
+                ].filter((id) => id !== assigneeId)
+              : [];
+
       const order = await tx.order.create({
         data: {
           tenantId: DEFAULT_TENANT_ID,
@@ -965,11 +1239,58 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           adminShippedAt,
           invoiceIssuedAt,
           invoiceNumber,
+          kanbanAssigneeIds: assigneeId ? [assigneeId] : [],
+          kanbanParticipantIds: participantIds,
           constructions: { create: constructions },
         },
         select: { id: true, orderNumber: true },
       });
-      createdOrders.push(order);
+      createdOrders.push({
+        ...order,
+        status,
+        createdAt,
+        assigneeId,
+        participantIds,
+        constructions: constructions.map((c) => ({
+          priceListItemId: c.priceListItemId,
+          quantity: c.quantity,
+        })),
+      });
+    }
+
+    /** «Что сделано» на карточках канбана — начисления ФОТ по исполнителям. */
+    for (const o of createdOrders) {
+      if (o.status === OrderStatus.CANCELLED || !o.assigneeId) continue;
+      const cardId = crmKanbanLinkedCardId(o.id);
+      const workerIds = [o.assigneeId, ...o.participantIds];
+      for (const con of o.constructions) {
+        const configs = payrollConfigsByItemId.get(con.priceListItemId) ?? [];
+        const seen = new Set<string>();
+        for (const workerId of workerIds) {
+          const track = DEMO_TECH_TRACK_BY_ID.get(workerId);
+          if (!track) continue;
+          const cfg = demoPickPayrollConfigForTrack(configs, track);
+          if (!cfg) continue;
+          const dedupe = `${workerId}:${cfg.id}`;
+          if (seen.has(dedupe)) continue;
+          seen.add(dedupe);
+          await tx.payrollWorkEntry.create({
+            data: {
+              tenantId: DEFAULT_TENANT_ID,
+              orderId: o.id,
+              kanbanCardId: cardId,
+              payrollConfigId: cfg.id,
+              priceListItemId: con.priceListItemId,
+              kind: cfg.kind,
+              quantity: con.quantity,
+              amountRub: cfg.amountRub * con.quantity,
+              userId: workerId,
+              updatedByUserId: OWNER_ID,
+              createdAt: o.createdAt,
+            },
+          });
+        }
+      }
     }
 
     /**

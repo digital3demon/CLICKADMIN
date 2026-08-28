@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Отозвать неиспользованный (или уже использованный) код демо. */
+/** Отозвать код демо: новый вход невозможен; активная сессия завершится на следующем запросе. */
 export async function POST(_req: Request, ctx: Ctx) {
   if (isCrmStandaloneDemo()) {
     return NextResponse.json(

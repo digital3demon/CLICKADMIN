@@ -17,6 +17,7 @@ import {
   sessionLookupCacheKey,
   writeSessionLookupCache,
 } from "@/lib/auth/session-lookup-cache";
+import { assertDemoAccessSessionActive } from "@/lib/auth/demo-session.server";
 
 export async function getSessionFromCookies(): Promise<SessionClaims | null> {
   try {
@@ -24,7 +25,10 @@ export async function getSessionFromCookies(): Promise<SessionClaims | null> {
     const demoT = c.get(SESSION_DEMO_COOKIE_NAME)?.value;
     if (demoT) {
       const d = await verifySessionToken(demoT);
-      if (d?.demo) return d;
+      if (d?.demo) {
+        if (await assertDemoAccessSessionActive(d.sid)) return d;
+        return null;
+      }
     }
     if (isSingleUserPortable()) {
       if (process.env.NODE_ENV === "production") return null;

@@ -2,6 +2,7 @@ import { SignJWT } from "jose/jwt/sign";
 import { jwtVerify } from "jose/jwt/verify";
 import type { JWTPayload } from "jose";
 import type { SubscriptionPlan, UserRole } from "@prisma/client";
+import { DEMO_ACCESS_SESSION_JWT_TTL } from "@/lib/auth/demo-access-session-policy";
 
 export const SESSION_COOKIE_NAME = "crm_session";
 
@@ -57,7 +58,7 @@ export async function signSessionToken(claims: SessionClaims): Promise<string> {
   return new SignJWT(body as JWTPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(SESSION_TTL)
+    .setExpirationTime(claims.demo ? DEMO_ACCESS_SESSION_JWT_TTL : SESSION_TTL)
     .sign(secretKey());
 }
 

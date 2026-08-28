@@ -37,7 +37,7 @@ export class DemoAccessCodeError extends Error {
 }
 
 /**
- * Проверить и «сжечь» код: один код = один вход / одна машина.
+ * Проверить и «сжечь» код: один код = один вход / одна машина / 12 ч сессии.
  * Возвращает sid для JWT демо-сессии.
  */
 export async function consumeDemoAccessCodeOrThrow(input: {

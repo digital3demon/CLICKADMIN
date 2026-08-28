@@ -9,6 +9,8 @@ type CodeRow = {
   createdAt: string;
   revokedAt: string | null;
   consumedAt: string | null;
+  expiresAt: string | null;
+  sessionActive: boolean;
   boundHint: string | null;
   status: "unused" | "used" | "revoked";
   active: boolean;
@@ -27,10 +29,11 @@ function fmtRu(iso: string | null): string {
   });
 }
 
-function statusLabel(s: CodeRow["status"]): string {
-  if (s === "unused") return "не использован";
-  if (s === "used") return "использован";
-  return "отозван";
+function statusLabel(row: CodeRow): string {
+  if (row.status === "unused") return "не использован";
+  if (row.status === "revoked") return "отозван";
+  if (row.sessionActive) return "активна";
+  return "истекла";
 }
 
 export function DemoAccessCodesClient() {
@@ -88,7 +91,7 @@ export function DemoAccessCodesClient() {
   const revokeCode = async (id: string) => {
     if (
       !window.confirm(
-        "Отозвать код? По нему больше нельзя войти в демо (если ещё не входили).",
+        "Отозвать код? Новый вход будет невозможен; если гость уже в демо — сессия завершится на следующем действии.",
       )
     ) {
       return;
@@ -124,8 +127,9 @@ export function DemoAccessCodesClient() {
     <div className="space-y-6">
       <p className="text-sm text-[var(--text-secondary)]">
         Общее демо без организаций: вы генерируете код и передаёте гостю. Один
-        код — один вход на одну машину. После использования код сгорает; полный
-        текст показывается только при создании.
+        код — один вход на одну машину, сессия 12 часов. После использования
+        код сгорает; отзыв кода сразу завершает активную сессию. Полный текст
+        кода показывается только при создании.
       </p>
 
       {error ? (
@@ -197,6 +201,7 @@ export function DemoAccessCodesClient() {
                 <th className="px-3 py-2 font-medium">Префикс</th>
                 <th className="px-3 py-2 font-medium">Создан</th>
                 <th className="px-3 py-2 font-medium">Вход</th>
+                <th className="px-3 py-2 font-medium">До</th>
                 <th className="px-3 py-2 font-medium">Статус</th>
                 <th className="px-3 py-2 font-medium" />
               </tr>
@@ -223,12 +228,15 @@ export function DemoAccessCodesClient() {
                       "—"
                     )}
                   </td>
+                  <td className="px-3 py-2 text-[var(--text-secondary)]">
+                    {k.expiresAt ? fmtRu(k.expiresAt) : "—"}
+                  </td>
                   <td className="px-3 py-2">
-                    {k.status === "unused" ? (
-                      <span className="text-emerald-700">{statusLabel(k.status)}</span>
+                    {k.status === "unused" || k.sessionActive ? (
+                      <span className="text-emerald-700">{statusLabel(k)}</span>
                     ) : (
                       <span className="text-[var(--text-muted)]">
-                        {statusLabel(k.status)}
+                        {statusLabel(k)}
                       </span>
                     )}
                   </td>

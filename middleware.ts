@@ -46,6 +46,30 @@ import {
   isClickMigPublicOpen,
   isClickMigPublicSurfacePath,
 } from "@/lib/clickmig/form-host";
+import { assertDemoAccessSessionActive } from "@/lib/auth/demo-session.server";
+
+function clearDemoSessionCookieOn(res: NextResponse): NextResponse {
+  res.cookies.set(SESSION_DEMO_COOKIE_NAME, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+  return res;
+}
+
+function rejectDemoSession(req: NextRequest, pathname: string): NextResponse {
+  if (pathname.startsWith("/api/")) {
+    const out = NextResponse.json(
+      { error: "Демо-сессия завершена. Нужен новый код доступа." },
+      { status: 401 },
+    );
+    return securityHeaders(clearDemoSessionCookieOn(out));
+  }
+  const qs = new URLSearchParams({ next: pathname, demoExpired: "1" });
+  const redir = redirectPublic(req, `/login?${qs.toString()}`);
+  return securityHeaders(clearDemoSessionCookieOn(redir));
+}
 
 function securityHeaders(res: NextResponse) {
   // Модалки предпросмотра внутри CRM используют iframe с тем же origin.
@@ -387,6 +411,13 @@ export async function middleware(req: NextRequest) {
     }
     const qs = new URLSearchParams({ next: pathname });
     return redirectPublic(req, `/login?${qs.toString()}`);
+  }
+
+  if (session.demo) {
+    const demoOk = await assertDemoAccessSessionActive(session.sid);
+    if (!demoOk) {
+      return rejectDemoSession(req, pathname);
+    }
   }
 
   let activeUserContext:

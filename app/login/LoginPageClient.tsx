@@ -16,6 +16,7 @@ export function LoginPageClient() {
   const sp = useSearchParams();
   const nextPath = sp.get("next")?.trim() || "/orders";
   const inactiveReason = sp.get("reason") === "inactive";
+  const demoExpired = sp.get("demoExpired") === "1";
 
   const [needsBootstrap, setNeedsBootstrap] = useState<boolean | null>(null);
   /** null — ещё не знаем; true — portable / single-user, вход через API отключён */
@@ -203,6 +204,13 @@ export function LoginPageClient() {
       {inactiveReason ? (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
           Доступ к учётной записи отключён. Обратитесь к владельцу CRM.
+        </div>
+      ) : null}
+
+      {demoExpired ? (
+        <div className="mt-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
+          Демо-сессия завершена (12 часов или отзыв кода). Запросите новый код
+          у владельца CRM.
         </div>
       ) : null}
 

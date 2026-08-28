@@ -1,5 +1,6 @@
 import type { NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, SESSION_DEMO_COOKIE_NAME } from "@/lib/auth/jwt";
+import { DEMO_ACCESS_SESSION_TTL_SEC } from "@/lib/auth/demo-access-session-policy";
 import { VIEW_AS_ROLE_COOKIE_NAME } from "@/lib/auth/view-as-role";
 import type { UserRole } from "@prisma/client";
 
@@ -42,7 +43,7 @@ export function setDemoSessionCookie(res: NextResponse, token: string): void {
     secure,
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_MAX_AGE_SEC,
+    maxAge: DEMO_ACCESS_SESSION_TTL_SEC,
   });
 }
 
