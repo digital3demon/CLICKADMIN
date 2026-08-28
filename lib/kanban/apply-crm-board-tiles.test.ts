@@ -28,6 +28,7 @@ function tile(partial: Partial<CrmBoardTile> & Pick<CrmBoardTile, "orderId">): C
     orderNumber: "2608-100",
     title: "2608-100 Тест",
     cardTypeId: null,
+    cardTypeName: null,
     assignees: ["u-я"],
     participants: [],
     stageDueYmd: "2026-09-01",
@@ -58,6 +59,49 @@ describe("applyCrmBoardTilesToAppState", () => {
       next.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
     expect(card.description).toBe("");
     expect(card.assignees).toEqual(["u-я"]);
+  });
+
+  it("тип с наряда по имени «Сплинт», не сырой cuid", () => {
+    const next = applyCrmBoardTilesToAppState(defaultAppState(), [
+      tile({
+        orderId: "ord-сплинт",
+        cardTypeId: "cuid-из-наряда",
+        cardTypeName: "Сплинт",
+      }),
+    ]);
+    const loc = findCardByLinkedOrderId(next, "ord-сплинт");
+    const card =
+      next.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    const board = next.boards[loc!.boardIndex]!;
+    const splint = board.cardTypes.find((t) => t.name === "Сплинт");
+    expect(splint?.id).toBeTruthy();
+    expect(card.cardTypeId).toBe(splint!.id);
+    expect(card.cardTypeId).not.toBe("cuid-из-наряда");
+  });
+
+  it("чужой id типа не затирает живой тип на карточке", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    const splintId = odon.cardTypes.find((t) => t.name === "Сплинт")!.id;
+    odon.columns[0]!.cards.push(
+      createCard({
+        id: "keep-type",
+        title: "2608-191 Степанов",
+        linkedOrderId: "ord-тип",
+        cardTypeId: splintId,
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "ord-тип",
+        cardTypeId: "cuid-чужой",
+        cardTypeName: "",
+      }),
+    ]);
+    const loc = findCardByLinkedOrderId(state, "ord-тип");
+    const card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.cardTypeId).toBe(splintId);
   });
 
   it("две доски: замена ортодонтии не требует и не сносит ортопедию", () => {

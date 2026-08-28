@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createCard } from "@/lib/kanban/model";
-import { listOrderIdsNeedingCrmStageDuePersist } from "@/lib/kanban/persist-crm-board-fields-client";
+import {
+  crmBoardFieldsFromKaitenRefreshPatch,
+  listOrderIdsNeedingCrmPeoplePersist,
+  listOrderIdsNeedingCrmStageDuePersist,
+} from "@/lib/kanban/persist-crm-board-fields-client";
 import type { KanbanAppState } from "@/lib/kanban/types";
 
 function stateWithCard(
@@ -68,5 +72,103 @@ describe("listOrderIdsNeedingCrmStageDuePersist", () => {
       [],
     );
     expect(rows).toEqual([]);
+  });
+});
+
+function stateWithPeople(
+  linkedOrderId: string,
+  assignees: string[],
+  participants: string[],
+): KanbanAppState {
+  return {
+    version: 1,
+    boards: [
+      {
+        id: "b1",
+        title: "Ортодонтия",
+        columns: [
+          {
+            id: "c1",
+            title: "Сборка",
+            cards: [
+              createCard({
+                id: "карта-юля",
+                title: "2608-12 Крупышева",
+                linkedOrderId,
+                assignees,
+                participants,
+              }),
+            ],
+          },
+        ],
+        users: [],
+        cardTypes: [],
+      },
+    ],
+    activeBoardId: "b1",
+    search: "",
+    viewMode: "board",
+    calendarMonth: { y: 2026, m: 8 },
+    filters: {
+      cardTypeId: "",
+      due: "",
+      assigneeUserId: "",
+      participantUserId: "",
+    },
+    filterTemplates: [],
+  };
+}
+
+describe("listOrderIdsNeedingCrmPeoplePersist", () => {
+  it("пишет локальных участников, если в плитке пусто (кириллица в oid)", () => {
+    const rows = listOrderIdsNeedingCrmPeoplePersist(
+      stateWithPeople("ord-юля", ["u-я"], ["u-юля"]),
+      [{ orderId: "ord-юля", assignees: [], participants: [] }],
+    );
+    expect(rows).toEqual([
+      { orderId: "ord-юля", assignees: ["u-я"], participants: ["u-юля"] },
+    ]);
+  });
+
+  it("не дублирует людей, которые уже в БД", () => {
+    const rows = listOrderIdsNeedingCrmPeoplePersist(
+      stateWithPeople("ord-юля", ["u-я"], []),
+      [{ orderId: "ord-юля", assignees: ["u-я"], participants: [] }],
+    );
+    expect(rows).toEqual([]);
+  });
+});
+
+describe("crmBoardFieldsFromKaitenRefreshPatch", () => {
+  it("берёт срок и людей, пустой патч не пишет", () => {
+    expect(
+      crmBoardFieldsFromKaitenRefreshPatch({
+        cardId: "c-1",
+        linkedOrderId: "ord-степанов",
+        kaitenCardId: 11,
+        assignees: ["u-я"],
+        participants: [],
+        fingerprint: "fp",
+        unmappedLabels: [],
+        kaitenHead: { due_date: "2026-08-29" },
+      }),
+    ).toEqual({
+      orderId: "ord-степанов",
+      assignees: ["u-я"],
+      participants: [],
+      stageDueYmd: "2026-08-29",
+    });
+    expect(
+      crmBoardFieldsFromKaitenRefreshPatch({
+        cardId: "c-empty",
+        linkedOrderId: "ord-пусто",
+        kaitenCardId: 12,
+        assignees: [],
+        participants: [],
+        fingerprint: "fp",
+        unmappedLabels: [],
+        kaitenHead: { due_date: null },
+      }),
+    ).toBeNull();
   });
 });

@@ -34,9 +34,11 @@ import {
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
+import { persistCrmBoardFieldsOnOrder } from "@/lib/kanban/crm-board-fields.server";
 import {
   applyKaitenHeadFieldsToKanbanCard,
   unwrapKaitenCardPayload,
+  ymdFromKaitenDueDate,
 } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { loadKaitenUsersDirectory } from "@/lib/kaiten-user-directory";
 import {
@@ -160,11 +162,12 @@ export async function runKanbanMembersBackfillBatch(
 
   const fromClient = parseRefreshTargets(input.targets);
   const allFromState = collectKanbanKaitenRefreshTargets(state);
+  /** Без списка с клиента не сканируем tenant JSON — там могут остаться тысячи linked. */
   const work =
     fromClient.length > 0
       ? fromClient
       : allAtOnce
-        ? allFromState
+        ? []
         : (() => {
             const after = input.afterOrderId?.trim() || null;
             const { page } = nextLinkedOrderIdPage(
@@ -182,7 +185,10 @@ export async function runKanbanMembersBackfillBatch(
     input.clientTotal > 0
       ? Math.floor(input.clientTotal)
       : 0;
-  const total = Math.max(clientTotal, allFromState.length, fromClient.length);
+  const total =
+    fromClient.length > 0
+      ? Math.max(clientTotal, fromClient.length)
+      : Math.max(clientTotal, allFromState.length);
 
   if (work.length === 0) {
     return { ...empty, total, finished: true };
@@ -216,6 +222,10 @@ export async function runKanbanMembersBackfillBatch(
   const directory = await loadKaitenUsersDirectory(db, tenantId, auth);
   const burst = { burst: true as const };
   const pendingLaneByOrderId = new Map<string, KaitenTrackLane>();
+  const pendingCrmByOrderId = new Map<
+    string,
+    { assignees?: string[]; participants?: string[]; stageDueYmd?: string }
+  >();
   const patches: KaitenRefreshCardPatch[] = [];
   type FetchedKaiten = {
     headCard: Record<string, unknown> | null;
@@ -335,6 +345,27 @@ export async function runKanbanMembersBackfillBatch(
       unmappedLabels: fetched.unmappedLabels,
       kaitenHead: fetched.patchHead,
     });
+    const persistOid = String(target.linkedOrderId || "").trim();
+    if (persistOid) {
+      const dueYmd = fetched.patchHead
+        ? ymdFromKaitenDueDate(
+            fetched.patchHead.due_date ?? fetched.patchHead.dueDate,
+          )
+        : null;
+      const hasPeople =
+        fetched.assignees.length > 0 || fetched.participants.length > 0;
+      if (hasPeople || dueYmd) {
+        pendingCrmByOrderId.set(persistOid, {
+          ...(hasPeople
+            ? {
+                assignees: fetched.assignees,
+                participants: fetched.participants,
+              }
+            : {}),
+          ...(dueYmd ? { stageDueYmd: dueYmd } : {}),
+        });
+      }
+    }
 
     let membersChanged = false;
     let headChanged = false;
@@ -457,23 +488,34 @@ export async function runKanbanMembersBackfillBatch(
           1,
         ).page.length === 0;
 
-  if (finished || allAtOnce) {
-    for (const [orderId, lane] of pendingLaneByOrderId) {
-      try {
-        await db.order.update({
-          where: { id: orderId },
-          data: { kaitenTrackLane: lane },
-        });
-      } catch {
-        /* снимок канбана уже обновлён */
-      }
+  for (const [orderId, lane] of pendingLaneByOrderId) {
+    try {
+      await db.order.update({
+        where: { id: orderId },
+        data: { kaitenTrackLane: lane },
+      });
+    } catch {
+      /* снимок канбана уже обновлён */
     }
-    if (snapshotDirty) {
-      try {
-        await saveKanbanStateWithRetry(tenantId, state, loaded.updatedAt);
-      } catch {
-        /* клиент всё равно применит patches */
-      }
+  }
+  for (const [orderId, row] of pendingCrmByOrderId) {
+    try {
+      await persistCrmBoardFieldsOnOrder({
+        tenantId,
+        orderId,
+        assignees: row.assignees,
+        participants: row.participants,
+        stageDueYmd: row.stageDueYmd,
+      });
+    } catch {
+      /* клиент допишет PATCH /board-fields */
+    }
+  }
+  if ((finished || allAtOnce) && snapshotDirty) {
+    try {
+      await saveKanbanStateWithRetry(tenantId, state, loaded.updatedAt);
+    } catch {
+      /* клиент всё равно применит patches */
     }
   }
 

@@ -38,6 +38,7 @@ import {
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import { overlayMissingLocalLinkedCardsOntoRemote } from "@/lib/kanban/overlay-missing-local-linked-cards";
+import { resolveKanbanBoardCardTypeId } from "@/lib/kanban/resolve-kanban-card-type";
 import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state";
 import { stripLinkedOrderCardsForTenantChrome } from "@/lib/kanban/kanban-tenant-chrome";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
@@ -152,6 +153,10 @@ export function kanbanAggregateColumnKey(title: string): string {
   const n = normalizeKanbanColumnTitle(title);
   if (n === "сдано админам") return "сдана админам";
   return n;
+}
+
+export function isKanbanHandoverToAdminsColumn(title: string): boolean {
+  return kanbanAggregateColumnKey(title) === "сдана админам";
 }
 
 /**
@@ -430,13 +435,23 @@ export function normalizeBoardCardTypes(board: KanbanBoard) {
   board.cardTypes.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 }
 
+export function getCardTypeDef(
+  board: KanbanBoard,
+  cardTypeId: string,
+): CardTypeDef | undefined {
+  if (!cardTypeId) return undefined;
+  return (
+    (board.cardTypes || []).find((x) => x.id === cardTypeId) ??
+    kaitenCardTypes().find((x) => x.id === cardTypeId)
+  );
+}
+
 export function getCardTypeAccent(board: KanbanBoard, cardTypeId: string): string {
   if (!cardTypeId) return "#5ce1ff";
-  const t = (board.cardTypes || []).find((x) => x.id === cardTypeId);
+  const t = getCardTypeDef(board, cardTypeId);
   const c = t && t.color ? String(t.color).trim() : "";
   if (c && /^#[0-9a-fA-F]{6}$/.test(c)) return c;
-  const d = kaitenCardTypes().find((x) => x.id === cardTypeId);
-  return (d && d.color) || "#5ce1ff";
+  return "#5ce1ff";
 }
 
 /** Читаемый цвет текста (#fff / почти чёрный) поверх заливки акцентом типа (календарь и т.п.). */
@@ -2761,20 +2776,10 @@ function resolveLinkedOrderCardTypeId(
     );
     if (hit?.id) return hit.id;
   }
-  if (row.kaitenCardTypeName?.trim()) {
-    const needle = row.kaitenCardTypeName.trim().toLowerCase();
-    const hit = (board.cardTypes || []).find(
-      (t) => t.name.trim().toLowerCase() === needle,
-    );
-    if (hit?.id) return hit.id;
-  }
-  if (
-    row.kaitenCardTypeId &&
-    (board.cardTypes || []).some((t) => t.id === row.kaitenCardTypeId)
-  ) {
-    return row.kaitenCardTypeId;
-  }
-  return "";
+  return resolveKanbanBoardCardTypeId(board, {
+    cardTypeId: row.kaitenCardTypeId,
+    cardTypeName: row.kaitenCardTypeName,
+  });
 }
 
 function linkedOrderKanbanBlockedAtIso(

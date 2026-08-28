@@ -19,6 +19,7 @@ export type CrmBoardTile = {
   orderNumber: string;
   title: string;
   cardTypeId: string | null;
+  cardTypeName: string | null;
   assignees: string[];
   participants: string[];
   stageDueYmd: string;
@@ -99,6 +100,7 @@ export function crmBoardTileFromOrderRow(row: {
   patientName: string | null;
   doctorFullName?: string;
   kaitenCardTypeId: string | null;
+  kaitenCardTypeName?: string | null;
   kaitenCardTitleLabel: string | null;
   kaitenCardTitleMirror: string | null;
   kanbanAssigneeIds?: string[] | null;
@@ -135,6 +137,7 @@ export function crmBoardTileFromOrderRow(row: {
       titleMirror: row.kaitenCardTitleMirror,
     }),
     cardTypeId: row.kaitenCardTypeId,
+    cardTypeName: (row.kaitenCardTypeName || "").trim() || null,
     assignees: normalizeCrmUserIds(row.kanbanAssigneeIds),
     participants: normalizeCrmUserIds(row.kanbanParticipantIds),
     stageDueYmd: stage,

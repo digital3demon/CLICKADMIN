@@ -80,6 +80,8 @@ import {
 } from "@/lib/kanban/kanban-card-members-client";
 import {
   persistCrmBoardFieldsClient,
+  persistCrmBoardFieldsFromKaitenRefreshPatches,
+  persistMissingCrmPeopleFromState,
   persistMissingCrmStageDuesFromState,
 } from "@/lib/kanban/persist-crm-board-fields-client";
 import { applyCrmBoardTilesToAppState } from "@/lib/kanban/apply-crm-board-tiles";
@@ -585,6 +587,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           });
           applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
           persistMissingCrmStageDuesFromState(next, tiles);
+          persistMissingCrmPeopleFromState(next, tiles);
           saveKanbanState(next, false);
           return next;
         });
@@ -3093,6 +3096,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   }
                 }}
                 onComplete={async (patches) => {
+                  persistCrmBoardFieldsFromKaitenRefreshPatches(patches);
                   if (patches.length > 0) {
                     setAppState((prev) => {
                       if (!prev) return prev;

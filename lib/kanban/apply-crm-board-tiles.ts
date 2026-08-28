@@ -14,6 +14,7 @@ import {
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
+import { resolveKanbanBoardCardTypeId } from "@/lib/kanban/resolve-kanban-card-type";
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 
 function findLinkedOnBoard(
@@ -44,11 +45,16 @@ function parkedLinkedOrderIds(board: KanbanBoard): Set<string> {
   return ids;
 }
 
-function applyTileToCard(card: KanbanCard, tile: CrmBoardTile): void {
+function applyTileToCard(
+  card: KanbanCard,
+  tile: CrmBoardTile,
+  board: KanbanBoard,
+): void {
   card.title = tile.title;
   card.linkedOrderId = tile.orderId;
   card.linkedOrderNumber = tile.orderNumber;
-  if (tile.cardTypeId) card.cardTypeId = tile.cardTypeId;
+  const typeId = resolveKanbanBoardCardTypeId(board, tile);
+  if (typeId) card.cardTypeId = typeId;
   if (
     !shouldKeepLocalKanbanMembers(card, {
       assignees: tile.assignees,
@@ -104,7 +110,7 @@ export function applyCrmBoardTilesToAppState(
       const fromCol = board.columns[found.colIndex]!;
       const [card] = fromCol.cards.splice(found.cardIndex, 1);
       if (!card) continue;
-      applyTileToCard(card, tile);
+      applyTileToCard(card, tile, board);
       if (fromCol.id !== targetCol.id) {
         targetCol.cards.push(card);
       } else {
@@ -115,7 +121,7 @@ export function applyCrmBoardTilesToAppState(
         id: crmKanbanLinkedCardId(tile.orderId),
         title: tile.title,
         description: "",
-        cardTypeId: tile.cardTypeId || board.cardTypes?.[0]?.id || "",
+        cardTypeId: resolveKanbanBoardCardTypeId(board, tile),
         linkedOrderId: tile.orderId,
         linkedOrderNumber: tile.orderNumber,
         assignees: tile.assignees,

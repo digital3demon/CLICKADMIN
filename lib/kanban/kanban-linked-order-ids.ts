@@ -1,3 +1,8 @@
+import {
+  isKanbanAggregateBoardId,
+  isKanbanHandoverToAdminsColumn,
+  KANBAN_BOARD_PRODUCTION_ID,
+} from "@/lib/kanban/model";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
 /** Наряды с карточкой в колонках доски (не архив и не СТОП). */
@@ -49,8 +54,8 @@ function pushRefreshTarget(
 }
 
 /**
- * Все карточки колонок и СТОП (не архив) — для обновления с Kaiten.
- * Сначала активная доска, чтобы экран обновился раньше.
+ * Карточки открытой доски (колонки + СТОП), без архива, производства
+ * и «Сдана админам». Не все наряды Kaiten и не чужие доски в RAM.
  */
 export function collectKanbanKaitenRefreshTargets(
   state: KanbanAppState | null | undefined,
@@ -58,18 +63,21 @@ export function collectKanbanKaitenRefreshTargets(
 ): KanbanKaitenRefreshTarget[] {
   if (!state) return [];
   const prefer = String(preferBoardId || state.activeBoardId || "").trim();
-  const boards = [...(state.boards ?? [])];
-  if (prefer) {
-    boards.sort((a, b) => {
-      const ap = a.id === prefer ? 0 : 1;
-      const bp = b.id === prefer ? 0 : 1;
-      return ap - bp;
-    });
-  }
+  const all = [...(state.boards ?? [])];
+  const boards =
+    prefer && !isKanbanAggregateBoardId(prefer)
+      ? all.filter((b) => b.id === prefer)
+      : all.filter(
+          (b) =>
+            !isKanbanAggregateBoardId(b.id) &&
+            b.id !== KANBAN_BOARD_PRODUCTION_ID,
+        );
   const out: KanbanKaitenRefreshTarget[] = [];
   const seen = new Set<string>();
   for (const board of boards) {
+    if (board.id === KANBAN_BOARD_PRODUCTION_ID) continue;
     for (const col of board.columns ?? []) {
+      if (isKanbanHandoverToAdminsColumn(col.title || "")) continue;
       for (const card of col.cards ?? []) {
         pushRefreshTarget(out, seen, card);
       }

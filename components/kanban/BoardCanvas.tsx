@@ -16,6 +16,7 @@ import {
   dueCategory,
   formatDate,
   getCardTypeAccent,
+  getCardTypeDef,
   isCardBlocked,
   kanbanTypeRingStyle,
   pushActivity,
@@ -293,7 +294,7 @@ function KanbanCardView({
   }, [menuOpen]);
   const blocked = isCardBlocked(card);
   const accent = getCardTypeAccent(homeBoard, card.cardTypeId);
-  const ct = (homeBoard.cardTypes || []).find((t) => t.id === card.cardTypeId);
+  const ct = getCardTypeDef(homeBoard, card.cardTypeId);
   const assignees = card.assignees || [];
   /** Участники — отдельная роль от ответственных; один пользователь может быть в обоих списках. */
   const participants = card.participants || [];

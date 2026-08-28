@@ -69,7 +69,8 @@ describe("collectKanbanKaitenRefreshTargets", () => {
       ],
     } as unknown as KanbanAppState;
     const t = collectKanbanKaitenRefreshTargets(state, "ortho");
-    expect(t.map((x) => x.cardId)).toEqual(["c-1", "c-local", "c-stop", "c-odon"]);
+    expect(t.map((x) => x.cardId)).toEqual(["c-1", "c-local", "c-stop"]);
+    expect(t.map((x) => x.cardId)).not.toContain("c-odon");
     expect(t.find((x) => x.cardId === "c-1")?.kaitenCardId).toBe(11);
     expect(t.find((x) => x.cardId === "c-local")?.kaitenCardId).toBeNull();
   });
@@ -101,6 +102,73 @@ describe("collectKanbanKaitenRefreshTargets", () => {
     expect(t).toHaveLength(1);
     expect(t[0]?.kaitenCardId).toBeNull();
     expect(t[0]?.linkedOrderId).toBe("ord-а");
+  });
+
+  it("не сверяет «Сдано админам» (кириллица в title)", () => {
+    const state = {
+      activeBoardId: "odon",
+      boards: [
+        {
+          id: "odon",
+          title: "Ортодонтия",
+          columns: [
+            {
+              id: "live",
+              title: "К исполнению",
+              cards: [{ id: "c-live", linkedOrderId: "ord-live", kaitenCardId: 1 }],
+            },
+            {
+              id: "ship",
+              title: "Сдано админам",
+              cards: [{ id: "c-ship", linkedOrderId: "ord-сдан", kaitenCardId: 2 }],
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const t = collectKanbanKaitenRefreshTargets(state, "odon");
+    expect(t.map((x) => x.cardId)).toEqual(["c-live"]);
+  });
+
+  it("МОИ: живые колонки всех досок, без сдачи админам и производства", () => {
+    const state = {
+      activeBoardId: "kanban_board_my_cards",
+      boards: [
+        {
+          id: "kanban_board_my_cards",
+          title: "Мои",
+          columns: [],
+        },
+        {
+          id: "odon",
+          title: "Ортодонтия",
+          columns: [
+            {
+              id: "live",
+              title: "Обработка",
+              cards: [{ id: "c-odon", linkedOrderId: "ord-odon", kaitenCardId: 1 }],
+            },
+            {
+              id: "ship",
+              title: "Сдана админам",
+              cards: [{ id: "c-ship", linkedOrderId: "ord-сдан", kaitenCardId: 2 }],
+            },
+          ],
+        },
+        {
+          id: "kanban-board-production",
+          title: "Производство",
+          columns: [
+            {
+              id: "p",
+              cards: [{ id: "c-prod", linkedOrderId: "ord-prod", kaitenCardId: 3 }],
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const t = collectKanbanKaitenRefreshTargets(state, "kanban_board_my_cards");
+    expect(t.map((x) => x.cardId)).toEqual(["c-odon"]);
   });
 });
 

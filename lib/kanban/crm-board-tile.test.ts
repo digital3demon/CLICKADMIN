@@ -66,6 +66,7 @@ describe("crm-board-tile", () => {
       updatedAt: "2026-08-28T10:00:00.000Z",
     });
     expect(tile.boardId).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(tile.cardTypeId).toBe("t1");
     expect(tile.assignees).toEqual(["u-я"]);
     expect(tile.stageDueYmd).toBe("2026-09-01");
     expect(tile).not.toHaveProperty("description");

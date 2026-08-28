@@ -61,6 +61,21 @@ function hydrateWhere(
   };
 }
 
+async function attachCardTypeNames(
+  rows: Array<{ kaitenCardTypeId: string | null }>,
+): Promise<Map<string, string>> {
+  const ids = [
+    ...new Set(rows.map((r) => r.kaitenCardTypeId).filter(Boolean)),
+  ] as string[];
+  if (ids.length === 0) return new Map();
+  const clients = await getClientsPrisma();
+  const types = await clients.kaitenCardType.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true },
+  });
+  return new Map(types.map((t) => [t.id, (t.name || "").trim()]));
+}
+
 async function attachDoctorNames(
   rows: Array<{ doctorId: string } & Record<string, unknown>>,
 ): Promise<Map<string, string>> {
@@ -254,11 +269,17 @@ export async function listCrmBoardTiles(input: {
     take: CRM_BOARD_TILES_CAP,
     select: TILE_SELECT,
   });
-  const names = await attachDoctorNames(rows);
+  const [names, typeNames] = await Promise.all([
+    attachDoctorNames(rows),
+    attachCardTypeNames(rows),
+  ]);
   const tiles = rows.map((r) =>
     crmBoardTileFromOrderRow({
       ...r,
       doctorFullName: names.get(r.doctorId) || "—",
+      kaitenCardTypeName: r.kaitenCardTypeId
+        ? typeNames.get(r.kaitenCardTypeId) || null
+        : null,
     }),
   );
   return { tiles, asOf: new Date().toISOString() };
@@ -307,11 +328,17 @@ export async function listCrmMyTiles(input: {
     take: CRM_BOARD_TILES_CAP,
     select: TILE_SELECT,
   });
-  const names = await attachDoctorNames(rows);
+  const [names, typeNames] = await Promise.all([
+    attachDoctorNames(rows),
+    attachCardTypeNames(rows),
+  ]);
   const tiles = rows.map((r) =>
     crmBoardTileFromOrderRow({
       ...r,
       doctorFullName: names.get(r.doctorId) || "—",
+      kaitenCardTypeName: r.kaitenCardTypeId
+        ? typeNames.get(r.kaitenCardTypeId) || null
+        : null,
     }),
   );
   return { tiles, asOf: new Date().toISOString() };
