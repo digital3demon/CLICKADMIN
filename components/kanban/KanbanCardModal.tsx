@@ -770,10 +770,9 @@ export function KanbanCardModal({
           const fc = findCard(b, cardId);
           if (!fc) return;
           ensureKanbanCardFilesFromChatImages(fc.card, snap.cardImages);
-          const hadLocal = (fc.card.comments || []).length > 0;
-          if (snap.comments.length > 0 || !hadLocal) {
+          if (snap.comments.length > 0) {
             fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
-          } else {
+          } else if ((fc.card.comments || []).length > 0) {
             fc.card.comments = withImagePlaceholders(
               mergeRequestClosedFlags(fc.card.comments || [], closedFlags),
               fc.card,
@@ -826,6 +825,17 @@ export function KanbanCardModal({
             ),
             fc.card,
           );
+        });
+      }
+      const again = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
+      if (cancelled) return;
+      if (again.ok) {
+        onApply((b) => {
+          const fc = findCard(b, cardId);
+          if (!fc) return;
+          ensureKanbanCardFilesFromChatImages(fc.card, again.cardImages);
+          if (again.comments.length === 0) return;
+          fc.card.comments = withImagePlaceholders(again.comments, fc.card);
         });
       }
       setKaitenChatLoading(false);

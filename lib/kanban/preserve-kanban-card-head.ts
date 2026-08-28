@@ -115,5 +115,22 @@ export function overlayLocalKanbanCardHeadOntoRemote(
     if (shouldKeepLocalKanbanStageDue(localDue, getKanbanStageDue(card))) {
       setKanbanStageDue(card, localDue);
     }
+    if (!(card.comments?.length) && (loc.comments?.length ?? 0) > 0) {
+      card.comments = structuredClone(loc.comments);
+    }
+    if ((loc.files?.length ?? 0) > 0) {
+      const byId = new Map((card.files || []).map((f) => [f.id, f]));
+      for (const f of loc.files || []) {
+        const cur = byId.get(f.id);
+        if (!cur) {
+          byId.set(f.id, structuredClone(f));
+          continue;
+        }
+        if (!(cur.dataUrl || "").trim() && (f.dataUrl || "").trim()) {
+          byId.set(f.id, { ...cur, dataUrl: f.dataUrl });
+        }
+      }
+      card.files = [...byId.values()];
+    }
   });
 }

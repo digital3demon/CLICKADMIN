@@ -41,6 +41,19 @@ describe("extractOrderNumbersFromOcrText", () => {
     expect(extractOrderNumbersFromOcrText(raw)).toEqual(["2608-156"]);
   });
 
+  it("этикетка без тире после «заказа», кириллица вокруг", () => {
+    expect(
+      extractOrderNumbersFromOcrText(
+        "Клиника Скандинавия Пациент Барыкина Я. № заказа 2608246 Доктор Сильницкая",
+      ),
+    ).toEqual(["2608-246"]);
+    expect(
+      extractOrderNumbersFromOcrText(
+        "Пациент Волк В. N3aka3a2608-306 Адрес пр. Тореза",
+      ),
+    ).toEqual(["2608-306"]);
+  });
+
   it("не берёт LOT абатмента 260429-LS80 как наряд", () => {
     const geo =
       "Geo Multibase Abutment GM-IFU-KR-03 2025.01.14 LL2-SURO30-H2 260429-LS80 (01)08800028717599(10)260429-LS80(11)260429";
@@ -61,6 +74,24 @@ describe("pickBestOrderNumberFromOcr", () => {
     const raw =
       "Geo 260429-LS80 2026.04.29\nКлиника Атрибут РЕМИ\nПациент Калашникова Ю.\n№ заказа: 2608-156";
     expect(pickBestOrderNumberFromOcr(raw)).toBe("2608-156");
+  });
+
+  it("этикетки отгрузки: Волк / Белокосова / Карлеев", () => {
+    expect(
+      pickBestOrderNumberFromOcr(
+        "Клиника Ортодонтическая студия Адрес пр. Тореза д. 95 Доктор Скупченко М. Д. Пациент Волк В. № заказа 2608-306",
+      ),
+    ).toBe("2608-306");
+    expect(
+      pickBestOrderNumberFromOcr(
+        "Клиника Меди ул. Маршала Захарова Пациент Белокосова Ю. № заказа 2608-245 Доктор Абдуллаев",
+      ),
+    ).toBe("2608-245");
+    expect(
+      pickBestOrderNumberFromOcr(
+        "Клиника Атрибьют РЕМИ Новочеркасский пр. Доктор Невский Д. Д. Пациент Карлеев П. № заказа 2608-353",
+      ),
+    ).toBe("2608-353");
   });
 });
 
@@ -97,17 +128,17 @@ describe("pickOrderNumberAfterOcrConfusion", () => {
     expect(picked?.orderNumber).toBe("2608-266");
   });
 
-  it("без фамилий не выбирает между 256 и 266", () => {
+  it("без фамилий оставляет запрошенный номер (корректировка)", () => {
     expect(
       pickOrderNumberAfterOcrConfusion(
-        "2608-256",
+        "2608-306",
         [
-          { orderNumber: "2608-256", patientName: "Сидоров" },
-          { orderNumber: "2608-266", patientName: "Ермаченков" },
+          { orderNumber: "2608-305", patientName: "Сидоров" },
+          { orderNumber: "2608-306", patientName: "Волк В." },
         ],
-        "№ заказа 2608-256",
-      ),
-    ).toBeNull();
+        "",
+      )?.orderNumber,
+    ).toBe("2608-306");
   });
 });
 

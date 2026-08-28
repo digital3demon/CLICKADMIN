@@ -1920,6 +1920,7 @@ function appendArchivedSearchHits(args: {
 /**
  * Вид доски для рендера: при поиске — все доступные доски (как раньше);
  * виртуальные «Мои» / «Ответственный» тоже собирают карточки со всех дорожек.
+ * Пустые колонки своей доски не выкидываем — иначе fit-zoom раздувает один столбец.
  * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
  */
 /** «МОИ» / «Ответственный»: участник, поиск по наряду, или только что найденный oid. */
@@ -2035,7 +2036,7 @@ export function buildKanbanDisplayView(
             stickyOrderIds: stickyLinkedOrderIds,
           }),
       });
-      displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
+      /* Пустые колонки шаблона оставляем: иначе fit-zoom раздувает 1–2 столбца. */
     }
     return { displayBoard, cardHomeBoardId };
   }
@@ -2100,7 +2101,13 @@ export function buildKanbanDisplayView(
     textMatches,
     passesFilters: passesFiltersWithoutSearchText,
   });
-  displayBoard.columns = displayBoard.columns.filter((c) => c.cards.length > 0);
+  /* Свои колонки — всегда (скелет доски). Чужие заголовки — только если есть попадание. */
+  const nativeTitles = new Set(
+    active.columns.map((c) => c.title.trim().toLowerCase()),
+  );
+  displayBoard.columns = displayBoard.columns.filter(
+    (c) => nativeTitles.has(c.title.trim().toLowerCase()) || c.cards.length > 0,
+  );
 
   return { displayBoard, cardHomeBoardId };
 }

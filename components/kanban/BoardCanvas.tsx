@@ -138,7 +138,7 @@ const BOARD_COLUMN_WIDTH_FIXED =
  * На ПК (shell-laptop) колонки — равные доли grid, без max-w 270 (9 столбцов иначе вылезают).
  * Mobile / низкое окно — прежние px + скролл.
  */
-const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-auto shell-laptop:min-w-0 shell-laptop:max-w-none shell-laptop:h-full`;
+const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-auto shell-laptop:min-w-0 shell-laptop:max-w-none shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:self-stretch`;
 
 /** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
 const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
@@ -940,7 +940,7 @@ export function BoardCanvas({
       setKanbanBoardLiveZoom(z);
       root.style.setProperty("--kanban-board-zoom", String(z));
       root.style.width = `${parent.clientWidth / z}px`;
-      root.style.height = `${parent.clientHeight / z}px`;
+      root.style.height = `${window.innerHeight / z}px`;
     };
 
     apply();
@@ -1535,7 +1535,7 @@ export function BoardCanvas({
     >
       <div
         ref={horizontalScrollRef}
-        className="relative z-0 flex min-h-0 min-w-0 flex-1 touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2 shell-laptop:overflow-x-hidden"
+        className="relative z-0 flex min-h-0 min-w-0 flex-1 items-stretch touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2 shell-laptop:overflow-x-hidden"
       >
         <div className="flex w-max min-w-0 shrink-0 items-start gap-1.5 sm:gap-2 shell-laptop:h-full shell-laptop:w-full shell-laptop:max-w-full shell-laptop:min-w-0 shell-laptop:flex-1 shell-laptop:items-stretch">
           <SortableContext
@@ -1629,7 +1629,7 @@ export function BoardCanvas({
               </div>
             ) : (
               <div
-                className="flex items-start gap-1.5 sm:gap-2 kanban-columns-fit"
+                className="flex h-full min-h-0 items-stretch gap-1.5 sm:gap-2 kanban-columns-fit"
                 style={{ "--kanban-col-count": columnIds.length } as CSSProperties}
               >
                 {board.columns.map((col) => {

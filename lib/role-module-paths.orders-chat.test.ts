@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isKanbanAttachmentUploadRequest,
+  isKanbanLinkedReadAllowed,
   isOrderAttachmentUploadAllowed,
   orderAttachmentUploadModule,
   orderChatApiModuleForPath,
@@ -30,6 +31,50 @@ describe("orderChatApiModuleForPath", () => {
     expect(
       orderChatApiModuleForPath("/api/orders/abc/kaiten-lab-mention-ack", "POST"),
     ).toBe("ORDERS");
+  });
+
+  it("GET чата/файлов Kaiten → KANBAN_CARD_CHAT, POST комментария → ORDERS", () => {
+    expect(
+      orderChatApiModuleForPath("/api/orders/наряд-1/kaiten/chat", "GET"),
+    ).toBe("KANBAN_CARD_CHAT");
+    expect(
+      orderChatApiModuleForPath("/api/orders/наряд-1/kaiten/comments", "GET"),
+    ).toBe("KANBAN_CARD_CHAT");
+    expect(
+      orderChatApiModuleForPath("/api/orders/наряд-1/kaiten/card-head", "GET"),
+    ).toBe("KANBAN_CARD_CHAT");
+    expect(
+      orderChatApiModuleForPath("/api/orders/наряд-1/kaiten/files/9", "GET"),
+    ).toBe("KANBAN_CARD_CHAT");
+    expect(
+      orderChatApiModuleForPath("/api/orders/наряд-1/kaiten/comments", "POST"),
+    ).toBe("ORDERS");
+  });
+});
+
+describe("isKanbanLinkedReadAllowed", () => {
+  it("производство без ORDERS читает чат и файлы", () => {
+    expect(
+      isKanbanLinkedReadAllowed(
+        { KANBAN_CARD_CHAT: true },
+        "/api/orders/наряд-1/kaiten/chat",
+        "GET",
+      ),
+    ).toBe(true);
+    expect(
+      isKanbanLinkedReadAllowed(
+        { KANBAN_ATTACH_FILES: true },
+        "/api/orders/наряд-1/attachments/файл-1",
+        "GET",
+      ),
+    ).toBe(true);
+    expect(
+      isKanbanLinkedReadAllowed(
+        { KANBAN_CARD_CHAT: true },
+        "/api/orders/наряд-1/kaiten/comments",
+        "POST",
+      ),
+    ).toBe(false);
   });
 });
 

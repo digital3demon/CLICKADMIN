@@ -34,6 +34,33 @@ class OrderParseTests(unittest.TestCase):
         raw2 = "Xy3VaxMeTOBP N38x8332608-134"
         self.assertEqual(pick_order_number_from_text(raw2), "2608-134")
 
+    def test_sticker_no_hyphen_after_zakaz(self) -> None:
+        # OCR глотает тире: «№ заказа 2608306»
+        raw = "Клиника Ортодонтическая Пациент Волк В. № заказа 2608306 Адрес Тореза"
+        self.assertEqual(pick_order_number_from_text(raw), "2608-306")
+        raw2 = "Пациент Барыкина Я. N3aka3a2608246 Доктор Сильницкая"
+        self.assertEqual(pick_order_number_from_text(raw2), "2608-246")
+
+    def test_shipping_labels_from_failed_scans(self) -> None:
+        self.assertEqual(
+            pick_order_number_from_text(
+                "Клиника Меди Пациент Белокосова Ю. № заказа 2608-245 Доктор Абдуллаев"
+            ),
+            "2608-245",
+        )
+        self.assertEqual(
+            pick_order_number_from_text(
+                "Клиника Атрибьют РЕМИ Пациент Карлеев П. № заказа 2608-353"
+            ),
+            "2608-353",
+        )
+        self.assertEqual(
+            pick_order_number_from_text(
+                "Клиника Атрибут РЕМИ Пациент Литвинская В. № заказа 2608-356"
+            ),
+            "2608-356",
+        )
+
     def test_kaiten_ocr_typos(self) -> None:
         raw = "1/1 ittps://clicklab.kaiten.rw/68012438"
         self.assertEqual(
@@ -70,6 +97,15 @@ class BarcodePreferTests(unittest.TestCase):
         gs1 = "(01)08800028717599(10)260429-LS80(11)260429"
         self.assertTrue(is_manufacturer_or_noise_barcode(gs1))
         self.assertIsNone(pick_preferred_barcode([gs1]))
+
+    def test_clickadmin_https_is_not_crm_qr(self) -> None:
+        url = "https://clickadmin.ru/l/abc123"
+        self.assertFalse(is_crm_useful_qr(url))
+        self.assertFalse(is_crm_useful_qr("https://example.com/foo"))
+
+    def test_bare_order_number_qr(self) -> None:
+        self.assertTrue(is_crm_useful_qr("2608-306"))
+        self.assertTrue(is_crm_useful_qr("2608306"))
 
 
 class GeoLabelVsStickerTests(unittest.TestCase):

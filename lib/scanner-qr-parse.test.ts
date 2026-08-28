@@ -74,7 +74,13 @@ describe("pickPreferredScannerQr", () => {
 
   it("голый номер наряда полезен", () => {
     expect(isCrmUsefulScannerQr("2608-156")).toBe(true);
+    expect(isCrmUsefulScannerQr("2608156")).toBe(true);
     expect(pickPreferredScannerQr([geoGs1, "2608-156"])).toBe("2608-156");
+  });
+
+  it("URL этикетки «клик админ» не считается CRM QR", () => {
+    expect(isCrmUsefulScannerQr("https://clickadmin.ru/l/abc")).toBe(false);
+    expect(isCrmUsefulScannerQr("https://example.com/foo")).toBe(false);
   });
 
   it("один GS1 без витрины → пусто (не подсовывать производителя)", () => {

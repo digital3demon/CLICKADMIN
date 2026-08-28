@@ -93,6 +93,11 @@ export function isCrmUsefulScannerQr(text: string): boolean {
   const parsed = parseScannerQrPayload(t);
   if (parsed.kind === "hub" || parsed.kind === "kaiten") return true;
   if (/^\d{4}-\d{3}$/.test(t)) return true;
+  if (/^\d{7}$/.test(t)) {
+    const yy = Number(t.slice(0, 2));
+    const mm = Number(t.slice(2, 4));
+    if (yy >= 20 && yy <= 39 && mm >= 1 && mm <= 12) return true;
+  }
   return false;
 }
 

@@ -34,8 +34,17 @@ export function orderChatApiModuleForPath(
   const http = method.toUpperCase();
   if (tail === "kanban-chat") return "KANBAN_CARD_CHAT";
   if (tail === "kaiten-lab-mention-ack") return "ORDERS";
-  if (tail === "kaiten/chat") return "ORDERS";
-  if (tail === "kaiten/comments") return "ORDERS";
+  /* GET чата/файлов — канбан без модуля ORDERS (производство, USER). POST комментария Kaiten — ORDERS. */
+  if (tail === "kaiten/chat") {
+    return HTTP_READ_METHODS.has(http) ? "KANBAN_CARD_CHAT" : "ORDERS";
+  }
+  if (tail === "kaiten/comments") {
+    return HTTP_READ_METHODS.has(http) ? "KANBAN_CARD_CHAT" : "ORDERS";
+  }
+  if (tail === "kaiten/card-head") return "KANBAN_CARD_CHAT";
+  if (tail === "kaiten/files" || tail.startsWith("kaiten/files/")) {
+    return HTTP_READ_METHODS.has(http) ? "KANBAN_CARD_CHAT" : "ORDERS";
+  }
   if (tail === "chat-corrections" && !HTTP_READ_METHODS.has(http)) {
     return "ORDERS";
   }
@@ -133,6 +142,35 @@ export function isOrderAttachmentUploadAllowed(
   }
 
   return false;
+}
+
+/** GET ленты/файлов карточки: канбан без пакета «Наряды». */
+export function isKanbanLinkedReadPath(pathname: string): boolean {
+  const t = orderIdApiTail(pathname);
+  if (!t) return false;
+  const tail = t.tail;
+  if (tail === "kaiten/chat") return true;
+  if (tail === "kaiten/comments") return true;
+  if (tail === "kaiten/card-head") return true;
+  if (tail === "kaiten/files" || tail.startsWith("kaiten/files/")) return true;
+  if (tail === "attachments" || tail.startsWith("attachments/")) return true;
+  return false;
+}
+
+export function isKanbanLinkedReadAllowed(
+  access: Partial<Record<AppModule, boolean>>,
+  pathname: string,
+  method: string,
+): boolean {
+  if (!HTTP_READ_METHODS.has(method.toUpperCase())) return false;
+  if (!isKanbanLinkedReadPath(pathname)) return false;
+  return (
+    access.KANBAN_CARD_CHAT === true ||
+    access.KANBAN === true ||
+    access.KANBAN_ATTACH_FILES === true ||
+    access.ORDERS === true ||
+    access.ORDERS_CHAT === true
+  );
 }
 
 /** API настроек печати: GET — просмотр, PATCH — редактирование шаблонов. */

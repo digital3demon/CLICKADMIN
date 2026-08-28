@@ -175,4 +175,61 @@ describe("applyKanbanMembersByOrderId", () => {
     ).toBe(false);
     expect(state.boards[0]!.columns[0]!.cards[0]!.assignees).toEqual(["u-юлич"]);
   });
+
+  it("не теряет локальные комментарии и картинку с пустым remote", () => {
+    const local = {
+      boards: [
+        {
+          id: "b",
+          columns: [
+            {
+              id: "col",
+              cards: [
+                {
+                  id: "c1",
+                  title: "Шубина Т.В.",
+                  comments: [
+                    {
+                      id: "cm-1",
+                      userId: "u",
+                      text: "скан после шины",
+                      createdAt: "2026-08-28T00:00:00.000Z",
+                    },
+                  ],
+                  files: [
+                    {
+                      id: "f1",
+                      name: "шина.png",
+                      mime: "image/png",
+                      size: 10,
+                      dataUrl: "/api/orders/наряд-1/attachments/a1",
+                      addedAt: "2026-08-28T00:00:00.000Z",
+                      addedByUserId: "u",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const remote = {
+      boards: [
+        {
+          id: "b",
+          columns: [
+            {
+              id: "col",
+              cards: [{ id: "c1", title: "Шубина Т.В.", comments: [], files: [] }],
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    overlayLocalKanbanCardHeadOntoRemote(local, remote);
+    const out = remote.boards[0]!.columns[0]!.cards[0]!;
+    expect(out.comments?.map((c) => c.text)).toEqual(["скан после шины"]);
+    expect(out.files?.[0]?.dataUrl).toBe("/api/orders/наряд-1/attachments/a1");
+  });
 });

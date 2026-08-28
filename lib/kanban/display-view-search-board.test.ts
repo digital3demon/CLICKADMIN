@@ -146,7 +146,7 @@ describe("buildKanbanDisplayView · search on board", () => {
     expect(cardHomeBoardId.get("hit-299")).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
   });
 
-  it("прячет пустые колонки, чтобы попадание в «Сдана админам» было видно", () => {
+  it("при поиске оставляет скелет колонок, попадание остаётся в своей", () => {
     const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
     const shipped = ortho.columns.find((c) => c.title === "Сдана админам")!;
     shipped.cards.push(
@@ -156,6 +156,7 @@ describe("buildKanbanDisplayView · search on board", () => {
         linkedOrderId: "o-orlov",
       }),
     );
+    const nativeTitles = ortho.columns.map((c) => c.title);
     const state: KanbanAppState = {
       version: 1,
       boards: [ortho],
@@ -175,8 +176,50 @@ describe("buildKanbanDisplayView · search on board", () => {
       sessionUserId: "me",
       sessionUserRole: "ADMIN",
     });
-    expect(displayBoard.columns.map((c) => c.title)).toEqual(["Сдана админам"]);
-    expect(displayBoard.columns[0]!.cards.map((c) => c.id)).toEqual(["orlov"]);
+    expect(displayBoard.columns.map((c) => c.title)).toEqual(nativeTitles);
+    expect(
+      displayBoard.columns.find((c) => c.title === "Сдана админам")?.cards.map((c) => c.id),
+    ).toEqual(["orlov"]);
+    expect(
+      displayBoard.columns
+        .filter((c) => c.title !== "Сдана админам")
+        .every((c) => c.cards.length === 0),
+    ).toBe(true);
+  });
+
+  it("поиск «шубина»: кириллица вокруг совпадения, пустые колонки не выкидываются", () => {
+    const odon = mirrorBoard(KANBAN_BOARD_ORTHODONTICS_ID, "Ортодонтия");
+    const temp = odon.columns[0]!;
+    temp.title = "Сдача админом · ВРЕМЕННЫЕ";
+    temp.cards.push(
+      createCard({
+        id: "shubina",
+        title: "2607-115 Шубина Т.В. Невский Д.Д. Временные",
+        linkedOrderId: "o-шубина",
+      }),
+    );
+    const nativeTitles = odon.columns.map((c) => c.title);
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [odon],
+      activeBoardId: KANBAN_BOARD_ORTHODONTICS_ID,
+      search: "шубина",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+    });
+    expect(displayBoard.columns.map((c) => c.title)).toEqual(nativeTitles);
+    expect(displayBoard.columns[0]!.cards.map((c) => c.id)).toEqual(["shubina"]);
   });
 
   it("при поиске показывает попадание из архива в колонке, откуда ушла карточка", () => {

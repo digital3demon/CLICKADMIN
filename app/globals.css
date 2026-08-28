@@ -278,22 +278,23 @@ html {
 /*
  * Десктопный канбан: CSS zoom (не font-size — rem от html 110%, колонки в px).
  * Не transform: scale — ломает getBoundingClientRect у dnd-kit.
- * --kanban-board-zoom и width/height в px ставит JS (fit по числу колонок).
- * Fallback 0.875 + height от родителя (не 100dvh) — иначе overflow-x-clip на main
- * срезает крайний столбец на доли процента.
+ * --kanban-board-zoom и width в px ставит JS (fit по числу колонок).
+ * Высота всегда 100dvh / zoom — не от main.clientHeight: иначе колонки
+ * схлопываются в одну карточку.
  * Только .kanban-board-scale (страница), не модалки fixed inset-0.
  */
 @media (min-width: 1024px) and (min-height: 560px) {
   .kanban-root.kanban-board-scale {
     zoom: var(--kanban-board-zoom, 0.875);
     width: calc(100% / var(--kanban-board-zoom, 0.875));
-    height: calc(100% / var(--kanban-board-zoom, 0.875));
+    height: calc(100dvh / var(--kanban-board-zoom, 0.875));
   }
 
   .kanban-columns-fit {
     display: grid;
     grid-template-columns: repeat(var(--kanban-col-count, 1), minmax(0, 1fr));
     align-items: stretch;
+    align-self: stretch;
     width: auto;
     min-width: 0;
     flex: 1 1 0%;

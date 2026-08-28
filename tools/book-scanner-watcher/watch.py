@@ -309,7 +309,11 @@ def _qr_candidates(img: np.ndarray) -> list[np.ndarray]:
 
 
 def is_crm_useful_qr(text: str) -> bool:
-    """Hub-стикер / Kaiten / голый YYMM-NNN — то, что CRM умеет резолвить."""
+    """Hub / Kaiten / YYMM-NNN — как isCrmUsefulScannerQr в CRM.
+
+    Любой https (этикетка «клик админ») не считаем полезным: иначе
+    OCR номера не запускается и наряд не находится.
+    """
     t = (text or "").strip()
     if not t:
         return False
@@ -320,8 +324,8 @@ def is_crm_useful_qr(text: str) -> bool:
         return True
     if re.fullmatch(r"\d{4}-\d{3}", t):
         return True
-    if low.startswith("http://") or low.startswith("https://"):
-        return "(01)" not in t
+    if re.fullmatch(r"\d{7}", t) and _is_plausible_order_yymm(t[:4]):
+        return True
     return False
 
 
@@ -467,6 +471,11 @@ def clip_person(name: str | None, limit: int = 20) -> str:
 # Без lookbehind по буквам; (?!\d) — не режем хвост более длинного числа.
 # Кандидаты ранжируем по YYMM (20–39 / 01–12), предпочтение более поздним.
 _ORDER_OCR_RE = re.compile(r"(\d{4})\s*[-–—−]\s*(\d{3})(?!\d)")
+# «№ заказа 2608306» — OCR глотает тире. Без \b (кириллица).
+_ORDER_AFTER_ZAKAZ_RE = re.compile(
+    r"(?:заказ|zakaz|зака3|3aka3|n3ak|n3ax|nzak|зак[аa]з)[^\d]{0,12}(\d{4})\s*[-–—−]?\s*(\d{3})(?!\d)",
+    re.I,
+)
 # OCR путает .ru→.rw, https→ittps/ttps
 _KAITEN_OCR_RE = re.compile(
     r"(?:h?t?tps?://)?(?:[\w.-]+\.)?kaiten\.r[uw]/(?:card/)?(\d{4,})", re.I
@@ -530,7 +539,16 @@ def _order_has_sticker_context(text: str, start: int) -> bool:
     window = text[max(0, start - 28) : start].lower()
     return any(
         token in window
-        for token in ("zakaz", "заказ", "3aka3", "n3ak", "№ зак", "n зак")
+        for token in (
+            "zakaz",
+            "заказ",
+            "3aka3",
+            "n3ak",
+            "№ зак",
+            "n зак",
+            "заказа",
+            "n2ak",
+        )
     )
 
 
@@ -538,22 +556,25 @@ def pick_order_number_from_text(raw: str) -> str | None:
     found: list[tuple[int, int, str]] = []  # (score, index, num)
     seen: set[str] = set()
     text = raw or ""
-    for i, m in enumerate(_ORDER_OCR_RE.finditer(text)):
-        yymm = m.group(1)
-        num = f"{yymm}-{m.group(2)}"
+
+    def consider(yymm: str, nnn: str, start: int, extra: int) -> None:
+        num = f"{yymm}-{nnn}"
         if num in seen:
-            continue
+            return
         if not _is_plausible_order_yymm(yymm):
-            continue
-        if _is_lot_code_collision(text, yymm, m.start()):
-            continue
+            return
+        if _is_lot_code_collision(text, yymm, start):
+            return
         seen.add(num)
-        # позже в тексте (стикер: «№ заказа» внизу) — выше
-        score = i
-        score += 50
-        if _order_has_sticker_context(text, m.start()):
-            score += 20
-        found.append((score, i, num))
+        score = extra + 50
+        if _order_has_sticker_context(text, start):
+            score += 30
+        found.append((score, start, num))
+
+    for m in _ORDER_AFTER_ZAKAZ_RE.finditer(text):
+        consider(m.group(1), m.group(2), m.start(), 40)
+    for i, m in enumerate(_ORDER_OCR_RE.finditer(text)):
+        consider(m.group(1), m.group(2), m.start(), i)
     if not found:
         return None
     found.sort(key=lambda t: (t[0], t[1]), reverse=True)
@@ -571,7 +592,7 @@ def pick_kaiten_url_from_text(raw: str) -> str | None:
 
 
 def _ocr_mats_for_crop(crop: np.ndarray) -> list[np.ndarray]:
-    """Нормальный размер + 2× серый (склеенный мелкий текст шапки)."""
+    """Нормальный размер + 2× серый; мелкую этикетку ещё крутим (±8°)."""
     ch, cw = crop.shape[:2]
     work = crop
     if max(ch, cw) > 1600:
@@ -581,6 +602,16 @@ def _ocr_mats_for_crop(crop: np.ndarray) -> list[np.ndarray]:
     gray = cv2.cvtColor(work, cv2.COLOR_BGR2GRAY)
     up = cv2.resize(gray, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
     mats.append(cv2.cvtColor(up, cv2.COLOR_GRAY2BGR))
+    small = max(ch, cw) < 900
+    if small:
+        h, w = work.shape[:2]
+        cxy = (w / 2.0, h / 2.0)
+        for ang in (-8.0, 8.0, -15.0, 15.0):
+            m = cv2.getRotationMatrix2D(cxy, ang, 1.0)
+            rot = cv2.warpAffine(
+                work, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
+            )
+            mats.append(rot)
     return mats
 
 
@@ -590,25 +621,25 @@ def _white_label_crops(img: np.ndarray) -> list[np.ndarray]:
     out: list[np.ndarray] = []
     try:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, mask = cv2.threshold(gray, 175, 255, cv2.THRESH_BINARY)
-        mask = cv2.morphologyEx(
-            mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8)
-        )
-        cnts, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
         boxes: list[tuple[int, int, int, int, int]] = []
-        for c in cnts:
-            x, y, bw, bh = cv2.boundingRect(c)
-            area = bw * bh
-            if area < (w * h) * 0.004:
-                continue
-            if bw < 80 or bh < 40:
-                continue
-            # этикетка шире, чем высокая (или близко к квадрату)
-            if bw < bh * 0.7:
-                continue
-            boxes.append((area, x, y, bw, bh))
+        for thr in (145, 170, 195):
+            _, mask = cv2.threshold(gray, thr, 255, cv2.THRESH_BINARY)
+            mask = cv2.morphologyEx(
+                mask, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8)
+            )
+            cnts, _ = cv2.findContours(
+                mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
+            for c in cnts:
+                x, y, bw, bh = cv2.boundingRect(c)
+                area = bw * bh
+                if area < (w * h) * 0.002:
+                    continue
+                if bw < 70 or bh < 36:
+                    continue
+                if bw < bh * 0.55:
+                    continue
+                boxes.append((area, x, y, bw, bh))
         boxes.sort(reverse=True)
         for _area, x, y, bw, bh in boxes[:5]:
             pad = 4
@@ -630,10 +661,13 @@ def local_ocr_hints(path: Path) -> tuple[str | None, str | None, str]:
         return None, None, ""
     h, w = img.shape[:2]
     crops: list[np.ndarray] = []
-    # Мелкая этикетка отгрузки часто справа снизу (крупная бирка производителя — слева)
-    if h > 4 and w > 4:
-        crops.append(img[int(h * 0.45) :, int(w * 0.45) :])
     crops.extend(_white_label_crops(img))
+    # Этикетка: верх/низ + лево/право (фото на чёрном фоне).
+    if h > 4 and w > 4:
+        crops.append(img[0 : max(1, int(h * 0.55)), 0 : max(1, int(w * 0.55))])
+        crops.append(img[0 : max(1, int(h * 0.55)), int(w * 0.45) :])
+        crops.append(img[int(h * 0.45) :, int(w * 0.45) :])
+        crops.append(img[int(h * 0.45) :, 0 : max(1, int(w * 0.55))])
     crops.extend(
         [
             img[0 : max(1, h * 2 // 5), :],
@@ -698,12 +732,22 @@ def resolve_upload_hints(
     """
     qr = decode_qr(path)
     if qr and is_crm_useful_qr(qr):
+        bare = qr.strip()
+        glued = re.fullmatch(r"(\d{4})(\d{3})", bare)
+        if glued and _is_plausible_order_yymm(glued.group(1)):
+            return None, f"{glued.group(1)}-{glued.group(2)}", ""
+        if re.fullmatch(r"\d{4}-\d{3}", bare):
+            return None, bare, ""
         return qr, None, ""
     if qr and is_manufacturer_or_noise_barcode(qr):
         logging.info(
             "product barcode ignored (OCR fallback): %s",
             qr[:64],
         )
+        qr = None
+    elif qr:
+        # URL «клик админ» и прочий шум — не блокируем OCR номера.
+        logging.info("non-CRM QR ignored (OCR fallback): %s", qr[:64])
         qr = None
     order_n, kaiten_url, ocr_text = local_ocr_hints(path)
     # явный номер наряда надёжнее «левого» QR; URL из OCR — как qr hint
@@ -801,6 +845,8 @@ def upload_scan(
         headers["x-scanner-qr"] = quote(qr_hint, safe=":/?&=#%")
     if force_order_number:
         headers["x-scanner-order-number"] = force_order_number.strip()
+    if exact_order_number:
+        headers["x-scanner-order-exact"] = "1"
     blob = (ocr_text or "").strip()
     if blob:
         headers["x-scanner-ocr-text"] = quote(blob[:500])

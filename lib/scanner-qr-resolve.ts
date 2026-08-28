@@ -114,7 +114,14 @@ export async function resolveOrderFromOrderNumber(
   opts?: { exactOnly?: boolean },
 ): Promise<ScannerOrderResolve> {
   const tenantId = String(apiKeyTenantId || "").trim();
-  const orderNumber = String(orderNumberRaw || "").trim();
+  const compact = String(orderNumberRaw || "")
+    .trim()
+    .replace(/[–—−]/g, "-")
+    .replace(/\s+/g, "");
+  const glued = /^(\d{4})(\d{3})$/.exec(compact);
+  const orderNumber = glued
+    ? `${glued[1]}-${glued[2]}`
+    : compact;
   if (!tenantId || !orderNumber) {
     return { ok: false, reason: "order_not_found" };
   }

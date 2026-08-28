@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth/jwt";
 import {
   getModuleForPathname,
+  isKanbanLinkedReadAllowed,
   isOrderAttachmentUploadAllowed,
   requiredModuleForPath,
 } from "@/lib/role-module-paths";
@@ -720,6 +721,12 @@ export async function middleware(req: NextRequest) {
           req.method,
           req.headers,
         )
+      ) {
+        moduleAllowed = true;
+      }
+      if (
+        !moduleAllowed &&
+        isKanbanLinkedReadAllowed(access, pathname, req.method)
       ) {
         moduleAllowed = true;
       }

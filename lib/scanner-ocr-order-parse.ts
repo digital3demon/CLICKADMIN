@@ -10,6 +10,10 @@ import { ORDER_NUMBER_PATTERN } from "@/lib/order-number";
 const ORDER_NUM_IN_TEXT_RE =
   /(?<![\dA-Za-z])(\d{4})\s*[-–—−]\s*(\d{3})(?![\dA-Za-z])/g;
 
+/** «№ заказа 2608306» / «N3aka3a2608-245» — OCR часто глотает тире. */
+const ORDER_NUM_AFTER_ZAKAZ_RE =
+  /(?:заказ|zakaz|зака3|3aka3|n3ak|n3ax|nzak|зак[аa]з)[^\d]{0,12}(\d{4})\s*[-–—−]?\s*(\d{3})(?!\d)/gi;
+
 /** Legacy Kaiten URL в OCR-тексте распечатки наряда. */
 const KAITEN_URL_RE =
   /(?:https?:\/\/)?(?:[\w.-]+\.)?kaiten\.ru\/(?:card\/)?(\d{4,})/gi;
@@ -29,20 +33,33 @@ function isLotCodeCollision(text: string, yymm: string, start: number): boolean 
   ).test(around);
 }
 
+function pushOrderNum(
+  found: string[],
+  seen: Set<string>,
+  text: string,
+  yymm: string,
+  nnn: string,
+  start: number,
+): void {
+  const num = `${yymm}-${nnn}`;
+  if (!ORDER_NUMBER_PATTERN.test(num)) return;
+  if (!isPlausibleOrderYymm(yymm)) return;
+  if (isLotCodeCollision(text, yymm, start)) return;
+  if (seen.has(num)) return;
+  seen.add(num);
+  found.push(num);
+}
+
 export function extractOrderNumbersFromOcrText(raw: string): string[] {
   const text = String(raw ?? "");
   if (!text.trim()) return [];
   const found: string[] = [];
   const seen = new Set<string>();
+  for (const m of text.matchAll(ORDER_NUM_AFTER_ZAKAZ_RE)) {
+    pushOrderNum(found, seen, text, m[1] ?? "", m[2] ?? "", m.index ?? 0);
+  }
   for (const m of text.matchAll(ORDER_NUM_IN_TEXT_RE)) {
-    const yymm = m[1] ?? "";
-    const num = `${yymm}-${m[2]}`;
-    if (!ORDER_NUMBER_PATTERN.test(num)) continue;
-    if (!isPlausibleOrderYymm(yymm)) continue;
-    if (isLotCodeCollision(text, yymm, m.index ?? 0)) continue;
-    if (seen.has(num)) continue;
-    seen.add(num);
-    found.push(num);
+    pushOrderNum(found, seen, text, m[1] ?? "", m[2] ?? "", m.index ?? 0);
   }
   return found;
 }
@@ -63,8 +80,11 @@ export function pickBestOrderNumberFromOcr(raw: string): string | null {
       const yymm = m[1] ?? "";
       if (isPlausibleOrderYymm(yymm)) score += 50;
     }
-    const idx = raw.indexOf(n);
-    const window = raw.slice(Math.max(0, idx - 28), idx).toLowerCase();
+    const compact = n.replace("-", "");
+    const idxHyphen = raw.indexOf(n);
+    const idxCompact = raw.indexOf(compact);
+    const idx = idxHyphen >= 0 ? idxHyphen : idxCompact;
+    const window = raw.slice(Math.max(0, idx - 28), Math.max(0, idx)).toLowerCase();
     // «№ заказа» на этикетке отгрузки (кириллица; OCR: n3ak / 3aka3)
     if (
       /заказ/.test(window) ||
@@ -138,7 +158,7 @@ export type OcrOrderNameCandidate = {
  * есть в тексте этикетки. Без имён оставляем запрошенный номер.
  */
 export function pickOrderNumberAfterOcrConfusion<T extends OcrOrderNameCandidate>(
-  _requested: string,
+  requested: string,
   rows: T[],
   ocrText: string,
 ): T | null {
@@ -158,7 +178,8 @@ export function pickOrderNumberAfterOcrConfusion<T extends OcrOrderNameCandidate
   if (best && best.score >= 4 && (!second || best.score > second.score)) {
     return best.row;
   }
-  return null;
+  /* Имена не разобрали: оставляем то, что запросили (корректировка / OCR как есть). */
+  return rows.find((r) => r.orderNumber === requested) ?? null;
 }
 
 /** ID карточки Kaiten из URL в OCR (распечатка наряда / карточки). */

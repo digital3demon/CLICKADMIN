@@ -3368,8 +3368,6 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   (n, c) => n + c.cards.length,
                   0,
                 ) + stoppedCards.length}
-                {" · "}
-                пустые колонки скрыты
               </span>
             ) : actualOn ? (
               <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">
