@@ -8,12 +8,19 @@ import {
   isKanbanLabMentionNotifyRole,
   normalizeKanbanAdminMentionTag,
 } from "@/lib/kanban-admin-mention";
-import { buildKanbanMentionInCommentTelegramHtmlLines } from "@/lib/kanban-mention-telegram-html";
+import {
+  buildKanbanMentionInCommentTelegramHtmlLines,
+  telegramMentionCommentQuote,
+} from "@/lib/kanban-mention-telegram-html";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { normalizeProductionMentionTag } from "@/lib/kanban-production-mention-tag";
 import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import { getPrisma } from "@/lib/get-prisma";
-import { notifyKanbanTelegramTargetUsers } from "@/lib/telegram-kanban-notify";
+import {
+  notifyKanbanTelegramSubscribers,
+  notifyKanbanTelegramTargetUsers,
+} from "@/lib/telegram-kanban-notify";
+import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
 import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 
 function resolveNotifySiteOrigin(primary: string | null | undefined): string {
@@ -39,8 +46,8 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
   text: string;
   siteOrigin: string | null;
   productionMentionTag?: string | null;
-}): Promise<void> {
-  if (opts.sessionDemo) return;
+}): Promise<string[]> {
+  if (opts.sessionDemo) return [];
 
   const origin = resolveNotifySiteOrigin(opts.siteOrigin);
 
@@ -88,7 +95,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       orderId: opts.orderId,
       textSnippet: opts.text.slice(0, 80),
     });
-    return;
+    return [];
   }
 
   const withTelegram = mentionedAll.filter((id) => {
@@ -167,4 +174,47 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       skipTenantSharedChat: true,
     });
   }
+  return mentionedAll;
+}
+
+/** «Добавлен комментарий» — всем с галочкой, кроме автора и тех, кто уже получил @упоминание. */
+export async function notifyTelegramForKanbanChatCommentAdded(opts: {
+  sessionDemo?: boolean;
+  actorUserId: string | null;
+  tenantId: string;
+  orderId: string;
+  orderNumber: string;
+  text: string;
+  siteOrigin: string | null;
+  excludeUserIds?: string[];
+}): Promise<void> {
+  if (opts.sessionDemo) return;
+  const origin = resolveNotifySiteOrigin(opts.siteOrigin);
+  const prisma = await getPrisma();
+  const actor = opts.actorUserId
+    ? await prisma.user.findUnique({
+        where: { id: opts.actorUserId },
+        select: { displayName: true, mentionHandle: true, email: true },
+      })
+    : null;
+  const who = escapeTelegramHtml(userPersonDisplayName(actor ?? {}));
+  const cardUrl = `${origin}${kanbanOrderDeepLinkPath(opts.orderId)}`;
+  const orderUrl = `${origin}/orders/${encodeURIComponent(opts.orderId)}`;
+  const title = (opts.orderNumber || "").trim() || "наряд";
+  const cardLink = telegramHtmlLink(cardUrl, title);
+  const cardWord = telegramHtmlLink(cardUrl, "карточке");
+  const orderWord = telegramHtmlLink(orderUrl, "заказе");
+  const quote = telegramMentionCommentQuote(opts.text);
+  const snippet = quote ? escapeTelegramHtml(quote) : "";
+  const tail = snippet ? `\n«${snippet}»` : "";
+  await notifyKanbanTelegramSubscribers(prisma, {
+    event: "tg_comment_added",
+    actorUserId: opts.actorUserId,
+    alsoExcludeUserIds: opts.excludeUserIds,
+    lines: [`${who} оставил(а) комментарий к ${cardLink}${tail}`],
+    linesAdmin: [
+      `${who} оставил(а) комментарий к ${cardWord} и ${orderWord}${tail}`,
+    ],
+    parseMode: "HTML",
+  });
 }

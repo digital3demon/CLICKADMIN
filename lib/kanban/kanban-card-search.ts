@@ -1,34 +1,20 @@
 /**
  * Поиск карточек канбана.
- * Timezone не используется. Границы токенов — пробел, не JS `\b` (кириллица).
+ * Timezone не используется. Границы токенов — не JS `\b` (кириллица).
  */
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
+import {
+  foldOrderSearchText,
+  orderSearchSignificantTokens,
+  textMatchesOrderSearch,
+} from "@/lib/order-search-query";
 
-/** Латиница, визуально как кириллица — после toLocaleLowerCase. */
-const LAT_LOOKALIKE_TO_CYR: Record<string, string> = {
-  a: "а",
-  e: "е",
-  o: "о",
-  p: "р",
-  c: "с",
-  x: "х",
-  y: "у",
-  t: "т",
-  h: "н",
-  k: "к",
-  m: "м",
-  b: "в",
-};
+export const foldKanbanSearchText = foldOrderSearchText;
 
-export function foldKanbanSearchText(raw: string): string {
-  return String(raw || "")
-    .toLocaleLowerCase("ru-RU")
-    .replace(/ё/g, "е")
-    .replace(/[aeopcxythkmb]/g, (ch) => LAT_LOOKALIKE_TO_CYR[ch] ?? ch);
-}
-
-/** Слова запроса; пробел режет токены (кириллица до и после). */
+/** Слова запроса; инициалы из строки документооборота отбрасываются. */
 export function kanbanSearchTokens(raw: string): string[] {
+  const significant = orderSearchSignificantTokens(raw);
+  if (significant.length > 0) return significant;
   const folded = foldKanbanSearchText(raw).replace(/\s+/g, " ").trim();
   if (!folded) return [];
   return folded.split(" ").filter(Boolean);
@@ -60,33 +46,12 @@ export function kanbanCardSearchHaystack(
     .join("\n");
 }
 
-/** Цифровые прогоны: «214» ≠ «14» в дате 14.08 и ≠ фрагмент cuid. */
-export function haystackDigitRuns(folded: string): string[] {
-  return String(folded || "").match(/\d+/g) ?? [];
-}
-
-function tokenMatchesHaystack(token: string, hay: string): boolean {
-  if (/^\d+$/.test(token)) {
-    const runs = haystackDigitRuns(hay);
-    if (runs.includes(token)) return true;
-    /* «079» в «2606079» без дефиса. Короче 3 не суффиксим: «14» ≠ «214». */
-    if (token.length >= 3) {
-      return runs.some(
-        (run) => run.length > token.length && run.endsWith(token),
-      );
-    }
-    return false;
-  }
-  return hay.includes(token);
-}
+export { haystackDigitRuns } from "@/lib/order-search-query";
 
 export function kanbanCardMatchesSearch(
   card: KanbanCard,
   query: string,
   board?: KanbanBoard | null,
 ): boolean {
-  const tokens = kanbanSearchTokens(query);
-  if (tokens.length === 0) return true;
-  const hay = foldKanbanSearchText(kanbanCardSearchHaystack(card, board));
-  return tokens.every((t) => tokenMatchesHaystack(t, hay));
+  return textMatchesOrderSearch(kanbanCardSearchHaystack(card, board), query);
 }

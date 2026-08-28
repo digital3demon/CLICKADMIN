@@ -16,6 +16,7 @@ import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
 import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 import { kanbanLinkedOrderNumberSuffixContains } from "@/lib/kanban/linked-orders-search-where";
+import { kanbanLinkedOrderGoneIds } from "@/lib/kanban/linked-orders-gone-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -370,9 +371,20 @@ export async function GET(request: Request) {
       }
     })();
 
+    const existenceRows =
+      boardOrderIds.length > 0
+        ? await ordersPrisma.order.findMany({
+            where: { tenantId, id: { in: boardOrderIds } },
+            select: { id: true, archivedAt: true, status: true },
+          })
+        : [];
+
     return NextResponse.json({
       orders,
-      goneIds: boardOrderIds.filter((id) => !seenRowIds.has(id)),
+      goneIds: kanbanLinkedOrderGoneIds({
+        requestedIds: boardOrderIds,
+        existing: existenceRows,
+      }),
     });
   } catch (e) {
     console.error("[kanban/linked-orders]", e);

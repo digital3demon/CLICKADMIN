@@ -90,7 +90,7 @@ describe("kanban actual appointment", () => {
     ).toBe(true);
   });
 
-  it("фильтрует и сортирует колонку по дате записи", () => {
+  it("не выкидывает карточку: окно записи только поднимает её выше", () => {
     const range = ordersShipmentActualAppointmentRange("2026-07-27");
     const byOrder = linkedOrdersToAppointmentMap([
       row("old", "2026-07-01T10:00:00+03:00"),
@@ -120,7 +120,9 @@ describe("kanban actual appointment", () => {
       "c-local",
       "c-in",
       "c-later",
+      "c-old",
     ]);
+    expect(next.columns[0]!.cards).toHaveLength(4);
     expect(board.columns[0]!.cards).toHaveLength(4);
   });
 });

@@ -15,6 +15,7 @@ import {
 import { ordersAppointmentDateWhere } from "@/lib/orders-shipment-list-filter";
 import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { moscowDayBoundsUtc } from "@/lib/shipments-date-range";
+import { orderSearchPrismaNeedles } from "@/lib/order-search-query";
 
 export type FinanceOfficeAppointmentFilter = {
   mode: OrdersShipmentMode;
@@ -27,15 +28,20 @@ export type FinanceOfficeInvoiceIssuedFilter = {
   toYmd: string;
 };
 
-function searchWhere(q: string): Prisma.OrderWhereInput {
-  const contains = q.trim();
-  if (!contains) return {};
+function searchTokenWhere(token: string): Prisma.OrderWhereInput {
   return {
     OR: [
-      { orderNumber: { contains, mode: "insensitive" } },
-      { patientName: { contains, mode: "insensitive" } },
+      { orderNumber: { contains: token, mode: "insensitive" } },
+      { patientName: { contains: token, mode: "insensitive" } },
     ],
   };
+}
+
+function searchWhere(q: string): Prisma.OrderWhereInput {
+  const needles = orderSearchPrismaNeedles(q);
+  if (needles.length === 0) return {};
+  if (needles.length === 1) return searchTokenWhere(needles[0]!);
+  return { AND: needles.map(searchTokenWhere) };
 }
 
 export function financeOfficeScopeWhere(

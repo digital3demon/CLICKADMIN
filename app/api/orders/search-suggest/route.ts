@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
+import { orderSearchPrismaNeedles } from "@/lib/order-search-query";
 
 type SuggestItem = { value: string; kind: "order" | "patient" | "doctor" | "clinic" };
 
@@ -28,8 +29,9 @@ export async function GET(req: Request) {
     const s = await getSessionFromCookies();
     if (!s) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
     const tenantId = await requireSessionTenantId(s);
-    const q = norm(new URL(req.url).searchParams.get("q") ?? "");
-    if (!q) return NextResponse.json({ items: [] });
+    const qRaw = norm(new URL(req.url).searchParams.get("q") ?? "");
+    if (!qRaw) return NextResponse.json({ items: [] });
+    const q = orderSearchPrismaNeedles(qRaw)[0] ?? qRaw;
 
     const [ordersPrisma, clientsPrisma] = await Promise.all([
       getOrdersPrisma(),

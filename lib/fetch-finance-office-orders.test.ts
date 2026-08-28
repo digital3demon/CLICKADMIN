@@ -97,6 +97,15 @@ describe("financeOfficeScopeWhere", () => {
     expect(json).not.toContain("financeCalculated");
   });
 
+  it("вставка строки документооборота ищет по номеру, не по всей фразе", () => {
+    const w = financeOfficeScopeWhere("t1", {
+      search: "2608-325 Загоскина Я. Самус Н. Э.",
+    });
+    const json = JSON.stringify(w);
+    expect(json).toContain("2608-325");
+    expect(json).not.toContain("Загоскина Я. Самус");
+  });
+
   it("фильтр счёта перекрывает лаб-срок и запись", () => {
     const w = financeOfficeScopeWhere("t1", {
       mode: "actual",

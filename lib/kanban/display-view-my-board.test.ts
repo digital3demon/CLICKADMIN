@@ -5,7 +5,10 @@ import {
   createCard,
   KANBAN_BOARD_DISTRIBUTE_ID,
   KANBAN_BOARD_MY_CARDS_ID,
+  KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
+  KANBAN_BOARD_PRODUCTION_ID,
+  listKanbanAggregateSourceBoards,
 } from "@/lib/kanban/model";
 import type { KanbanAppState, KanbanBoard } from "@/lib/kanban/types";
 
@@ -299,5 +302,172 @@ describe("buildKanbanDisplayView · Мои", () => {
     const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
     expect(allIds).toContain("я-ответственный");
     expect(allIds).not.toContain("только-участник");
+  });
+
+  it("«МОИ» забирает карточку Юли с ортодонтии, даже если шаблон — ортопедия", () => {
+    const ortho = orthopedicsMirrorBoard();
+    const odon: KanbanBoard = {
+      id: KANBAN_BOARD_ORTHODONTICS_ID,
+      title: "Ортодонтия",
+      columns: buildKaitenMirrorColumnsForBoard(KANBAN_BOARD_ORTHODONTICS_ID),
+      users: [],
+      cardTypes: [],
+      isPrivate: true,
+      accessUserIds: [],
+    };
+    const shipped = odon.columns.find((c) => c.title === "Сдана админам")!;
+    shipped.title = "Сдано админам";
+    shipped.cards.push(
+      createCard({
+        id: "юля-ортодонтия",
+        title: "2605-088 Мостепанова М.В. Сплинт",
+        linkedOrderId: "ord-мостепанова",
+        assignees: [],
+        participants: ["u-юля"],
+      }),
+    );
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho, odon],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "u-юля",
+      sessionUserRole: "PRODUCTION",
+    });
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).toContain("юля-ортодонтия");
+  });
+
+  it("источники «МОИ» — все доски кроме производства и виртуальных", () => {
+    const extra: KanbanBoard = {
+      id: "kanban-board-extra-clinic",
+      title: "Клиника",
+      columns: [{ id: "col-extra", title: "К исполнению", cards: [] }],
+      users: [],
+      cardTypes: [],
+    };
+    const production: KanbanBoard = {
+      id: KANBAN_BOARD_PRODUCTION_ID,
+      title: "Производство",
+      columns: [{ id: "col-prod", title: "Печать · В работе", cards: [] }],
+      users: [],
+      cardTypes: [],
+    };
+    const virtual: KanbanBoard = {
+      id: KANBAN_BOARD_MY_CARDS_ID,
+      title: "Мои",
+      columns: [],
+      users: [],
+      cardTypes: [],
+    };
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [orthopedicsMirrorBoard(), extra, production, virtual],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const ids = listKanbanAggregateSourceBoards(state).map((b) => b.id);
+    expect(ids).toContain(KANBAN_BOARD_ORTHOPEDICS_ID);
+    expect(ids).toContain("kanban-board-extra-clinic");
+    expect(ids).not.toContain(KANBAN_BOARD_PRODUCTION_ID);
+    expect(ids).not.toContain(KANBAN_BOARD_MY_CARDS_ID);
+  });
+
+  it("«МОИ» не берёт карточки с производства, даже если пользователь в команде", () => {
+    const ortho = orthopedicsMirrorBoard();
+    ortho.columns.find((c) => c.title === "К исполнению")!.cards.push(
+      createCard({
+        id: "юля-ортопедия",
+        title: "2608-010 Ортопедия",
+        linkedOrderId: "ord-ортопедия",
+        assignees: [],
+        participants: ["u-юля"],
+      }),
+    );
+    const production: KanbanBoard = {
+      id: KANBAN_BOARD_PRODUCTION_ID,
+      title: "Производство",
+      columns: [
+        {
+          id: "col-prod",
+          title: "Печать · В работе",
+          cards: [
+            createCard({
+              id: "юля-производство",
+              title: "2608-011 Печать",
+              linkedOrderId: "ord-печать",
+              assignees: ["u-юля"],
+              participants: [],
+            }),
+          ],
+        },
+      ],
+      users: [],
+      cardTypes: [],
+    };
+    const extra: KanbanBoard = {
+      id: "kanban-board-extra-clinic",
+      title: "Клиника",
+      columns: [
+        {
+          id: "col-extra",
+          title: "К исполнению",
+          cards: [
+            createCard({
+              id: "юля-клиника",
+              title: "2608-012 Клиника",
+              linkedOrderId: "ord-клиника",
+              assignees: [],
+              participants: ["u-юля"],
+            }),
+          ],
+        },
+      ],
+      users: [],
+      cardTypes: [],
+    };
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho, extra, production],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "",
+      viewMode: "list",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "u-юля",
+      sessionUserRole: "PRODUCTION",
+    });
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).toContain("юля-ортопедия");
+    expect(allIds).toContain("юля-клиника");
+    expect(allIds).not.toContain("юля-производство");
   });
 });

@@ -4,6 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { patientSurnamesMatch } from "@/lib/order-continuation-match";
+import { textMatchesOrderSearch } from "@/lib/order-search-query";
 import { withApiTiming } from "@/lib/server/api-timing";
 import { logger } from "@/lib/server/logger";
 
@@ -80,11 +81,12 @@ export async function GET(req: Request) {
         );
 
         if (q) {
-          matched = matched.filter((r) => {
-            const num = r.orderNumber.toLowerCase();
-            const pat = (r.patientName ?? "").toLowerCase();
-            return num.includes(q) || pat.includes(q);
-          });
+          matched = matched.filter((r) =>
+            textMatchesOrderSearch(
+              `${r.orderNumber}\n${r.patientName ?? ""}`,
+              q,
+            ),
+          );
         }
 
         matched.sort((a, b) => {

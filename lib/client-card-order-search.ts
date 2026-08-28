@@ -1,5 +1,5 @@
-import { fieldsMatchListQuery } from "@/lib/prefix-search-match";
 import { normalizeClientsSearchQuery } from "@/lib/clients-list-search";
+import { textMatchesOrderSearch } from "@/lib/order-search-query";
 
 export type ClientCardOrderItem = {
   id: string;
@@ -41,7 +41,7 @@ export function clientCardOrderMatchesSearch(
           order.createdAtLabel,
           order.shippedAtLabel,
         ];
-  return fieldsMatchListQuery(fields, q);
+  return textMatchesOrderSearch(fields.filter(Boolean).join("\n"), q);
 }
 
 export function filterClientCardOrders(

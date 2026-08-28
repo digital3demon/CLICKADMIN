@@ -93,7 +93,7 @@ function defaultDistributeNewOrdersByBoardId(boardId: string): boolean {
 }
 
 /**
- * Виртуальные доски: только представление, карточки остаются на дорожках «Ортопедия» / «Ортодонтия».
+ * Виртуальные доски: карточки со всех досок, кроме «Производство».
  * «Мои» — участник или ответственный (или своя локальная карточка без наряда).
  * «Ответственный» — только карточки, где пользователь в ответственных (`assignees`).
  */
@@ -138,14 +138,19 @@ export function getKanbanLayoutTemplateBoard(state: KanbanAppState): KanbanBoard
   );
 }
 
-/** Откуда собирать карточки на «Мои» / «Ответственный» (зеркала Kaiten или одна демо-доска). */
+/** «Мои» / «Ответственный»: все доски, кроме виртуальных и «Производство». */
 export function listKanbanAggregateSourceBoards(state: KanbanAppState): KanbanBoard[] {
-  const mirrors = state.boards.filter(
+  return (state.boards ?? []).filter(
     (b) =>
-      b.id === KANBAN_BOARD_ORTHOPEDICS_ID || b.id === KANBAN_BOARD_ORTHODONTICS_ID,
+      !isKanbanAggregateBoardId(b.id) && b.id !== KANBAN_BOARD_PRODUCTION_ID,
   );
-  if (mirrors.length > 0) return mirrors;
-  return [...state.boards];
+}
+
+/** Ключ колонки для «МОИ»: «Сдано/Сдана админам» — одна корзина. */
+export function kanbanAggregateColumnKey(title: string): string {
+  const n = normalizeKanbanColumnTitle(title);
+  if (n === "сдано админам") return "сдана админам";
+  return n;
 }
 
 /**
@@ -1998,8 +2003,11 @@ export function buildKanbanDisplayView(
   };
 
   if (agg) {
+    const sources = listKanbanAggregateSourceBoards(state);
     const template =
-      accessibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID) ??
+      sources.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID) ??
+      sources.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID) ??
+      sources[0] ??
       accessibleBoards[0] ??
       getKanbanLayoutTemplateBoard(state);
     const displayBoard = structuredClone(template);
@@ -2008,16 +2016,24 @@ export function buildKanbanDisplayView(
     displayBoard.automations = [];
     const uid = sessionUserId;
 
+    const colByKey = new Map<string, KanbanColumn>();
     for (const colView of displayBoard.columns) {
-      const acc: KanbanCard[] = [];
-      const seen = new Set<string>();
-      const titleNorm = colView.title.trim().toLowerCase();
-      for (const home of listKanbanAggregateSourceBoards(state)) {
-        if (!canUserAccessBoard(home, uid || null, sessionUserRole)) continue;
-        const colO = home.columns.find(
-          (c) => c.title.trim().toLowerCase() === titleNorm,
-        );
-        if (!colO) continue;
+      colView.cards = [];
+      colByKey.set(kanbanAggregateColumnKey(colView.title), colView);
+    }
+    const seen = new Set<string>();
+    for (const home of sources) {
+      for (const colO of home.columns || []) {
+        const key = kanbanAggregateColumnKey(colO.title);
+        let colView = colByKey.get(key);
+        if (!colView) {
+          colView = {
+            ...structuredClone(colO),
+            cards: [],
+          };
+          displayBoard.columns.push(colView);
+          colByKey.set(key, colView);
+        }
         for (const card of colO.cards) {
           if (seen.has(card.id)) continue;
           if (!uid) continue;
@@ -2033,18 +2049,15 @@ export function buildKanbanDisplayView(
           if (q && !textMatches(card, home)) continue;
           if (!passesFiltersWithoutSearchText(card, home)) continue;
           seen.add(card.id);
-          acc.push(card);
+          colView.cards.push(card);
           cardHomeBoardId.set(card.id, home.id);
         }
       }
-      colView.cards = acc;
     }
     if (q) {
       appendArchivedSearchHits({
         displayBoard,
-        homes: listKanbanAggregateSourceBoards(state).filter((b) =>
-          canUserAccessBoard(b, uid || null, sessionUserRole),
-        ),
+        homes: sources,
         cardHomeBoardId,
         textMatches,
         passesFilters: passesFiltersWithoutSearchText,

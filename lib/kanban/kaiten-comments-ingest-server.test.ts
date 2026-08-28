@@ -45,6 +45,7 @@ vi.mock("@/lib/order-chat-inbox-db", () => ({
 const notifyMentionsTg = vi.fn();
 vi.mock("@/lib/kanban-chat-mention-telegram.server", () => ({
   notifyTelegramForKanbanChatMentions: (...args: unknown[]) => notifyMentionsTg(...args),
+  notifyTelegramForKanbanChatCommentAdded: vi.fn(),
 }));
 
 describe("kaitenParsedCommentsToKanbanSyncRows", () => {

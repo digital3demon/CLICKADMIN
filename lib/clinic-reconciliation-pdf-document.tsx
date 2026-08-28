@@ -17,8 +17,11 @@ import {
   RECON_COL_W_PT as COL_W,
   RECON_HEAD_GRAY as HEAD_GRAY,
   RECON_PAGE_INNER_PT as PAGE_INNER,
+  RECON_PDF_PAGE_PAD_BOTTOM,
+  RECON_PDF_PAGE_PAD_TOP,
   RECON_ROW_GRAY as ROW_GRAY,
-  reconColSpan as span,
+  reconSummaryCompact,
+  type ReconSummaryCompact,
 } from "@/lib/clinic-reconciliation-layout";
 
 /**
@@ -43,8 +46,8 @@ const styles = StyleSheet.create({
   page: {
     fontFamily: "NotoSans",
     fontSize: 7,
-    paddingTop: 18,
-    paddingBottom: 16,
+    paddingTop: RECON_PDF_PAGE_PAD_TOP,
+    paddingBottom: RECON_PDF_PAGE_PAD_BOTTOM,
     paddingLeft: 14,
     paddingRight: 18,
     color: "#000",
@@ -74,6 +77,8 @@ function PdfCell({
   align,
   bold,
   size,
+  pad,
+  lineHeight,
   children,
 }: {
   w: number;
@@ -82,6 +87,8 @@ function PdfCell({
   align?: "left" | "right" | "center";
   bold?: boolean;
   size?: number;
+  pad?: number;
+  lineHeight?: number;
   children?: string;
 }) {
   return (
@@ -93,7 +100,7 @@ function PdfCell({
         flexGrow: 0,
         flexShrink: 0,
         flexBasis: w,
-        padding: CELL_PAD,
+        padding: pad ?? CELL_PAD,
         backgroundColor: bg,
         borderStyle: "solid",
         borderColor: BORDER,
@@ -107,7 +114,7 @@ function PdfCell({
       <Text
         style={{
           fontSize: size ?? 6.5,
-          lineHeight: 1.15,
+          lineHeight: lineHeight ?? 1.15,
           textAlign: align ?? "left",
           fontWeight: bold ? 700 : 400,
           color: bg === HEAD_GRAY ? "#FFFFFF" : "#000000",
@@ -286,7 +293,7 @@ function DetailHeaderRow({ first }: { first?: boolean }) {
 function SummaryInsetRow({
   first,
   head,
-  minHeight,
+  compact,
   name,
   qty,
   unit,
@@ -294,7 +301,7 @@ function SummaryInsetRow({
 }: {
   first?: boolean;
   head?: boolean;
-  minHeight: number;
+  compact: ReconSummaryCompact;
   name: string;
   qty: string;
   unit: string;
@@ -302,13 +309,17 @@ function SummaryInsetRow({
 }) {
   const gap = innerSpan(0, 4);
   const bg = head ? HEAD_GRAY : ROW_GRAY;
+  const size = head ? Math.max(5.2, compact.fontSize - 0.4) : compact.fontSize;
   return (
     <View wrap={false} style={{ width: PAGE_INNER }}>
       {first ? <View style={styles.hLine} /> : null}
       <View
         style={[
           styles.rowInner,
-          { minHeight, backgroundColor: "transparent" },
+          {
+            minHeight: head ? compact.headMinH : compact.rowMinH,
+            backgroundColor: "transparent",
+          },
         ]}
       >
         <View
@@ -321,13 +332,37 @@ function SummaryInsetRow({
           }}
         />
         <View style={styles.vLine} />
-        <PdfCell w={innerCol(5)} bg={bg} align={head ? "center" : "left"} bold={head} size={head ? 5.8 : 6.2}>
+        <PdfCell
+          w={innerCol(5)}
+          bg={bg}
+          align={head ? "center" : "left"}
+          bold={head}
+          size={size}
+          pad={compact.cellPad}
+          lineHeight={1.05}
+        >
           {name}
         </PdfCell>
-        <PdfCell w={innerCol(6)} bg={bg} align={head ? "center" : "right"} bold={head} size={head ? 5.8 : 6.2}>
+        <PdfCell
+          w={innerCol(6)}
+          bg={bg}
+          align={head ? "center" : "right"}
+          bold={head}
+          size={size}
+          pad={compact.cellPad}
+          lineHeight={1.05}
+        >
           {qty}
         </PdfCell>
-        <PdfCell w={innerCol(7)} bg={bg} align={head ? "center" : "right"} bold={head} size={head ? 5.8 : 6.2}>
+        <PdfCell
+          w={innerCol(7)}
+          bg={bg}
+          align={head ? "center" : "right"}
+          bold={head}
+          size={size}
+          pad={compact.cellPad}
+          lineHeight={1.05}
+        >
           {unit}
         </PdfCell>
         <PdfCell
@@ -336,7 +371,9 @@ function SummaryInsetRow({
           bg={bg}
           align={head ? "center" : "right"}
           bold={head}
-          size={head ? 5.8 : 6.2}
+          size={size}
+          pad={compact.cellPad}
+          lineHeight={1.05}
         >
           {sum}
         </PdfCell>
@@ -363,15 +400,17 @@ function SummaryInsetRow({
 
 function SummaryBlock({
   payload,
+  compact,
 }: {
   payload: ClinicReconciliationPdfPayload;
+  compact: ReconSummaryCompact;
 }) {
   return (
     <View style={{ width: PAGE_INNER }}>
       <SummaryInsetRow
         first
         head
-        minHeight={18}
+        compact={compact}
         name="НАИМЕНОВАНИЕ ПОЗИЦИИ"
         qty="КОЛ-ВО ЕДИНИЦ"
         unit="СТОИМОСТЬ ЕДИНИЦЫ БЕЗ СКИДОК"
@@ -380,34 +419,91 @@ function SummaryBlock({
       {payload.summary.map((row, i) => (
         <SummaryInsetRow
           key={`s-${i}`}
-          minHeight={15}
+          compact={compact}
           name={row.label}
           qty={String(row.quantity).replace(".", ",")}
           unit={formatRubPdf(row.unitRub)}
           sum={formatRubPdf(row.totalRub)}
         />
       ))}
-      <GridRow bg={ROW_GRAY} minHeight={20}>
-        <PdfCell w={innerSpan(0, 2)} bg={ROW_GRAY} align="center" bold>
+      <GridRow bg={ROW_GRAY} minHeight={compact.yellowMinH}>
+        <PdfCell
+          w={innerSpan(0, 2)}
+          bg={ROW_GRAY}
+          align="center"
+          bold
+          pad={compact.cellPad}
+          size={compact.fontSize}
+          lineHeight={1.05}
+        >
           {payload.labLegalName}
         </PdfCell>
-        <PdfCell w={innerCol(3)} bg={ROW_GRAY} align="center" bold>
+        <PdfCell
+          w={innerCol(3)}
+          bg={ROW_GRAY}
+          align="center"
+          bold
+          pad={compact.cellPad}
+          size={compact.fontSize}
+          lineHeight={1.05}
+        >
           {payload.periodFromLabel}
         </PdfCell>
-        <PdfCell w={innerCol(4)} bg={ROW_GRAY} align="center" bold>
+        <PdfCell
+          w={innerCol(4)}
+          bg={ROW_GRAY}
+          align="center"
+          bold
+          pad={compact.cellPad}
+          size={compact.fontSize}
+          lineHeight={1.05}
+        >
           {payload.periodToLabel}
         </PdfCell>
-        <PdfCell w={innerCol(5)} bg={ROW_GRAY} align="center" bold>
+        <PdfCell
+          w={innerCol(5)}
+          bg={ROW_GRAY}
+          align="center"
+          bold
+          pad={compact.cellPad}
+          size={compact.fontSize}
+          lineHeight={1.05}
+        >
           {payload.clinicTitleLine}
         </PdfCell>
-        <PdfCell w={innerCol(6)} bg={ROW_GRAY} align="right" bold>
+        <PdfCell
+          w={innerCol(6)}
+          bg={ROW_GRAY}
+          align="right"
+          bold
+          pad={compact.cellPad}
+          size={compact.fontSize}
+          lineHeight={1.05}
+        >
           {String(payload.yellowRow.totalUnits).replace(".", ",")}
         </PdfCell>
-        <PdfCell w={innerCol(7)} bg={ROW_GRAY} />
-        <PdfCell w={innerCol(8)} bg={ROW_GRAY} align="right" bold>
+        <PdfCell w={innerCol(7)} bg={ROW_GRAY} pad={compact.cellPad} />
+        <PdfCell
+          w={innerCol(8)}
+          bg={ROW_GRAY}
+          align="right"
+          bold
+          pad={compact.cellPad}
+          size={compact.fontSize}
+          lineHeight={1.05}
+        >
           {formatRubPdf(payload.yellowRow.baseTotalRub)}
         </PdfCell>
-        <PdfCell w={innerCol(9)} last bg={ROW_GRAY} align="right" bold>
+        <PdfCell
+          w={innerCol(9)}
+          last
+          bg={ROW_GRAY}
+          align="right"
+          bold
+          pad={compact.cellPad}
+          size={compact.fontSize}
+          lineHeight={1.05}
+        >
           {formatRubPdf(payload.yellowRow.discountedTotalRub)}
         </PdfCell>
       </GridRow>
@@ -454,12 +550,47 @@ function PayTotalsBlock({
   );
 }
 
+function DetailPages({
+  payload,
+  repeatHeaderAfterFirst,
+}: {
+  payload: ClinicReconciliationPdfPayload;
+  repeatHeaderAfterFirst: boolean;
+}) {
+  return (
+    <>
+      {repeatHeaderAfterFirst ? (
+        <View
+          fixed
+          render={({ pageNumber }) =>
+            pageNumber > 1 ? <DetailHeaderRow first /> : <View />
+          }
+        />
+      ) : null}
+      <DetailHeaderRow first />
+      {payload.detail.map((line, i) => (
+        <DetailRow key={`d-${i}`} line={line} />
+      ))}
+    </>
+  );
+}
+
 export function ClinicReconciliationPdfDocument({
   payload,
 }: {
   payload: ClinicReconciliationPdfPayload;
 }) {
   ensureNotoSansPdfFonts();
+  const compact = reconSummaryCompact(payload.summary.length);
+
+  const firstBlock = (
+    <View wrap={compact.allowWrap} style={{ width: PAGE_INNER }}>
+      <SummaryBlock payload={payload} compact={compact} />
+      <View wrap={false}>
+        <PayTotalsBlock payload={payload} />
+      </View>
+    </View>
+  );
 
   return (
     <Document
@@ -467,20 +598,21 @@ export function ClinicReconciliationPdfDocument({
       creator="dental-lab-crm"
       language="ru-RU"
     >
-      <Page size="A4" orientation="landscape" style={styles.page}>
-        <View
-          fixed
-          render={({ pageNumber }) =>
-            pageNumber > 1 ? <DetailHeaderRow first /> : <View />
-          }
-        />
-        <SummaryBlock payload={payload} />
-        <PayTotalsBlock payload={payload} />
-        <DetailHeaderRow first />
-        {payload.detail.map((line, i) => (
-          <DetailRow key={`d-${i}`} line={line} />
-        ))}
-      </Page>
+      {compact.allowWrap ? (
+        <>
+          <Page size="A4" orientation="landscape" style={styles.page}>
+            {firstBlock}
+          </Page>
+          <Page size="A4" orientation="landscape" style={styles.page}>
+            <DetailPages payload={payload} repeatHeaderAfterFirst />
+          </Page>
+        </>
+      ) : (
+        <Page size="A4" orientation="landscape" style={styles.page}>
+          {firstBlock}
+          <DetailPages payload={payload} repeatHeaderAfterFirst />
+        </Page>
+      )}
     </Document>
   );
 }

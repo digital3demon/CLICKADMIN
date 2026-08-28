@@ -10,6 +10,7 @@ import {
 import { syncClarifyRepliesForOrder } from "@/lib/order-chat-correction-clarify.server";
 import { loadKanbanOrderComments } from "@/lib/kanban/kanban-order-comments-store";
 import { normalizeRevisionsHistorySearchQuery } from "@/lib/revisions-history";
+import { orderSearchContainsNeedle } from "@/lib/order-search-query";
 
 const TAKE_DEFAULT = 150;
 const TAKE_SEARCH = 200;
@@ -160,12 +161,13 @@ function mapProsthetics(
 }
 
 function buildCorrectionSearchWhere(q: string): Prisma.OrderChatCorrectionWhereInput {
+  const orderNeedle = orderSearchContainsNeedle(q) || q;
   const or: Prisma.OrderChatCorrectionWhereInput[] = [
     { text: { contains: q, mode: "insensitive" } },
     { authorLabel: { contains: q, mode: "insensitive" } },
-    { order: { orderNumber: { contains: q, mode: "insensitive" } } },
-    { order: { patientName: { contains: q, mode: "insensitive" } } },
-    { order: { doctor: { is: { fullName: { contains: q, mode: "insensitive" } } } } },
+    { order: { orderNumber: { contains: orderNeedle, mode: "insensitive" } } },
+    { order: { patientName: { contains: orderNeedle, mode: "insensitive" } } },
+    { order: { doctor: { is: { fullName: { contains: orderNeedle, mode: "insensitive" } } } } },
     { resolvedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
     { rejectedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
   ];
@@ -182,12 +184,13 @@ function buildCorrectionSearchWhere(q: string): Prisma.OrderChatCorrectionWhereI
 function buildProstheticsSearchWhere(
   q: string,
 ): Prisma.OrderProstheticsRequestWhereInput {
+  const orderNeedle = orderSearchContainsNeedle(q) || q;
   const or: Prisma.OrderProstheticsRequestWhereInput[] = [
     { text: { contains: q, mode: "insensitive" } },
     { authorLabel: { contains: q, mode: "insensitive" } },
-    { order: { orderNumber: { contains: q, mode: "insensitive" } } },
-    { order: { patientName: { contains: q, mode: "insensitive" } } },
-    { order: { doctor: { is: { fullName: { contains: q, mode: "insensitive" } } } } },
+    { order: { orderNumber: { contains: orderNeedle, mode: "insensitive" } } },
+    { order: { patientName: { contains: orderNeedle, mode: "insensitive" } } },
+    { order: { doctor: { is: { fullName: { contains: orderNeedle, mode: "insensitive" } } } } },
     { resolvedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
     { rejectedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },
     { arrivedBy: { is: { displayName: { contains: q, mode: "insensitive" } } } },

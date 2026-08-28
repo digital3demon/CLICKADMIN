@@ -224,6 +224,34 @@ function kaitenLaneForKanbanBoardId(boardId: string): KaitenTrackLane | undefine
   return undefined;
 }
 
+function notifyKanbanColumnTelegram(
+  card: KanbanCard,
+  boardId: string,
+  columnTitle: string,
+) {
+  const titleLine = (card.title || "").trim() || "Без названия";
+  const linkHtml = telegramHtmlLink(
+    kanbanCardAbsoluteUrl(card.id, boardId),
+    titleLine,
+  );
+  const col = escapeTelegramHtml(columnTitle);
+  const oid = card.linkedOrderId?.trim() || "";
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  postKanbanTelegramNotify({
+    kaitenCardId: card.kaitenCardId,
+    event: "tg_kanban_crm_sync",
+    parseMode: "HTML",
+    lines: [`В ${linkHtml} колонка — ${col}`],
+    ...(oid
+      ? {
+          linesAdmin: [
+            `В ${telegramHtmlLink(kanbanCardAbsoluteUrl(card.id, boardId), "карточке")} и ${telegramHtmlLink(`${origin}/orders/${encodeURIComponent(oid)}`, "заказе")} колонка — ${col}`,
+          ],
+        }
+      : {}),
+  });
+}
+
 const STOP_HOVER_PREVIEW_OFFSET = 14;
 const STOP_HOVER_PREVIEW_WIDTH = 288;
 const STOP_HOVER_PREVIEW_MAX = 8;
@@ -1446,6 +1474,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (!uid || isDemo || !kanbanStateReady) return;
     if (sessionMirrorSyncedForUserRef.current === uid) return;
     sessionMirrorSyncedForUserRef.current = uid;
+    const fromHeads = collectLinkedOrderIdsFromHeadsCache(loadKanbanCardHeadsCache(), {
+      sessionUserId: uid,
+    });
+    if (fromHeads.length > 0) {
+      setStickyLinkedOrderIds((prev) => mergeStickyLinkedOrderIds(prev, fromHeads));
+    }
     void syncKanbanMirrorFromApi();
   }, [kanbanSessionUserId, isDemo, kanbanStateReady, syncKanbanMirrorFromApi]);
 
@@ -1627,9 +1661,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const agg = kanbanAggregateMode(appState.activeBoardId);
     const q = (appState.search || "").trim();
     const homes = agg
-      ? listKanbanAggregateSourceBoards(appState).filter((b) =>
-          canUserAccessBoard(b, uid || null, kanbanSessionRole),
-        )
+      ? listKanbanAggregateSourceBoards(appState)
       : [board];
     const seen = new Set<string>();
     const rows: KanbanArchivedCard[] = [];
@@ -1668,9 +1700,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const agg = kanbanAggregateMode(appState.activeBoardId);
     const q = (appState.search || "").trim();
     const homes = agg
-      ? listKanbanAggregateSourceBoards(appState).filter((b) =>
-          canUserAccessBoard(b, uid || null, kanbanSessionRole),
-        )
+      ? listKanbanAggregateSourceBoards(appState)
       : q
         ? visibleBoards
         : [board];
@@ -2081,6 +2111,16 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       });
       if (!isDemo && kaitenFollowUp) {
         void syncKaitenMirrorAfterKanbanMove(kaitenFollowUp);
+        const loc = appState
+          ? findCardInAppState(appState, drag.cardId)
+          : null;
+        if (loc && kaitenFollowUp.columnTitle) {
+          notifyKanbanColumnTelegram(
+            loc.card,
+            loc.board.id,
+            kaitenFollowUp.columnTitle,
+          );
+        }
       }
     },
     [
@@ -2089,6 +2129,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       stickyLinkedOrderIds,
       activityActorLabel,
       isDemo,
+      appState,
       kanbanCardPerms.moveColumns,
       showToast,
       syncKaitenMirrorAfterKanbanMove,
@@ -2606,6 +2647,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         sortOrder,
       });
     }
+    if (!isDemo) {
+      notifyKanbanColumnTelegram(cardSnapshot, home.id, nextTitle);
+    }
     showToast(`Этап: «${nextTitle}»`);
   };
 
@@ -2704,6 +2748,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         kaitenTrackLane: kaitenLaneForKanbanBoardId(home.id),
         sortOrder,
       });
+    }
+    if (!isDemo) {
+      notifyKanbanColumnTelegram(cardSnapshot, home.id, prevTitle);
     }
     showToast(`Этап: «${prevTitle}»`);
   };
@@ -2816,6 +2863,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           kaitenTrackLane: kaitenLaneForKanbanBoardId(home.id),
           sortOrder,
         });
+      }
+      if (!isDemo) {
+        notifyKanbanColumnTelegram(cardSnapshot, home.id, targetCol.title);
       }
       showToast(`Этап: «${targetCol.title}»`);
     },
@@ -3358,7 +3408,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               </span>
             ) : actualOn ? (
               <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">
-                Актуальное: дата записи сегодня … +2 раб. дня (МСК)
+                Актуальное: ближайшие записи сверху, карточки не скрываются
               </span>
             ) : null}
             {dndLocked && (
@@ -3419,6 +3469,19 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     }
               }
               onCardColumnChanged={({ cardId, toColumnId }) => {
+                const locNow = appState
+                  ? findCardInAppState(appState, cardId)
+                  : null;
+                const toColNow = locNow?.board.columns.find(
+                  (c) => c.id === toColumnId,
+                );
+                if (!isDemo && locNow && toColNow) {
+                  notifyKanbanColumnTelegram(
+                    locNow.card,
+                    locNow.board.id,
+                    toColNow.title,
+                  );
+                }
                 let productionTelegramCreates: Array<{
                   childId: string;
                   laneName: string;

@@ -13,6 +13,7 @@ import {
   ORDER_REVISION_KIND_RU,
   type RevisionsHistoryItem,
 } from "@/lib/revisions-history";
+import { orderSearchContainsNeedle } from "@/lib/order-search-query";
 
 const TAKE_EACH_DEFAULT = 100;
 const MERGED_LIMIT_DEFAULT = 150;
@@ -40,12 +41,13 @@ function kindTokensFromQuery(
 function buildOrderRevisionSearchWhere(
   q: string,
 ): Prisma.OrderRevisionWhereInput {
+  const orderNeedle = orderSearchContainsNeedle(q) || q;
   const or: Prisma.OrderRevisionWhereInput[] = [
     { actorLabel: { contains: q, mode: "insensitive" } },
     { summary: { contains: q, mode: "insensitive" } },
-    { order: { orderNumber: { contains: q, mode: "insensitive" } } },
-    { order: { patientName: { contains: q, mode: "insensitive" } } },
-    { order: { doctor: { fullName: { contains: q, mode: "insensitive" } } } },
+    { order: { orderNumber: { contains: orderNeedle, mode: "insensitive" } } },
+    { order: { patientName: { contains: orderNeedle, mode: "insensitive" } } },
+    { order: { doctor: { fullName: { contains: orderNeedle, mode: "insensitive" } } } },
     {
       order: {
         clinic: { is: { name: { contains: q, mode: "insensitive" } } },

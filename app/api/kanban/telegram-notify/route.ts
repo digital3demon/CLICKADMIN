@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
-import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
 import {
   buildKanbanMentionInCommentTelegramHtmlLines,
   type KanbanMentionTelegramContext,
@@ -98,16 +97,6 @@ export async function POST(req: Request) {
   const event = parseKanbanTelegramPrefKey(o.event);
   if (!event) {
     return NextResponse.json({ error: "Неизвестное событие" }, { status: 400 });
-  }
-
-  const kaitenRaw = o.kaitenCardId;
-  const skipKaitenDuplicate =
-    shouldSkipCrmKanbanTelegram(kaitenRaw as number | null | undefined) &&
-    event !== "tg_mentioned_in_comment" &&
-    event !== "tg_production_new_card" &&
-    event !== "tg_production_mentioned";
-  if (skipKaitenDuplicate) {
-    return NextResponse.json({ ok: true, skipped: "kaiten" });
   }
 
   const mentionCtx = parseMentionContextPayload(o.mentionContext);

@@ -34,6 +34,21 @@ describe("clientCardOrderMatchesSearch", () => {
     expect(clientCardOrderMatchesSearch(base, "smile", "doctor")).toBe(true);
   });
 
+  it("вставка названия из документооборота с инициалами", () => {
+    expect(
+      clientCardOrderMatchesSearch(
+        {
+          ...base,
+          orderNumber: "2608-325",
+          patientName: "Загоскина Яна",
+          doctorName: "Самус Николай Эдуардович",
+        },
+        "2608-325 Загоскина Я. Самус Н. Э.",
+        "clinic",
+      ),
+    ).toBe(true);
+  });
+
   it("пустой запрос — все строки", () => {
     expect(clientCardOrderMatchesSearch(base, "", "clinic")).toBe(true);
   });

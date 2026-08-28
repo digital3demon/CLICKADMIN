@@ -1,6 +1,7 @@
 /**
  * Режим «Актуальное» на доске канбана: те же даты записи, что на /orders?ship=actual
- * (сегодня … сегодня+2 рабочих дня МСК, плюс карточки без даты).
+ * (сегодня … сегодня+2 рабочих дня МСК). Сортировка, не скрытие:
+ * карточка с датой вне окна остаётся в колонке.
  * Только активная доска; не пишется в tenant JSON.
  */
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
@@ -87,7 +88,10 @@ export function kanbanShouldApplyActualAppointmentView(
   return actualOn && (search || "").trim().length < 2;
 }
 
-/** Копия доски: в колонках только «актуальные» карточки, внутри колонки — сортировка как в заказах. */
+/**
+ * Копия доски: ближайшие записи сверху, остальные карточки остаются.
+ * Нельзя выкидывать карточку из колонки — поиск тогда «воскрешает» её.
+ */
 export function applyKanbanActualAppointmentView(
   board: KanbanBoard,
   byOrderId: ReadonlyMap<string, KanbanLinkedAppointmentSnap>,
@@ -95,16 +99,17 @@ export function applyKanbanActualAppointmentView(
 ): KanbanBoard {
   const next = structuredClone(board);
   for (const col of next.columns) {
-    const kept = col.cards.filter((c) =>
-      kanbanCardMatchesActualAppointment(c, byOrderId, range),
-    );
-    kept.sort((a, b) =>
-      compareOrdersByEffectiveAppointment(
+    const cards = [...col.cards];
+    cards.sort((a, b) => {
+      const aHit = kanbanCardMatchesActualAppointment(a, byOrderId, range);
+      const bHit = kanbanCardMatchesActualAppointment(b, byOrderId, range);
+      if (aHit !== bHit) return aHit ? -1 : 1;
+      return compareOrdersByEffectiveAppointment(
         appointmentFieldsForCard(a, byOrderId),
         appointmentFieldsForCard(b, byOrderId),
-      ),
-    );
-    col.cards = kept;
+      );
+    });
+    col.cards = cards;
   }
   return next;
 }

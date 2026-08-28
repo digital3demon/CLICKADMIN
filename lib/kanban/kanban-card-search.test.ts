@@ -125,6 +125,18 @@ describe("kanbanCardMatchesSearch", () => {
     expect(kanbanCardMatchesSearch(card, "214")).toBe(false);
   });
 
+  it("вставка названия из документооборота находит карточку с Н.Э. без пробелов", () => {
+    const card = createCard({
+      id: "c-doc-copy",
+      title: "Загоскина Я. Самус Н.Э. Сплинт 28.08",
+      linkedOrderId: "ord-загоскина",
+      linkedOrderNumber: "2608-325",
+    });
+    expect(
+      kanbanCardMatchesSearch(card, "2608-325 Загоскина Я. Самус Н. Э."),
+    ).toBe(true);
+  });
+
   it("учитывает тип карточки", () => {
     const card = createCard({
       id: "c4",

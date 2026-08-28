@@ -16,6 +16,10 @@ import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaite
 import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-corrections-read";
 import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
 import { orderTestVisibilityWhere } from "@/lib/order-test-visibility";
+import {
+  extractOrderNumberFromSearchQuery,
+  orderSearchPrismaNeedles,
+} from "@/lib/order-search-query";
 
 /** Поля списка заказов (страница «Заказы» и GET /api/orders). */
 export const ordersListPageSelect = {
@@ -247,18 +251,16 @@ async function fetchOrdersListPageLabMentionFiltered(
   );
 }
 
-export async function ordersSearchWhere(
-  needle: string,
+async function ordersSearchTokenWhere(
+  token: string,
   tenantId?: string | null,
 ): Promise<Prisma.OrderWhereInput> {
-  const n = needle.trim();
-  if (!n) return {};
   const clientsPrisma = await getClientsPrisma();
   const [doctors, clinics] = await Promise.all([
     clientsPrisma.doctor.findMany({
       where: {
         ...(tenantId ? { tenantId } : {}),
-        fullName: { contains: n, mode: "insensitive" },
+        fullName: { contains: token, mode: "insensitive" },
       },
       select: { id: true },
       take: 100,
@@ -266,7 +268,7 @@ export async function ordersSearchWhere(
     clientsPrisma.clinic.findMany({
       where: {
         ...(tenantId ? { tenantId } : {}),
-        name: { contains: n, mode: "insensitive" },
+        name: { contains: token, mode: "insensitive" },
       },
       select: { id: true },
       take: 100,
@@ -276,12 +278,31 @@ export async function ordersSearchWhere(
   const clinicIds = clinics.map((x) => x.id);
   return {
     OR: [
-      { orderNumber: { contains: n, mode: "insensitive" } },
-      { patientName: { contains: n, mode: "insensitive" } },
+      { orderNumber: { contains: token, mode: "insensitive" } },
+      { patientName: { contains: token, mode: "insensitive" } },
       ...(doctorIds.length > 0 ? [{ doctorId: { in: doctorIds } }] : []),
       ...(clinicIds.length > 0 ? [{ clinicId: { in: clinicIds } }] : []),
     ],
   };
+}
+
+export async function ordersSearchWhere(
+  needle: string,
+  tenantId?: string | null,
+): Promise<Prisma.OrderWhereInput> {
+  const n = needle.trim();
+  if (!n) return {};
+  const orderNumber = extractOrderNumberFromSearchQuery(n);
+  if (orderNumber) {
+    return { orderNumber: { contains: orderNumber, mode: "insensitive" } };
+  }
+  const tokens = orderSearchPrismaNeedles(n);
+  if (tokens.length === 0) return {};
+  if (tokens.length === 1) return ordersSearchTokenWhere(tokens[0]!, tenantId);
+  const parts = await Promise.all(
+    tokens.map((t) => ordersSearchTokenWhere(t, tenantId)),
+  );
+  return { AND: parts };
 }
 
 async function hydrateContractors(
@@ -351,7 +372,7 @@ export async function fetchOrdersListPage(
     hideShipped?: boolean;
     /** Только наряды с adminShippedOtpr = true (если задано, hideShipped игнорируется). */
     onlyShipped?: boolean;
-    /** Поиск по номеру наряда, пациенту, врачу, клинике (подстрока, без учёта регистра). */
+    /** Поиск: номер YYMM-NNN из строки документооборота или токены (пациент / врач / клиника). */
     search?: string | null | undefined;
     /** Фильтр по дате создания наряда (МСК), границы [start, endExclusive). */
     createdAtRange?: { start: Date; endExclusive: Date } | null | undefined;

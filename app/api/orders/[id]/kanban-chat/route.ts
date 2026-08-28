@@ -71,7 +71,10 @@ import {
   saveKanbanOrderComments,
 } from "@/lib/kanban/kanban-order-comments-store";
 import { normalizeProductionSettings } from "@/lib/kanban/production";
-import { notifyTelegramForKanbanChatMentions } from "@/lib/kanban-chat-mention-telegram.server";
+import {
+  notifyTelegramForKanbanChatCommentAdded,
+  notifyTelegramForKanbanChatMentions,
+} from "@/lib/kanban-chat-mention-telegram.server";
 import { personNameSurnameInitials } from "@/lib/person-name-surname-initials";
 import { getSiteOrigin } from "@/lib/site-origin-server";
 import {
@@ -946,8 +949,9 @@ export async function POST(
   } catch (e) {
     console.error("[kanban-chat POST] production mention tag", orderId, e);
   }
+  let mentionedForCommentExclude: string[] = [];
   try {
-    await notifyTelegramForKanbanChatMentions({
+    mentionedForCommentExclude = await notifyTelegramForKanbanChatMentions({
       sessionDemo: Boolean(session.demo),
       actorUserId: session.sub,
       tenantId,
@@ -960,6 +964,20 @@ export async function POST(
     });
   } catch (e) {
     console.error("[kanban-chat POST] mention tg", orderId, e);
+  }
+  try {
+    await notifyTelegramForKanbanChatCommentAdded({
+      sessionDemo: Boolean(session.demo),
+      actorUserId: session.sub,
+      tenantId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      text: messageText,
+      siteOrigin,
+      excludeUserIds: mentionedForCommentExclude,
+    });
+  } catch (e) {
+    console.error("[kanban-chat POST] comment-added tg", orderId, e);
   }
 
   after(() =>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
+import { ordersSearchWhere } from "@/lib/fetch-orders-list-page";
 
 function norm(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
@@ -42,12 +43,7 @@ export async function GET(req: Request) {
             where: {
               tenantId,
               archivedAt: null,
-              OR: [
-                { orderNumber: { contains: q, mode: "insensitive" } },
-                { patientName: { contains: q, mode: "insensitive" } },
-                { doctor: { fullName: { contains: q, mode: "insensitive" } } },
-                { clinic: { name: { contains: q, mode: "insensitive" } } },
-              ],
+              AND: [await ordersSearchWhere(q, tenantId)],
             },
             select: {
               id: true,

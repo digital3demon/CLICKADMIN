@@ -20,6 +20,8 @@ export type ChecklistItem = {
   completed: boolean;
   /** Когда пункт отметили выполненным (null/undefined — не выполнен). */
   completedAt?: string | null;
+  /** Ответственный за пункт (CRM user id). */
+  assigneeId?: string | null;
 };
 
 export type ProductionChecklistItem = ChecklistItem & {

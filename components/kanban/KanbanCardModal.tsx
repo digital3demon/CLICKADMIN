@@ -1078,6 +1078,7 @@ export function KanbanCardModal({
         text: "Новый пункт",
         completed: false,
         completedAt: null,
+        assigneeId: "",
       });
     });
   };
@@ -2448,6 +2449,28 @@ export function KanbanCardModal({
                             act,
                           );
                         });
+                        const typeLabel = selectedTypeName || "не выбран";
+                        const titleT = (card.title || "").trim() || "Без названия";
+                        const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleT);
+                        const oid = card.linkedOrderId?.trim();
+                        const { cardWord, orderWord } = oid
+                          ? cardOrderWordLinks(oid, cardId, board.id)
+                          : { cardWord: "", orderWord: "" };
+                        postKanbanCrmTelegramNotify({
+                          kaitenCardId: card.kaitenCardId,
+                          event: "tg_kanban_crm_sync",
+                          parseMode: "HTML",
+                          lines: [
+                            `В ${linkHtml} тип карточки — ${escapeTelegramHtml(typeLabel)}`,
+                          ],
+                          ...(oid
+                            ? {
+                                linesAdmin: [
+                                  `В ${cardWord} и ${orderWord} тип карточки — ${escapeTelegramHtml(typeLabel)}`,
+                                ],
+                              }
+                            : {}),
+                        });
                       })();
                     }}
                   >
@@ -2753,6 +2776,8 @@ export function KanbanCardModal({
                 <ChecklistEditor
                   card={card}
                   cardId={cardId}
+                  boardId={board.id}
+                  users={board.users || []}
                   onApply={onApply}
                   activityActorLabel={act}
                   canEdit={canManageKanbanChecklist}
@@ -3980,12 +4005,16 @@ function productionReworkCount(item: ChecklistItem): number {
 function ChecklistEditor({
   card,
   cardId,
+  boardId,
+  users,
   onApply,
   activityActorLabel,
   canEdit,
 }: {
   card: KanbanCard;
   cardId: string;
+  boardId: string;
+  users: Array<{ id: string; name: string }>;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   activityActorLabel?: string;
   canEdit: boolean;
@@ -4065,6 +4094,73 @@ function ChecklistEditor({
               });
             }}
           />
+          <select
+            disabled={!canEdit}
+            className="max-w-[7.5rem] shrink-0 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-1 py-0.5 text-[0.7rem] text-[var(--kaiten-modal-text)] disabled:opacity-40"
+            value={item.assigneeId || ""}
+            onChange={(e) => {
+              if (!canEdit) return;
+              const nextId = e.target.value;
+              const prevId = item.assigneeId || "";
+              onApply((b) => {
+                const fc = findCard(b, cardId);
+                if (!fc) return;
+                const list = fc.card.parentCardId
+                  ? fc.card.productionChecklist || []
+                  : fc.card.checklist || [];
+                const it = list.find((x) => x.id === item.id);
+                if (!it) return;
+                it.assigneeId = nextId;
+                if (fc.card.parentCardId) {
+                  syncParentProductionChecklistSnapshot(b, fc.card.id);
+                }
+                pushActivity(
+                  fc.card,
+                  nextId
+                    ? `Чеклист, ответственный: ${it.text}`
+                    : `Чеклист, снят ответственный: ${it.text}`,
+                  b.users[0]?.id,
+                  b,
+                  activityActorLabel,
+                );
+              });
+              if (nextId && nextId !== prevId) {
+                const titleT = (card.title || "").trim() || "Без названия";
+                const linkHtml = kanbanCardLinkHtml(cardId, boardId, titleT);
+                const itemEsc = escapeTelegramHtml((item.text || "").trim() || "пункт");
+                const oid = card.linkedOrderId?.trim();
+                const { cardWord, orderWord } = oid
+                  ? cardOrderWordLinks(oid, cardId, boardId)
+                  : { cardWord: "", orderWord: "" };
+                const who = escapeTelegramHtml(
+                  (activityActorLabel || "Пользователь").trim(),
+                );
+                postKanbanCrmTelegramNotify({
+                  kaitenCardId: card.kaitenCardId,
+                  event: "tg_checklist_assigned_responsible",
+                  targetUserIds: [nextId],
+                  parseMode: "HTML",
+                  lines: [
+                    `${who} назначил(а) вас ответственным за «${itemEsc}» в ${linkHtml}`,
+                  ],
+                  ...(oid
+                    ? {
+                        linesAdmin: [
+                          `${who} назначил(а) вас ответственным за «${itemEsc}» в ${cardWord} и ${orderWord}`,
+                        ],
+                      }
+                    : {}),
+                });
+              }
+            }}
+          >
+            <option value="">—</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name || u.id}
+              </option>
+            ))}
+          </select>
           {item.completed && item.completedAt ? (
             <span className="shrink-0 text-[0.66rem] text-[var(--kaiten-modal-muted)]">
               {formatDateTimeRu(item.completedAt)}

@@ -57,4 +57,30 @@ describe("renderClinicReconciliationPdfBuffer", () => {
     expect(text).toMatch(/Тындик Т\.В\./);
     expect(text).toMatch(/Невский Денис\s+Дмитриевич/);
   }, 30_000);
+
+  it("длинный список позиций не вставляет шапку детализации в середину сводки", async () => {
+    const many = Array.from({ length: 28 }, (_, i) => ({
+      label:
+        i === 27
+          ? "Strauman BL RC H 2.0 один"
+          : `Nobel CC 4.3 RP позиция ${i + 1} Реми`,
+      quantity: 1,
+      unitRub: 1000,
+      totalRub: 1000,
+    }));
+    const buf = await renderClinicReconciliationPdfBuffer({
+      ...payload,
+      summary: many,
+    });
+    const { text, error } = await extractPdfPlainText(buf);
+    expect(error).toBeNull();
+    const summaryHead = text.indexOf("НАИМЕНОВАНИЕ ПОЗИЦИИ");
+    const lastItem = text.indexOf("Strauman BL RC H 2.0 один");
+    const yellowClinic = text.indexOf("ОП ООО «РЕМИ»");
+    const detailHead = text.indexOf("Дата когда");
+    expect(summaryHead).toBeGreaterThanOrEqual(0);
+    expect(lastItem).toBeGreaterThan(summaryHead);
+    expect(yellowClinic).toBeGreaterThan(lastItem);
+    expect(detailHead).toBeGreaterThan(yellowClinic);
+  }, 30_000);
 });

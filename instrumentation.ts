@@ -13,6 +13,14 @@ export async function register() {
     console.error("[cron] crm-backup scheduler failed to start", e);
   }
   try {
+    const { startKanbanDeadlineReminderInProcess } = await import(
+      "@/lib/kanban-deadline-reminder-scheduler"
+    );
+    startKanbanDeadlineReminderInProcess();
+  } catch (e) {
+    console.error("[cron] kanban-deadline-reminders scheduler failed to start", e);
+  }
+  try {
     await import("@napi-rs/canvas");
   } catch {
     // на нестандартных платформах пакет может отсутствовать

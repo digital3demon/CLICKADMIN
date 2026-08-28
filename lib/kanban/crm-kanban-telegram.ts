@@ -1,9 +1,10 @@
 /**
- * CRM-канбан и Telegram: если карточка привязана к Kaiten (есть числовой kaitenCardId),
- * дубли из CRM не шлём — уведомления идут из цепочки Kaiten/наряда.
+ * Раньше CRM молчала, если у карточки был kaitenCardId (думали, что пушит Kaiten).
+ * Упоминания шли отдельно — поэтому в боте жило только «вас упомянули».
+ * Бота CRM и Kaiten не смешиваем: галочки профиля шлют события CRM всегда.
  */
 export function shouldSkipCrmKanbanTelegram(
-  kaitenCardId: number | null | undefined,
+  _kaitenCardId?: number | null,
 ): boolean {
-  return kaitenCardId != null && Number.isFinite(kaitenCardId);
+  return false;
 }
