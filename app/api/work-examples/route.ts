@@ -7,7 +7,10 @@ import {
   requireWorkExamplesCtx,
 } from "@/lib/work-examples/access.server";
 import { parseCardTypesSnapshot } from "@/lib/work-examples/composition-snapshot";
-import type { WorkExampleCompositionLine } from "@/lib/work-examples/constants";
+import {
+  parseWorkExampleTitle,
+  type WorkExampleCompositionLine,
+} from "@/lib/work-examples/constants";
 import { serializeWorkExample } from "@/lib/work-examples/serialize";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +57,7 @@ export async function POST(req: Request) {
   const row = await ctx.prisma.workExample.create({
     data: {
       tenantId: ctx.tenantId,
+      title: parseWorkExampleTitle(o.title),
       orderId: boundOrderId,
       cloudUrl: cloudUrl || null,
       technicianNotes: String(o.technicianNotes || "").slice(0, 4000),

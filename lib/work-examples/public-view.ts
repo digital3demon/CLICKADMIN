@@ -5,6 +5,7 @@ const PII_KEY =
   /^(orderNumber|patientName|doctorName|doctorId|clinicId|clinicName|surname|фамилия|deletedBy|createdBy|orderId|tenantId|cloudUrlDeleted|shareToken)$/i;
 
 export type PublicWorkExampleView = {
+  title: string;
   cardTypes: Array<{ id: string; name: string }>;
   composition: WorkExampleCompositionLine[];
   cloudUrl: string | null;
@@ -40,6 +41,7 @@ export function buildPublicWorkExampleView(input: {
       ? null
       : String(input.cloudUrl).trim();
   return {
+    title: String(input.title ?? "").replace(/\s+/g, " ").trim().slice(0, 160),
     cardTypes: parseCardTypesSnapshot(input.cardTypes),
     composition: parseCompositionSnapshot(input.compositionSnapshot),
     cloudUrl,

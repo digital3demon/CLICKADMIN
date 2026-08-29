@@ -19,6 +19,7 @@ export async function ensureWorkExampleTables(prisma: PrismaClient): Promise<voi
         "id" TEXT NOT NULL PRIMARY KEY,
         "tenantId" TEXT NOT NULL,
         "orderId" TEXT,
+        "title" TEXT NOT NULL DEFAULT '',
         "cloudUrl" TEXT,
         "cloudUrlPrevious" TEXT,
         "cloudUrlDeletedAt" DATETIME,
@@ -66,5 +67,32 @@ export async function ensureWorkExampleTables(prisma: PrismaClient): Promise<voi
     );
   }
 
+  const cols = (await prisma.$queryRawUnsafe(
+    `PRAGMA table_info("WorkExample")`,
+  )) as Array<{ name?: string }>;
+  const colNames = new Set((Array.isArray(cols) ? cols : []).map((c) => String(c.name || "")));
+  if (colNames.size > 0 && !colNames.has("title")) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "WorkExample" ADD COLUMN "title" TEXT NOT NULL DEFAULT ''`,
+    );
+  }
+
   checked.set(prisma, true);
+}
+
+/** Postgres без migrate: колонка названия примера. */
+export async function ensureWorkExampleTitleColumn(prisma: PrismaClient): Promise<void> {
+  try {
+    await prisma.$queryRawUnsafe("SELECT sqlite_version()");
+    return;
+  } catch {
+    /* postgres */
+  }
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "WorkExample" ADD COLUMN IF NOT EXISTS "title" TEXT NOT NULL DEFAULT ''`,
+    );
+  } catch {
+    /* таблицы ещё нет */
+  }
 }

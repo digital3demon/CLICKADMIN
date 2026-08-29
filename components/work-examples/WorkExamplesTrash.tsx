@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { WorkExampleItem } from "@/components/work-examples/types";
+import {
+  workExampleDisplayTitle,
+  type WorkExampleItem,
+} from "@/components/work-examples/types";
 
 type TrashFile = {
   exampleId: string;
@@ -49,7 +52,7 @@ export function WorkExamplesTrash() {
               className="flex items-center justify-between rounded-lg border border-[var(--card-border)] px-3 py-2 text-sm"
             >
               <span>
-                {ex.deletedCaption || ex.orderNumber || "не распределен"}
+                {ex.deletedCaption || workExampleDisplayTitle(ex)}
               </span>
               <button
                 type="button"

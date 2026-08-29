@@ -5,6 +5,7 @@ import {
   requireWorkExamplesCtx,
 } from "@/lib/work-examples/access.server";
 import { parseCardTypesSnapshot } from "@/lib/work-examples/composition-snapshot";
+import { parseWorkExampleTitle } from "@/lib/work-examples/constants";
 import { canDeleteWorkExampleWhole } from "@/lib/work-examples/permissions";
 import { serializeWorkExample } from "@/lib/work-examples/serialize";
 
@@ -48,6 +49,7 @@ export async function PATCH(req: Request, ctxP: Ctx) {
     : {};
 
   const data: Record<string, unknown> = {};
+  if (o.title !== undefined) data.title = parseWorkExampleTitle(o.title);
   if (typeof o.technicianNotes === "string") {
     data.technicianNotes = o.technicianNotes.slice(0, 4000);
   }

@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { WorkExampleDropZone } from "@/components/work-examples/WorkExampleDropZone";
 import type { WorkExampleCardType, WorkExampleItem } from "@/components/work-examples/types";
+import { WORK_EXAMPLE_TITLE_MAX } from "@/lib/work-examples/constants";
 
 type OrderHit = {
   id: string;
   orderNumber: string;
   patientName: string | null;
   doctorName: string;
+  clinicName?: string;
 };
 
 export function WorkExampleEditorModal({
@@ -21,8 +23,11 @@ export function WorkExampleEditorModal({
   onSaved: (next: WorkExampleItem) => void;
 }) {
   const isEdit = Boolean(item);
+  const [title, setTitle] = useState(item?.title ?? "");
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<OrderHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
   const [orderId, setOrderId] = useState(item?.orderId ?? "");
   const [orderLabel, setOrderLabel] = useState(
     item?.orderNumber || (item && !item.orderId ? "не распределен" : ""),
@@ -45,19 +50,46 @@ export function WorkExampleEditorModal({
   }, []);
 
   useEffect(() => {
-    if (q.trim().length < 2) {
+    const needle = q.trim();
+    if (needle.length < 2) {
       setHits([]);
+      setSearching(false);
+      setSearchErr(null);
       return;
     }
+    const ac = new AbortController();
     const t = window.setTimeout(() => {
-      void fetch(`/api/work-examples/order-search?q=${encodeURIComponent(q)}`, {
-        credentials: "include",
-      })
-        .then((r) => r.json())
-        .then((j: { items?: OrderHit[] }) => setHits(j.items ?? []))
-        .catch(() => setHits([]));
-    }, 250);
-    return () => window.clearTimeout(t);
+      void (async () => {
+        setSearching(true);
+        setSearchErr(null);
+        try {
+          const r = await fetch(
+            `/api/work-examples/order-search?q=${encodeURIComponent(needle)}`,
+            { credentials: "include", signal: ac.signal },
+          );
+          const j = (await r.json().catch(() => ({}))) as {
+            items?: OrderHit[];
+            error?: string;
+          };
+          if (!r.ok) {
+            setSearchErr(j.error || "Не удалось найти наряды");
+            setHits([]);
+            return;
+          }
+          setHits(Array.isArray(j.items) ? j.items : []);
+        } catch (e) {
+          if (ac.signal.aborted) return;
+          setSearchErr("Сеть недоступна");
+          setHits([]);
+        } finally {
+          if (!ac.signal.aborted) setSearching(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      ac.abort();
+      window.clearTimeout(t);
+    };
   }, [q]);
 
   const pickOrder = async (hit: OrderHit | null) => {
@@ -83,6 +115,7 @@ export function WorkExampleEditorModal({
 
   const persistMeta = async (): Promise<WorkExampleItem | null> => {
     const body = {
+      title,
       orderId: orderId || null,
       cardTypes,
       cloudUrl,
@@ -109,10 +142,6 @@ export function WorkExampleEditorModal({
     try {
       let current = item;
       if (!current) {
-        if (!window.confirm("Сначала сохранить пример и загрузить файлы?")) {
-          setBusy(false);
-          return;
-        }
         current = await persistMeta();
         if (!current) {
           setBusy(false);
@@ -164,11 +193,23 @@ export function WorkExampleEditorModal({
       }}
     >
       <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl">
-        <header className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
-          <h2 className="text-base font-semibold text-[var(--text-strong)]">
-            {isEdit ? "Изменить пример" : "Новый пример работы"}
-          </h2>
-          <button type="button" className="text-sm text-[var(--text-muted)]" onClick={onClose}>
+        <header className="flex items-center gap-3 border-b border-[var(--card-border)] px-4 py-3">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">Название примера работы</span>
+            <input
+              className="w-full bg-transparent text-base font-semibold text-[var(--text-strong)] outline-none placeholder:font-medium placeholder:text-[var(--text-muted)]"
+              placeholder="Название примера работы"
+              value={title}
+              maxLength={WORK_EXAMPLE_TITLE_MAX}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus={!isEdit}
+            />
+          </label>
+          <button
+            type="button"
+            className="shrink-0 text-sm text-[var(--text-muted)] hover:text-[var(--text-strong)]"
+            onClick={onClose}
+          >
             Закрыть
           </button>
         </header>
@@ -179,10 +220,13 @@ export function WorkExampleEditorModal({
                 Выберите работу
               </label>
               <input
-                className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm"
-                placeholder="Поиск наряда…"
+                type="search"
+                className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
+                placeholder="Наряд, врач, клиника, пациент…"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                autoComplete="off"
+                enterKeyHint="search"
               />
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 Сейчас: {orderLabel || "не распределен"}
@@ -196,6 +240,17 @@ export function WorkExampleEditorModal({
                   </button>
                 ) : null}
               </p>
+              {searchErr ? (
+                <p className="mt-1 text-sm text-red-600" role="alert">
+                  {searchErr}
+                </p>
+              ) : null}
+              {searching && q.trim().length >= 2 ? (
+                <p className="mt-1 text-xs text-[var(--text-muted)]">Поиск…</p>
+              ) : null}
+              {!searching && q.trim().length >= 2 && hits.length === 0 && !searchErr ? (
+                <p className="mt-1 text-xs text-[var(--text-muted)]">Ничего не найдено</p>
+              ) : null}
               {hits.length > 0 ? (
                 <ul className="mt-1 max-h-40 overflow-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] text-sm">
                   {hits.map((h) => (
@@ -208,6 +263,7 @@ export function WorkExampleEditorModal({
                         <span className="font-mono font-semibold">{h.orderNumber}</span>
                         {h.patientName ? ` · ${h.patientName}` : ""}
                         {h.doctorName ? ` · ${h.doctorName}` : ""}
+                        {h.clinicName ? ` · ${h.clinicName}` : ""}
                       </button>
                     </li>
                   ))}

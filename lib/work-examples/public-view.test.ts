@@ -7,6 +7,7 @@ import {
 describe("buildPublicWorkExampleView", () => {
   it("не отдаёт номер наряда и фамилии, прячет удалённые файлы и ссылку", () => {
     const view = buildPublicWorkExampleView({
+      title: "Сплинт Малинина верх",
       cardTypes: [{ id: "t1", name: "Сплинт" }],
       compositionSnapshot: [
         { name: "Сплинт Малинина", quantity: 1, unitPriceRub: 5000 },
@@ -34,10 +35,13 @@ describe("buildPublicWorkExampleView", () => {
         },
       ],
     });
+    expect(view.title).toBe("Сплинт Малинина верх");
     expect(view.cloudUrl).toBeNull();
     expect(view.files.map((f) => f.id)).toEqual(["f1"]);
     expect(view.files[0]?.fileName).toContain("малинина");
     expect(publicWorkExampleViewHasPii(view)).toBe(false);
-    expect(JSON.stringify(view)).not.toMatch(/orderNumber|patientName|doctorName|clinicId|deletedBy/);
+    expect(JSON.stringify(view)).not.toMatch(
+      /orderNumber|patientName|doctorName|clinicId|deletedBy/,
+    );
   });
 });

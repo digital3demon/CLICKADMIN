@@ -8,6 +8,12 @@ export const WORK_EXAMPLE_MAX_FILES_PER_UPLOAD = 40;
 export const WORK_EXAMPLE_FILE_KINDS = ["PHOTO", "CAD", "FILE"] as const;
 export type WorkExampleFileKindValue = (typeof WORK_EXAMPLE_FILE_KINDS)[number];
 
+export const WORK_EXAMPLE_TITLE_MAX = 160;
+
+export function parseWorkExampleTitle(raw: unknown): string {
+  return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, WORK_EXAMPLE_TITLE_MAX);
+}
+
 export type WorkExampleCardTypeSnap = { id: string; name: string };
 
 export type WorkExampleCompositionLine = {

@@ -16,8 +16,20 @@ export type WorkExampleFileLive = {
   sortOrder: number;
 };
 
+export function workExampleDisplayTitle(it: {
+  title?: string | null;
+  unassigned?: boolean;
+  orderNumber?: string | null;
+}): string {
+  const title = (it.title ?? "").trim();
+  if (title) return title;
+  if (it.orderNumber?.trim()) return it.orderNumber.trim();
+  return "не распределен";
+}
+
 export type WorkExampleItem = {
   id: string;
+  title: string;
   orderId: string | null;
   orderNumber: string | null;
   unassigned: boolean;

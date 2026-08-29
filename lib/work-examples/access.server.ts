@@ -115,6 +115,7 @@ export async function purgeExpiredWorkExampleTrash(
 
 export const exampleSelect = {
   id: true,
+  title: true,
   orderId: true,
   cloudUrl: true,
   cloudUrlPrevious: true,

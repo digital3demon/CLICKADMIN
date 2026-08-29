@@ -21,6 +21,7 @@ export async function GET(_req: Request, ctxP: Ctx) {
   const row = await db.workExample.findFirst({
     where: { tenantId: tenant.id, shareToken: tok, deletedAt: null },
     select: {
+      title: true,
       cardTypes: true,
       compositionSnapshot: true,
       cloudUrl: true,

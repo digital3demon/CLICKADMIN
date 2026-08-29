@@ -16,6 +16,7 @@ export type WorkExampleFileRow = {
 
 export type WorkExampleRow = {
   id: string;
+  title?: string | null;
   orderId: string | null;
   cloudUrl: string | null;
   cloudUrlPrevious: string | null;
@@ -45,6 +46,7 @@ export function serializeWorkExample(
   const cloudDeleted = isWorkExampleTrashActive(row.cloudUrlDeletedAt, now);
   return {
     id: row.id,
+    title: String(row.title ?? "").trim(),
     orderId: opts.includeInternal ? row.orderId : null,
     orderNumber: opts.includeInternal ? row.order?.orderNumber ?? null : null,
     unassigned: !row.orderId,

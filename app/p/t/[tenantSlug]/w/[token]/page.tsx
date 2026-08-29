@@ -26,6 +26,7 @@ export default async function PublicWorkExamplePage({
   const row = await db.workExample.findFirst({
     where: { tenantId: tenant.id, shareToken: tok, deletedAt: null },
     select: {
+      title: true,
       cardTypes: true,
       compositionSnapshot: true,
       cloudUrl: true,

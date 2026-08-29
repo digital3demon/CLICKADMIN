@@ -2660,6 +2660,8 @@ model WorkExample {
   tenant                   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderId                  String?
   order                    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  /// Своё имя примера (шапка модалки). Пустое — на плитке номер наряда.
+  title                    String    @default("")
   cloudUrl                 String?
   cloudUrlPrevious         String?
   cloudUrlDeletedAt        DateTime?

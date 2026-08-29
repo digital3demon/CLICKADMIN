@@ -1,0 +1,1 @@
+ALTER TABLE "WorkExample" ADD COLUMN "title" TEXT NOT NULL DEFAULT '';

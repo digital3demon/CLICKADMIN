@@ -1,49 +1,42 @@
 import { NextResponse } from "next/server";
-import { textMatchesOrderSearch } from "@/lib/order-search-query";
+import { fetchOrdersListPage } from "@/lib/fetch-orders-list-page";
+import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { normalizeOrdersSearchQuery } from "@/lib/orders-list-query";
 import { requireWorkExamplesCtx } from "@/lib/work-examples/access.server";
 
 export const dynamic = "force-dynamic";
 
-/** GET ?q= — номер / пациент / врач. Границы не \\b (кириллица). */
+/**
+ * GET ?q= — тот же поиск, что список заказов / «добавить в наряд»:
+ * номер YYMM-NNN, пациент, врач, клиника. Не \\b (кириллица).
+ */
 export async function GET(req: Request) {
   const ctx = await requireWorkExamplesCtx();
   if (!ctx.ok) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
-  const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
-  if (!q) return NextResponse.json({ items: [] });
+  const q = normalizeOrdersSearchQuery(new URL(req.url).searchParams.get("q"));
+  if (q.length < 2) return NextResponse.json({ items: [] });
 
-  const rows = await ctx.prisma.order.findMany({
-    where: { tenantId: ctx.tenantId, archivedAt: null },
-    select: {
-      id: true,
-      orderNumber: true,
-      patientName: true,
-      doctorId: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 80,
+  const prisma = await getOrdersPrisma();
+  const page = await fetchOrdersListPage(prisma, {
+    tenantId: ctx.tenantId,
+    cursor: null,
+    pageSize: 20,
+    search: q,
+    ordersListForUserId: ctx.session.sub,
+    viewerRole: ctx.session.role,
+    viewerUserId: ctx.session.sub,
   });
-  const doctorIds = [...new Set(rows.map((r) => r.doctorId).filter(Boolean))];
-  const doctors = doctorIds.length
-    ? await ctx.prisma.doctor.findMany({
-        where: { id: { in: doctorIds }, tenantId: ctx.tenantId },
-        select: { id: true, fullName: true },
-      })
-    : [];
-  const doctorName = new Map(doctors.map((d) => [d.id, d.fullName]));
-  const items = rows
-    .filter((r) =>
-      textMatchesOrderSearch(
-        [r.orderNumber, r.patientName, doctorName.get(r.doctorId) ?? ""].join(" "),
-        q,
-      ),
-    )
-    .slice(0, 20)
-    .map((r) => ({
-      id: r.id,
-      orderNumber: r.orderNumber,
-      patientName: r.patientName,
-      doctorName: doctorName.get(r.doctorId) ?? "",
-    }));
-  return NextResponse.json({ items });
+
+  return NextResponse.json(
+    {
+      items: page.orders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        patientName: o.patientName,
+        doctorName: o.doctor.fullName,
+        clinicName: o.clinic?.name ?? "",
+      })),
+    },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }

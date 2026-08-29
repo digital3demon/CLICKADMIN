@@ -5,10 +5,13 @@ import {
   ImageLightbox,
   type ImageLightboxState,
 } from "@/components/ui/ImageLightbox";
+import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import type { WorkExampleCompositionLine } from "@/components/work-examples/types";
+import { isWorkExampleViewableMesh } from "@/lib/work-examples/mesh-file";
 
 export type PublicShowcaseData = {
   labName: string;
+  title?: string;
   cardTypes: Array<{ id: string; name: string }>;
   composition: WorkExampleCompositionLine[];
   cloudUrl: string | null;
@@ -57,8 +60,11 @@ export function PublicWorkExampleShowcase({
           Портфолио лаборатории
         </p>
         <h1 className="mt-2 font-serif text-3xl tracking-tight sm:text-4xl">
-          {data.labName}
+          {data.title?.trim() || data.labName}
         </h1>
+        {data.title?.trim() ? (
+          <p className="mt-1 text-sm text-zinc-500">{data.labName}</p>
+        ) : null}
         {data.cardTypes.length ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {data.cardTypes.map((t) => (
@@ -104,6 +110,17 @@ export function PublicWorkExampleShowcase({
               открыть папку
             </a>
           </p>
+        ) : null}
+
+        {meshFiles.length ? (
+          <div className="mt-8">
+            <WorkExampleMeshViewer
+              meshes={meshFiles.map((f) => ({
+                url: fileHref(f.id),
+                fileName: f.fileName,
+              }))}
+            />
+          </div>
         ) : null}
 
         {other.length ? (

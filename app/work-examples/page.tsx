@@ -1,5 +1,4 @@
 import nextDynamic from "next/dynamic";
-import { ModuleFrame } from "@/components/layout/ModuleFrame";
 
 export const dynamic = "force-dynamic";
 
@@ -10,18 +9,13 @@ const WorkExamplesApp = nextDynamic(
     })),
   {
     loading: () => (
-      <p className="text-sm text-[var(--text-muted)]">Загрузка примеров работ…</p>
+      <p className="px-3 pt-6 text-sm text-[var(--text-muted)] sm:px-6 sm:pt-8">
+        Загрузка примеров работ…
+      </p>
     ),
   },
 );
 
 export default function WorkExamplesPage() {
-  return (
-    <ModuleFrame
-      title="Примеры работ"
-      description="Портфолио лаборатории: фото, КАД, файлы и ссылка. По QR — витрина без номера наряда и фамилий."
-    >
-      <WorkExamplesApp />
-    </ModuleFrame>
-  );
+  return <WorkExamplesApp />;
 }

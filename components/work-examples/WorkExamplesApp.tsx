@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import {
   ImageLightbox,
   type ImageLightboxState,
 } from "@/components/ui/ImageLightbox";
 import { WorkExampleEditorModal } from "@/components/work-examples/WorkExampleEditorModal";
-import type { WorkExampleItem } from "@/components/work-examples/types";
+import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
+import {
+  workExampleDisplayTitle,
+  type WorkExampleItem,
+} from "@/components/work-examples/types";
+import { isWorkExampleViewableMesh } from "@/lib/work-examples/mesh-file";
 
 function fileUrl(exampleId: string, fileId: string) {
   return `/api/work-examples/${encodeURIComponent(exampleId)}/files/${encodeURIComponent(fileId)}`;
@@ -115,22 +121,28 @@ export function WorkExamplesApp() {
   };
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <Link
-          href="/work-examples/trash"
-          className="text-sm text-[var(--sidebar-blue)] hover:underline"
-        >
-          Корзина
-        </Link>
+    <ModuleFrame
+      title="Примеры работ"
+      description="Портфолио лаборатории: фото, КАД, файлы и ссылка. По QR — витрина без номера наряда и фамилий."
+      titleBesideEnd={
         <button
           type="button"
-          className="rounded-lg bg-[var(--sidebar-blue)] px-3 py-1.5 text-sm font-semibold text-white"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-lg bg-[var(--sidebar-blue)] text-lg font-semibold leading-none text-white hover:bg-[var(--sidebar-blue-hover)]"
+          aria-label="Добавить пример работы"
           onClick={() => setEditor("new")}
         >
           +
         </button>
-      </div>
+      }
+      titleRowEnd={
+        <Link
+          href="/work-examples/trash"
+          className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
+        >
+          Корзина
+        </Link>
+      }
+    >
       {err ? <p className="mb-3 text-sm text-red-600">{err}</p> : null}
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {items.map((it) => {
@@ -198,7 +210,7 @@ export function WorkExamplesApp() {
             <header className="flex items-center justify-between gap-2 border-b border-[var(--card-border)] px-4 py-3">
               <div>
                 <p className="font-semibold">
-                  {view.unassigned ? "не распределен" : view.orderNumber}
+                  {workExampleDisplayTitle(view)}
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
                   {view.cardTypes.map((t) => t.name).join(" · ")}
@@ -270,6 +282,17 @@ export function WorkExamplesApp() {
                     </div>
                   ))}
               </div>
+              {view.files.some((f) => isWorkExampleViewableMesh(f.fileName)) ? (
+                <WorkExampleMeshViewer
+                  className="rounded-xl border border-[var(--card-border)]"
+                  meshes={view.files
+                    .filter((f) => isWorkExampleViewableMesh(f.fileName))
+                    .map((f) => ({
+                      url: fileUrl(view.id, f.id),
+                      fileName: f.fileName,
+                    }))}
+                />
+              ) : null}
               <ul className="space-y-1">
                 {view.files
                   .filter((f) => f.kind !== "PHOTO")
@@ -381,6 +404,6 @@ export function WorkExamplesApp() {
           onIndexChange={(index) => setLightbox((s) => (s ? { ...s, index } : s))}
         />
       ) : null}
-    </div>
+    </ModuleFrame>
   );
 }
