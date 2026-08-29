@@ -21,6 +21,7 @@ export type PublicWorkExampleView = {
 };
 
 export function buildPublicWorkExampleView(input: {
+  title?: string | null;
   cardTypes: unknown;
   compositionSnapshot: unknown;
   cloudUrl: string | null | undefined;
