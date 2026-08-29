@@ -350,7 +350,7 @@ export function WorkExampleEditorModal({
           {openKind === "CAD" ? (
             <WorkExampleDropZone
               label="Загрузить проект КАД"
-              accept=".stl,.ply,.obj,.3mf,.zip,.drc"
+              accept=".stl,.ply,.obj,.html,.htm,.3mf,.zip,.drc"
               onFiles={(files) => void upload("CAD", files)}
             />
           ) : null}

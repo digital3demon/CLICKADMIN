@@ -8,12 +8,16 @@ import {
   type ImageLightboxState,
 } from "@/components/ui/ImageLightbox";
 import { WorkExampleEditorModal } from "@/components/work-examples/WorkExampleEditorModal";
+import { WorkExampleHtmlViewer } from "@/components/work-examples/WorkExampleHtmlViewer";
 import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import {
   workExampleDisplayTitle,
   type WorkExampleItem,
 } from "@/components/work-examples/types";
-import { isWorkExampleViewableMesh } from "@/lib/work-examples/mesh-file";
+import {
+  isWorkExampleViewableHtml,
+  isWorkExampleViewableMesh,
+} from "@/lib/work-examples/mesh-file";
 
 function fileUrl(exampleId: string, fileId: string) {
   return `/api/work-examples/${encodeURIComponent(exampleId)}/files/${encodeURIComponent(fileId)}`;
@@ -293,6 +297,16 @@ export function WorkExamplesApp() {
                     }))}
                 />
               ) : null}
+              {view.files
+                .filter((f) => isWorkExampleViewableHtml(f.fileName))
+                .map((f) => (
+                  <WorkExampleHtmlViewer
+                    key={f.id}
+                    className="rounded-xl border-[var(--card-border)]"
+                    url={fileUrl(view.id, f.id)}
+                    fileName={f.fileName}
+                  />
+                ))}
               <ul className="space-y-1">
                 {view.files
                   .filter((f) => f.kind !== "PHOTO")

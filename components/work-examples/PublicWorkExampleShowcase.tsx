@@ -5,9 +5,13 @@ import {
   ImageLightbox,
   type ImageLightboxState,
 } from "@/components/ui/ImageLightbox";
+import { WorkExampleHtmlViewer } from "@/components/work-examples/WorkExampleHtmlViewer";
 import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import type { WorkExampleCompositionLine } from "@/components/work-examples/types";
-import { isWorkExampleViewableMesh } from "@/lib/work-examples/mesh-file";
+import {
+  isWorkExampleViewableHtml,
+  isWorkExampleViewableMesh,
+} from "@/lib/work-examples/mesh-file";
 
 export type PublicShowcaseData = {
   labName: string;
@@ -46,7 +50,14 @@ export function PublicWorkExampleShowcase({
   const fileHref = (id: string) =>
     `/api/public/work-examples/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(token)}/files/${encodeURIComponent(id)}`;
   const photos = data.files.filter((f) => f.kind === "PHOTO");
-  const other = data.files.filter((f) => f.kind !== "PHOTO");
+  const meshFiles = data.files.filter((f) => isWorkExampleViewableMesh(f.fileName));
+  const htmlFiles = data.files.filter((f) => isWorkExampleViewableHtml(f.fileName));
+  const other = data.files.filter(
+    (f) =>
+      f.kind !== "PHOTO" &&
+      !isWorkExampleViewableMesh(f.fileName) &&
+      !isWorkExampleViewableHtml(f.fileName),
+  );
   const [lightbox, setLightbox] = useState<ImageLightboxState | null>(null);
   const total = useMemo(
     () => data.composition.reduce((s, l) => s + l.lineTotalRub, 0),
@@ -120,6 +131,18 @@ export function PublicWorkExampleShowcase({
                 fileName: f.fileName,
               }))}
             />
+          </div>
+        ) : null}
+
+        {htmlFiles.length ? (
+          <div className="mt-8 space-y-4">
+            {htmlFiles.map((f) => (
+              <WorkExampleHtmlViewer
+                key={f.id}
+                url={fileHref(f.id)}
+                fileName={f.fileName}
+              />
+            ))}
           </div>
         ) : null}
 

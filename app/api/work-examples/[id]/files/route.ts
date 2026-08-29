@@ -28,7 +28,7 @@ function guessKind(file: File, forced: WorkExampleFileKindValue): WorkExampleFil
   if (mime.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name)) {
     return "PHOTO";
   }
-  if (/\.(stl|ply|obj|3mf|drc|dcm)$/i.test(name)) return "CAD";
+  if (/\.(stl|ply|obj|3mf|drc|dcm|html?)$/i.test(name)) return "CAD";
   return "FILE";
 }
 

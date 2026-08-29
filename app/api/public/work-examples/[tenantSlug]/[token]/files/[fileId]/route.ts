@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
+import { workExampleFileContentType } from "@/lib/work-examples/mesh-file";
 import { readWorkExampleFileBytes } from "@/lib/work-examples/storage";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function GET(_req: Request, ctxP: Ctx) {
   if (!bytes) return NextResponse.json({ error: "not found" }, { status: 404 });
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
-      "Content-Type": file.mime || "application/octet-stream",
+      "Content-Type": workExampleFileContentType(file.fileName, file.mime),
       "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
       "Cache-Control": "public, max-age=300",
     },
