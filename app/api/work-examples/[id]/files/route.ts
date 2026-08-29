@@ -8,6 +8,10 @@ import {
   WORK_EXAMPLE_MAX_FILES_PER_UPLOAD,
   type WorkExampleFileKindValue,
 } from "@/lib/work-examples/constants";
+import {
+  guessWorkExampleAttachKind,
+  isWorkExampleFormFile,
+} from "@/lib/work-examples/guess-attach-kind";
 import { serializeWorkExample } from "@/lib/work-examples/serialize";
 import { newWorkExampleFileId, writeWorkExampleFile } from "@/lib/work-examples/storage";
 
@@ -23,13 +27,7 @@ function parseKind(raw: string | null): WorkExampleFileKindValue {
 
 function guessKind(file: File, forced: WorkExampleFileKindValue): WorkExampleFileKindValue {
   if (forced !== "FILE") return forced;
-  const mime = (file.type || "").toLowerCase();
-  const name = (file.name || "").toLowerCase();
-  if (mime.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(name)) {
-    return "PHOTO";
-  }
-  if (/\.(stl|ply|obj|3mf|drc|dcm|html?)$/i.test(name)) return "CAD";
-  return "FILE";
+  return guessWorkExampleAttachKind(file);
 }
 
 /** POST multipart: files[], kind. Лимит 25 МБ, пачка до 40. SQLITE_BUSY — Prisma retry. */
@@ -50,7 +48,7 @@ export async function POST(req: Request, ctxP: Ctx) {
     return NextResponse.json({ error: "Не удалось прочитать файлы" }, { status: 400 });
   }
   const forced = parseKind(typeof form.get("kind") === "string" ? String(form.get("kind")) : null);
-  const incoming = form.getAll("files").filter((x): x is File => x instanceof File);
+  const incoming = form.getAll("files").filter(isWorkExampleFormFile);
   if (!incoming.length) {
     return NextResponse.json({ error: "Нет файлов" }, { status: 400 });
   }
@@ -60,6 +58,7 @@ export async function POST(req: Request, ctxP: Ctx) {
       { status: 400 },
     );
   }
+  const started = Date.now();
   let sort = example.files.reduce((m, f) => Math.max(m, f.sortOrder), -1) + 1;
   for (const file of incoming) {
     if (file.size > WORK_EXAMPLE_MAX_FILE_BYTES) {
@@ -95,6 +94,14 @@ export async function POST(req: Request, ctxP: Ctx) {
     where: { id: example.id },
     select: exampleSelect,
   });
+  console.info(
+    JSON.stringify({
+      evt: "work_example_files_upload",
+      exampleId: example.id,
+      n: incoming.length,
+      ms: Date.now() - started,
+    }),
+  );
   return NextResponse.json({
     item: serializeWorkExample(row, { includeInternal: true }),
   });

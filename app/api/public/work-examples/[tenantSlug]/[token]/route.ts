@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 import { buildPublicWorkExampleView } from "@/lib/work-examples/public-view";
+import { loadWorkExampleShowcaseBrand } from "@/lib/work-examples/showcase-brand.server";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +43,13 @@ export async function GET(_req: Request, ctxP: Ctx) {
   });
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   const view = buildPublicWorkExampleView(row);
+  const brand = await loadWorkExampleShowcaseBrand(db, tenant.id, tenant.name);
   return NextResponse.json({
-    labName: tenant.name || "Лаборатория",
+    labName: brand.labName,
+    logoUrl:
+      brand.logoRelPath && brand.logoMime
+        ? `/api/public/work-examples/${encodeURIComponent(slug)}/${encodeURIComponent(tok)}/logo`
+        : null,
     ...view,
   });
 }

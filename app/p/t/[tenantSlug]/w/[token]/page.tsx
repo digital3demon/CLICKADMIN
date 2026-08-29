@@ -3,6 +3,7 @@ import { PublicWorkExampleShowcase } from "@/components/work-examples/PublicWork
 import { prisma } from "@/lib/prisma";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 import { buildPublicWorkExampleView } from "@/lib/work-examples/public-view";
+import { loadWorkExampleShowcaseBrand } from "@/lib/work-examples/showcase-brand.server";
 
 export const dynamic = "force-dynamic";
 
@@ -48,11 +49,16 @@ export default async function PublicWorkExamplePage({
   if (!row) notFound();
 
   const view = buildPublicWorkExampleView(row);
+  const brand = await loadWorkExampleShowcaseBrand(db, tenant.id, tenant.name);
+  const logoUrl =
+    brand.logoRelPath && brand.logoMime
+      ? `/api/public/work-examples/${encodeURIComponent(slug)}/${encodeURIComponent(tok)}/logo`
+      : null;
   return (
     <PublicWorkExampleShowcase
       tenantSlug={slug}
       token={tok}
-      data={{ labName: tenant.name || "Лаборатория", ...view }}
+      data={{ labName: brand.labName, logoUrl, ...view }}
     />
   );
 }

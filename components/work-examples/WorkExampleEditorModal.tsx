@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { WorkExampleDropZone } from "@/components/work-examples/WorkExampleDropZone";
+import { useEffect, useRef, useState } from "react";
 import type { WorkExampleCardType, WorkExampleItem } from "@/components/work-examples/types";
 import { WORK_EXAMPLE_TITLE_MAX } from "@/lib/work-examples/constants";
+import { guessWorkExampleAttachKind } from "@/lib/work-examples/guess-attach-kind";
 
 type OrderHit = {
   id: string;
@@ -13,14 +13,28 @@ type OrderHit = {
   clinicName?: string;
 };
 
+type AttachKind = "PHOTO" | "CAD" | "FILE";
+
+type PendingFile = {
+  localId: string;
+  kind: AttachKind;
+  file: File;
+};
+
 export function WorkExampleEditorModal({
   item,
+  canDeleteWhole,
   onClose,
   onSaved,
+  onShare,
+  onDeleteWhole,
 }: {
   item: WorkExampleItem | null;
+  canDeleteWhole?: boolean;
   onClose: () => void;
   onSaved: (next: WorkExampleItem) => void;
+  onShare?: (id: string) => void;
+  onDeleteWhole?: (id: string) => void;
 }) {
   const isEdit = Boolean(item);
   const [title, setTitle] = useState(item?.title ?? "");
@@ -38,9 +52,26 @@ export function WorkExampleEditorModal({
   const [cloudUrl, setCloudUrl] = useState(item?.cloudUrl ?? "");
   const [tech, setTech] = useState(item?.technicianNotes ?? "");
   const [doc, setDoc] = useState(item?.doctorComments ?? "");
-  const [openKind, setOpenKind] = useState<"PHOTO" | "CAD" | "FILE" | null>(null);
+  const [pending, setPending] = useState<PendingFile[]>([]);
+  const [savedFiles, setSavedFiles] = useState(item?.files ?? []);
+  const [savedId, setSavedId] = useState(item?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const cadInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const queueFiles = (files: File[], forced?: AttachKind) => {
+    if (!files.length) return;
+    setPending((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        localId: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+        kind: forced ?? guessWorkExampleAttachKind(file),
+        file,
+      })),
+    ]);
+  };
 
   useEffect(() => {
     void fetch("/api/work-examples/card-types", { credentials: "include" })
@@ -122,8 +153,9 @@ export function WorkExampleEditorModal({
       technicianNotes: tech,
       doctorComments: doc,
     };
-    const r = await fetch(item ? `/api/work-examples/${item.id}` : "/api/work-examples", {
-      method: item ? "PATCH" : "POST",
+    const id = savedId || item?.id || "";
+    const r = await fetch(id ? `/api/work-examples/${id}` : "/api/work-examples", {
+      method: id ? "PATCH" : "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -133,50 +165,73 @@ export function WorkExampleEditorModal({
       setErr(j.error || "Не удалось сохранить");
       return null;
     }
+    setSavedId(j.item.id);
     return j.item;
   };
 
-  const upload = async (kind: "PHOTO" | "CAD" | "FILE", files: File[]) => {
-    setBusy(true);
-    setErr(null);
-    try {
-      let current = item;
-      if (!current) {
-        current = await persistMeta();
-        if (!current) {
-          setBusy(false);
-          return;
-        }
-        onSaved(current);
-      }
+  const uploadPending = async (exampleId: string): Promise<WorkExampleItem | null> => {
+    let latest: WorkExampleItem | null = null;
+    for (const kind of ["PHOTO", "CAD", "FILE"] as const) {
+      const batch = pending.filter((p) => p.kind === kind);
+      if (!batch.length) continue;
       const fd = new FormData();
       fd.set("kind", kind);
-      for (const f of files) fd.append("files", f);
-      const r = await fetch(`/api/work-examples/${current.id}/files`, {
+      for (const p of batch) fd.append("files", p.file);
+      const r = await fetch(`/api/work-examples/${exampleId}/files`, {
         method: "POST",
         credentials: "include",
         body: fd,
       });
       const j = (await r.json()) as { item?: WorkExampleItem; error?: string };
       if (!r.ok || !j.item) {
-        setErr(j.error || "Не удалось загрузить");
+        setErr(j.error || "Не удалось загрузить файлы");
+        return latest;
+      }
+      latest = j.item;
+    }
+    return latest;
+  };
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const next = await persistMeta();
+      if (!next) return;
+      const withFiles = pending.length ? await uploadPending(next.id) : next;
+      if (pending.length && !withFiles) {
+        onSaved(next);
         return;
       }
-      onSaved(j.item);
+      const saved = withFiles ?? next;
+      setPending([]);
+      setSavedFiles(saved.files);
+      onSaved(saved);
+      onClose();
     } finally {
       setBusy(false);
     }
   };
 
-  const save = async () => {
-    if (!window.confirm("Сохранить изменения в примере работы?")) return;
+  const removeSavedFile = async (fileId: string) => {
+    const id = savedId || item?.id;
+    if (!id) return;
     setBusy(true);
     setErr(null);
     try {
-      const next = await persistMeta();
-      if (next) {
-        onSaved(next);
-        onClose();
+      const r = await fetch(`/api/work-examples/${id}/files/${fileId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!r.ok) {
+        setErr("Не удалось удалить файл");
+        return;
+      }
+      const g = await fetch(`/api/work-examples/${id}`, { credentials: "include" });
+      const j = (await g.json()) as { item?: WorkExampleItem };
+      if (j.item) {
+        setSavedFiles(j.item.files);
+        onSaved(j.item);
       }
     } finally {
       setBusy(false);
@@ -191,14 +246,48 @@ export function WorkExampleEditorModal({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        queueFiles(Array.from(e.dataTransfer.files));
+      }}
     >
-      <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl">
+      <div
+        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-2xl"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          queueFiles(Array.from(e.dataTransfer.files));
+        }}
+        onPaste={(e) => {
+          const files: File[] = [];
+          for (const item of Array.from(e.clipboardData.items)) {
+            if (item.kind === "file") {
+              const f = item.getAsFile();
+              if (f) files.push(f);
+            }
+          }
+          if (files.length) {
+            e.preventDefault();
+            queueFiles(files);
+          }
+        }}
+      >
         <header className="flex items-center gap-3 border-b border-[var(--card-border)] px-4 py-3">
           <label className="min-w-0 flex-1">
             <span className="sr-only">Название примера работы</span>
             <input
-              className="w-full bg-transparent text-base font-semibold text-[var(--text-strong)] outline-none placeholder:font-medium placeholder:text-[var(--text-muted)]"
-              placeholder="Название примера работы"
+              className="w-full bg-transparent text-base font-semibold text-[var(--text-strong)] outline-none placeholder:font-semibold placeholder:text-[var(--text-strong)]"
+              placeholder="Новый пример работы"
               value={title}
               maxLength={WORK_EXAMPLE_TITLE_MAX}
               onChange={(e) => setTitle(e.target.value)}
@@ -213,33 +302,33 @@ export function WorkExampleEditorModal({
             Закрыть
           </button>
         </header>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
             <div className="min-w-0 flex-1">
-              <label className="text-xs font-medium text-[var(--text-muted)]">
-                Выберите работу
-              </label>
-              <input
-                type="search"
-                className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)]"
-                placeholder="Наряд, врач, клиника, пациент…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                autoComplete="off"
-                enterKeyHint="search"
-              />
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Сейчас: {orderLabel || "не распределен"}
-                {orderId ? (
-                  <button
-                    type="button"
-                    className="ml-2 text-[var(--sidebar-blue)]"
-                    onClick={() => void pickOrder(null)}
-                  >
-                    снять
-                  </button>
-                ) : null}
-              </p>
+              <div className="flex min-h-10 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
+                <input
+                  type="search"
+                  className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[var(--text-placeholder)]"
+                  placeholder="Поиск наряда…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  autoComplete="off"
+                  enterKeyHint="search"
+                  aria-label="Поиск наряда"
+                />
+                <span className="ml-2 shrink-0 text-xs text-[var(--text-muted)]">
+                  Сейчас: {orderLabel || "не распределен"}
+                  {orderId ? (
+                    <button
+                      type="button"
+                      className="ml-1 text-[var(--sidebar-blue)]"
+                      onClick={() => void pickOrder(null)}
+                    >
+                      снять
+                    </button>
+                  ) : null}
+                </span>
+              </div>
               {searchErr ? (
                 <p className="mt-1 text-sm text-red-600" role="alert">
                   {searchErr}
@@ -270,14 +359,14 @@ export function WorkExampleEditorModal({
                 </ul>
               ) : null}
             </div>
-            <div className="w-full sm:w-56">
+            <div className="w-full sm:w-44">
               <button
                 type="button"
-                className="w-full rounded-lg border border-[var(--card-border)] px-3 py-2 text-left text-sm"
+                className="flex h-full min-h-10 w-full flex-col justify-center rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-left text-sm"
                 onClick={() => setTypesOpen((v) => !v)}
               >
                 Типы работ
-                <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
+                <span className="text-xs text-[var(--text-muted)]">
                   {cardTypes.map((t) => t.name).join(", ") || "не заданы"}
                 </span>
               </button>
@@ -310,62 +399,106 @@ export function WorkExampleEditorModal({
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-[var(--text-muted)]">
-              Прикрепите ссылку
-            </label>
-            <input
-              className="mt-1 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm"
-              placeholder="https://…"
-              value={cloudUrl}
-              onChange={(e) => setCloudUrl(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["PHOTO", "+ фото"],
-                ["CAD", "+ проект кад"],
-                ["FILE", "+ файлы"],
-              ] as const
-            ).map(([k, label]) => (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
+              <input
+                className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[var(--text-placeholder)]"
+                placeholder="https://…"
+                value={cloudUrl}
+                onChange={(e) => setCloudUrl(e.target.value)}
+                aria-label="Ссылка на облако"
+              />
+              <span className="ml-2 shrink-0 text-xs text-[var(--text-muted)]">
+                Прикрепите ссылку
+              </span>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-1.5">
               <button
-                key={k}
                 type="button"
-                className="rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--surface-hover)]"
-                onClick={() => setOpenKind((v) => (v === k ? null : k))}
+                className="rounded-lg border border-[var(--card-border)] px-2.5 py-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
+                onClick={() => photoInputRef.current?.click()}
               >
-                {label}
+                + фото
               </button>
-            ))}
-          </div>
-          {openKind === "PHOTO" ? (
-            <WorkExampleDropZone
-              label="Загрузить фото"
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--card-border)] px-2.5 py-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
+                onClick={() => cadInputRef.current?.click()}
+              >
+                + проект кад
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--card-border)] px-2.5 py-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                + файлы
+              </button>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              className="hidden"
+              multiple
               accept="image/*"
-              onFiles={(files) => void upload("PHOTO", files)}
+              onChange={(e) => {
+                queueFiles(Array.from(e.target.files ?? []), "PHOTO");
+                e.target.value = "";
+              }}
             />
-          ) : null}
-          {openKind === "CAD" ? (
-            <WorkExampleDropZone
-              label="Загрузить проект КАД"
+            <input
+              ref={cadInputRef}
+              type="file"
+              className="hidden"
+              multiple
               accept=".stl,.ply,.obj,.html,.htm,.3mf,.zip,.drc"
-              onFiles={(files) => void upload("CAD", files)}
+              onChange={(e) => {
+                queueFiles(Array.from(e.target.files ?? []), "CAD");
+                e.target.value = "";
+              }}
             />
-          ) : null}
-          {openKind === "FILE" ? (
-            <WorkExampleDropZone
-              label="Загрузить файлы"
-              accept="*"
-              onFiles={(files) => void upload("FILE", files)}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={(e) => {
+                queueFiles(Array.from(e.target.files ?? []), "FILE");
+                e.target.value = "";
+              }}
             />
-          ) : null}
+          </div>
 
-          {item?.files.length ? (
-            <p className="text-xs text-[var(--text-muted)]">
-              Уже в примере: {item.files.map((f) => f.fileName).join(", ")}
-            </p>
+          {pending.length || savedFiles.length ? (
+            <ul className="space-y-1 text-xs text-[var(--text-muted)]">
+              {savedFiles.map((f) => (
+                <li key={f.id} className="flex items-center justify-between gap-2">
+                  <span>в примере: {f.fileName}</span>
+                  <button
+                    type="button"
+                    className="text-red-600"
+                    disabled={busy}
+                    onClick={() => void removeSavedFile(f.id)}
+                  >
+                    удалить
+                  </button>
+                </li>
+              ))}
+              {pending.map((p) => (
+                <li key={p.localId} className="flex items-center justify-between gap-2">
+                  <span>к сохранению: {p.file.name}</span>
+                  <button
+                    type="button"
+                    className="text-[var(--sidebar-blue)]"
+                    onClick={() =>
+                      setPending((prev) => prev.filter((x) => x.localId !== p.localId))
+                    }
+                  >
+                    убрать
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -392,18 +525,40 @@ export function WorkExampleEditorModal({
           </div>
           {err ? <p className="text-sm text-red-600">{err}</p> : null}
         </div>
-        <footer className="flex justify-end gap-2 border-t border-[var(--card-border)] px-4 py-3">
-          <button type="button" className="rounded-lg px-3 py-1.5 text-sm" onClick={onClose}>
-            Отмена
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            className="rounded-lg bg-[var(--sidebar-blue)] px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-            onClick={() => void save()}
-          >
-            Сохранить
-          </button>
+        <footer className="flex items-center justify-between gap-2 border-t border-[var(--card-border)] px-4 py-3">
+          <div className="flex gap-2">
+            {savedId ? (
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-sm"
+                onClick={() => onShare?.(savedId)}
+              >
+                QR
+              </button>
+            ) : null}
+            {savedId && canDeleteWhole ? (
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-sm text-red-600"
+                onClick={() => onDeleteWhole?.(savedId)}
+              >
+                Удалить
+              </button>
+            ) : null}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" className="rounded-lg px-3 py-1.5 text-sm" onClick={onClose}>
+              Отмена
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-lg bg-[var(--sidebar-blue)] px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={() => void save()}
+            >
+              {busy ? "Сохранение…" : "Сохранить"}
+            </button>
+          </div>
         </footer>
       </div>
     </div>

@@ -9,9 +9,49 @@ export const WORK_EXAMPLE_FILE_KINDS = ["PHOTO", "CAD", "FILE"] as const;
 export type WorkExampleFileKindValue = (typeof WORK_EXAMPLE_FILE_KINDS)[number];
 
 export const WORK_EXAMPLE_TITLE_MAX = 160;
+export const WORK_EXAMPLE_SHOWCASE_NAME_MAX = 120;
+export const WORK_EXAMPLE_SHOWCASE_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+/** Как карточки канбана: TenantClientState, ключ тенанта. Имя и путь лого — не ПИИ. */
+export const WORK_EXAMPLE_SHOWCASE_STATE_KEY = "workExampleShowcaseV1";
 
 export function parseWorkExampleTitle(raw: unknown): string {
   return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, WORK_EXAMPLE_TITLE_MAX);
+}
+
+/** Имя на витрине. Не `\b`: кириллица и пробелы вокруг не обрезаем криво. */
+export function parseWorkExampleShowcaseName(raw: unknown): string {
+  return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, WORK_EXAMPLE_SHOWCASE_NAME_MAX);
+}
+
+/** Своё имя витрины, иначе имя тенанта, иначе «Лаборатория». */
+export function resolveWorkExampleShowcaseName(
+  displayName: unknown,
+  tenantName: unknown,
+): string {
+  const custom = parseWorkExampleShowcaseName(displayName);
+  if (custom) return custom;
+  const tenant = String(tenantName ?? "").replace(/\s+/g, " ").trim();
+  return tenant || "Лаборатория";
+}
+
+export type WorkExampleShowcaseBrand = {
+  displayName: string;
+  logoRelPath: string | null;
+  logoMime: string | null;
+};
+
+export function parseWorkExampleShowcaseBrand(raw: unknown): WorkExampleShowcaseBrand {
+  const o =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const rel = String(o.logoRelPath || "").trim();
+  const mime = String(o.logoMime || "").trim().toLowerCase();
+  return {
+    displayName: parseWorkExampleShowcaseName(o.displayName),
+    logoRelPath: rel && !rel.includes("..") ? rel.slice(0, 240) : null,
+    logoMime: mime.startsWith("image/") ? mime.slice(0, 80) : null,
+  };
 }
 
 export type WorkExampleCardTypeSnap = { id: string; name: string };

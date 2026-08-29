@@ -15,6 +15,7 @@ import {
 
 export type PublicShowcaseData = {
   labName: string;
+  logoUrl?: string | null;
   title?: string;
   cardTypes: Array<{ id: string; name: string }>;
   composition: WorkExampleCompositionLine[];
@@ -67,15 +68,27 @@ export function PublicWorkExampleShowcase({
   return (
     <div className="min-h-screen bg-[#0f1419] text-zinc-100">
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-        <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-          Портфолио лаборатории
-        </p>
-        <h1 className="mt-2 font-serif text-3xl tracking-tight sm:text-4xl">
-          {data.title?.trim() || data.labName}
-        </h1>
-        {data.title?.trim() ? (
-          <p className="mt-1 text-sm text-zinc-500">{data.labName}</p>
-        ) : null}
+        <div className="flex items-start gap-4">
+          {data.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.logoUrl}
+              alt=""
+              className="h-14 w-14 shrink-0 rounded-xl bg-white/5 object-contain"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
+              Портфолио лаборатории
+            </p>
+            <h1 className="mt-2 font-serif text-3xl tracking-tight sm:text-4xl">
+              {data.title?.trim() || data.labName}
+            </h1>
+            {data.title?.trim() ? (
+              <p className="mt-1 text-sm text-zinc-500">{data.labName}</p>
+            ) : null}
+          </div>
+        </div>
         {data.cardTypes.length ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {data.cardTypes.map((t) => (
