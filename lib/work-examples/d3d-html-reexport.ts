@@ -69,12 +69,19 @@ function htmlEscape(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Копия в обычный ArrayBuffer: BlobPart и Uint8Array ctor отвергают ArrayBufferLike (TS 5.7+). */
+function toArrayBuffer(data: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return copy.buffer as ArrayBuffer;
+}
+
 async function gzipBytes(data: Uint8Array): Promise<Uint8Array> {
   if (typeof CompressionStream !== "function") {
     throw new Error("gzip: CompressionStream недоступен");
   }
-  const stream = new Blob([data]).stream().pipeThrough(new CompressionStream("gzip"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const stream = new Blob([toArrayBuffer(data)]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array((await new Response(stream).arrayBuffer()) as ArrayBuffer);
 }
 
 function recordToMesh(rec: ExocadCtmMeshRecord, index: number): D3dHtmlMeshV1 | null {

@@ -231,12 +231,7 @@ class Parser {
     for (let i = 0; i < ann; i += 1) this.skipAnnotation(version);
   }
 
-  parseMeshRecord(version: number): {
-    hasTexture: boolean;
-    matrix: Float32Array;
-    ctmBlob: Uint8Array;
-    name?: string;
-  } {
+  parseMeshRecord(version: number): ExocadCtmMeshRecord {
     this.readBool();
     this.readBool();
     const hasTexture = this.readBool();
@@ -251,7 +246,7 @@ class Parser {
     this.readF32();
     const matrix = this.readMatrixF32();
     const ctmBlob = this.readCtmBlob();
-    this.readImageEmbedded();
+    const textureBytes = this.readImageEmbedded();
     this.readF32();
     const treePaths = this.readTreePaths();
     if (version > 2) this.readBool();
@@ -264,6 +259,7 @@ class Parser {
       hasTexture,
       matrix,
       ctmBlob,
+      textureBytes,
       name: last || undefined,
     };
   }
