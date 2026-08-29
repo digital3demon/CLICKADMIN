@@ -105,6 +105,8 @@ export const ALL_APP_MODULES: AppModule[] = [
   "CONFIG_CLICKMIG",
   "AI_ADMIN",
   "AI_MODE",
+  "WORK_EXAMPLES",
+  "PROTOCOLS_REFS",
 ];
 
 /** @deprecated Матрица теперь по пакетам. */
@@ -172,6 +174,8 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
   CONFIG_CLICKMIG: "Конфиг: КликМиг",
   AI_ADMIN: "ИИ-Админ",
   AI_MODE: "ИИ-Режим (заказы)",
+  WORK_EXAMPLES: "Примеры работ",
+  PROTOCOLS_REFS: "Протоколы и справочники",
 };
 
 export { BUNDLE_LABELS };
@@ -244,6 +248,9 @@ export function defaultModuleAllowed(
   if (role === "OWNER") {
     return true;
   }
+
+  if (module === "PROTOCOLS_REFS") return true;
+  if (module === "WORK_EXAMPLES") return false;
 
   if (
     module === "ORDERS_NOTIFICATIONS" ||

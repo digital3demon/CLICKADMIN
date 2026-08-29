@@ -1783,11 +1783,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           cardId,
           boardId: homeBoardId || loc.board.id,
           actorLabel: activityActorLabel?.trim() || "Пользователь",
+          actorUserId: kanbanSessionUserId,
           dueYmd: ymd,
         });
       }
     },
-    [appState, activityActorLabel],
+    [appState, activityActorLabel, kanbanSessionUserId],
   );
 
   const applyCardUrgentFromList = useCallback(

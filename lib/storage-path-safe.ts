@@ -3,6 +3,7 @@ import path from "node:path";
 /** Ключи бакета, которые пишет само приложение. */
 export const APP_S3_KEY_PREFIXES = [
   "orders/",
+  "work-examples/",
   "tenants/",
   "clickmig/",
   "crm-dumps/",

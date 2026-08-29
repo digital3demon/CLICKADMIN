@@ -6,6 +6,7 @@ import {
 import {
   isKanbanTelegramPrefEnabled,
   mergeKanbanTelegramPrefs,
+  shouldNotifyKanbanOwnActions,
   type KanbanTelegramPrefKey,
 } from "@/lib/kanban-telegram-prefs";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
@@ -195,7 +196,8 @@ export async function notifyTenantAdminSharedTelegramChat(
 
 /**
  * Уведомления только указанным user id (каждый независимо проверяет prefs и Telegram).
- * Автор действия не получает сообщение.
+ * Автор не получает чужое сообщение. Свой текст (linesSelf) — только если
+ * в профиле включено «Уведомлять о моих действиях».
  *
  * `alternatePrefKeys` — достаточно включить любой из ключей (например упоминание ИЛИ «комментарий»).
  */
@@ -282,6 +284,7 @@ export async function notifyKanbanTelegramTargetUsers(
       continue;
     }
     const isSelf = sendSelf && u.id === actorId;
+    if (isSelf && !shouldNotifyKanbanOwnActions(merged)) continue;
     const mergedLines = linesHtmlForKanbanTelegramRecipient(
       u.role,
       isSelf ? (opts.linesSelf ?? opts.lines) : opts.lines,

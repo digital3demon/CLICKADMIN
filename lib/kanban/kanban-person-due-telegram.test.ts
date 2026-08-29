@@ -44,6 +44,25 @@ describe("buildKanbanPersonDueTelegramLines", () => {
     expect(lines[0]).toContain("Невский");
   });
 
+  it("себе: добавил и исключил, кириллица в названии карточки", () => {
+    const added = buildKanbanPersonDueTelegramLines({
+      kind: "added_participant",
+      actorLabel: "Всеволод Соколов",
+      cardTitle: "2608-389 Малинина В.А. Невский Д.Д.",
+      cardUrl,
+    });
+    expect(added.linesSelf?.[0]).toContain("Вы добавили себя в карточку");
+    expect(added.linesSelf?.[0]).toContain("Малинина");
+    const removed = buildKanbanPersonDueTelegramLines({
+      kind: "removed",
+      actorLabel: "Всеволод Соколов",
+      cardTitle: "2608-389 Малинина В.А. Невский Д.Д.",
+      cardUrl,
+    });
+    expect(removed.linesSelf?.[0]).toContain("Вы исключили себя из карточки");
+    expect(removed.linesSelf?.[0]).toContain("Малинина");
+  });
+
   it("срок: кто и какая дата", () => {
     const { lines } = buildKanbanPersonDueTelegramLines({
       kind: "due_set",
@@ -55,5 +74,17 @@ describe("buildKanbanPersonDueTelegramLines", () => {
     expect(lines[0]).toContain("Всеволод Соколов установил(а) срок");
     expect(lines[0]).toContain("03.09.26");
     expect(lines[0]).toContain("Шубина");
+  });
+
+  it("себе: установил срок, кириллица в названии", () => {
+    const { linesSelf } = buildKanbanPersonDueTelegramLines({
+      kind: "due_set",
+      actorLabel: "Всеволод Соколов",
+      cardTitle: "2608-389 Малинина В.А. Невский Д.Д.",
+      cardUrl,
+      dueYmd: "2026-09-03",
+    });
+    expect(linesSelf?.[0]).toContain("Вы установили срок 03.09.26");
+    expect(linesSelf?.[0]).toContain("Малинина");
   });
 });

@@ -1758,6 +1758,7 @@ export function KanbanCardModal({
         cardId,
         boardId: board.id,
         actorLabel: act || "Пользователь",
+        actorUserId: (commentAuthorUserId ?? "").trim() || null,
         dueYmd: v,
       });
     }

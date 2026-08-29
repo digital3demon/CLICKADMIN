@@ -18,6 +18,7 @@ import { ensureLegalEntityReconciliationTable } from "@/lib/ensure-legal-entity-
 import { ensureCorrectionClarifyColumns } from "@/lib/ensure-correction-clarify-columns";
 import { ensureOrderKanbanColumnBeforeShipped } from "@/lib/ensure-order-kanban-column-before-shipped";
 import { ensureLabTaskChatTables } from "@/lib/ensure-lab-task-chat-tables";
+import { ensureWorkExampleTables } from "@/lib/ensure-work-example-tables";
 import { ensureSqlitePragmas } from "@/lib/ensure-sqlite-pragmas";
 import { getDemoPrisma } from "@/lib/prisma-demo";
 import { getDemoDatabaseUrl } from "@/lib/prisma-demo";
@@ -42,6 +43,7 @@ async function prepareClient(
     await ensureCorrectionClarifyColumns(client);
     await ensureOrderKanbanColumnBeforeShipped(client);
     await ensureLabTaskChatTables(client);
+    await ensureWorkExampleTables(client);
   }
   /** SQLite без migrate и демо-Postgres после старого db push. */
   await ensureFinanceOfficeDebtColumns(client);

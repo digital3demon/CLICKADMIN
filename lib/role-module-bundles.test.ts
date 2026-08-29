@@ -121,4 +121,13 @@ describe("defaultModuleAllowed bundles alignment", () => {
     expect(defaultModuleAllowed("SENIOR_ADMINISTRATOR", "AI_MODE")).toBe(true);
     expect(defaultModuleAllowed("ADMINISTRATOR", "AI_ADMIN")).toBe(false);
   });
+
+  it("примеры работ выкл, протоколы вкл у всех кроме владельца (он и так всё)", () => {
+    expect(defaultModuleAllowed("USER", "WORK_EXAMPLES")).toBe(false);
+    expect(defaultModuleAllowed("SENIOR_TECHNICIAN", "WORK_EXAMPLES")).toBe(false);
+    expect(defaultModuleAllowed("ADMINISTRATOR", "WORK_EXAMPLES")).toBe(false);
+    expect(defaultModuleAllowed("OWNER", "WORK_EXAMPLES")).toBe(true);
+    expect(defaultModuleAllowed("USER", "PROTOCOLS_REFS")).toBe(true);
+    expect(defaultModuleAllowed("PRODUCTION", "PROTOCOLS_REFS")).toBe(true);
+  });
 });

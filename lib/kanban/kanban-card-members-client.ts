@@ -28,6 +28,8 @@ function postMemberTelegram(opts: {
   orderId?: string;
   lines: string[];
   linesAdmin?: string[];
+  linesSelf?: string[];
+  linesSelfAdmin?: string[];
 }) {
   postKanbanTelegramNotify({
     kaitenCardId: opts.kaitenCardId,
@@ -40,6 +42,8 @@ function postMemberTelegram(opts: {
     ...(opts.orderId ? { orderId: opts.orderId } : {}),
     lines: opts.lines,
     ...(opts.linesAdmin ? { linesAdmin: opts.linesAdmin } : {}),
+    ...(opts.linesSelf ? { linesSelf: opts.linesSelf } : {}),
+    ...(opts.linesSelfAdmin ? { linesSelfAdmin: opts.linesSelfAdmin } : {}),
   });
 }
 
@@ -111,7 +115,8 @@ export function notifyKanbanCardMemberChange(args: {
       const added = nextAssign.filter((id) => !prevAssign.includes(id));
       const removed = prevAssign.filter((id) => !nextAssign.includes(id));
       if (added.length) {
-        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+        const { lines, linesAdmin, linesSelf, linesSelfAdmin } =
+          buildKanbanPersonDueTelegramLines({
           kind: "added_assignee",
           actorLabel,
           cardTitle: titleLine,
@@ -126,10 +131,13 @@ export function notifyKanbanCardMemberChange(args: {
           orderId: oid || undefined,
           lines,
           linesAdmin,
+          linesSelf,
+          linesSelfAdmin,
         });
       }
       if (removed.length) {
-        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+        const { lines, linesAdmin, linesSelf, linesSelfAdmin } =
+          buildKanbanPersonDueTelegramLines({
           kind: "removed",
           actorLabel,
           cardTitle: titleLine,
@@ -143,13 +151,16 @@ export function notifyKanbanCardMemberChange(args: {
           orderId: oid || undefined,
           lines,
           linesAdmin,
+          linesSelf,
+          linesSelfAdmin,
         });
       }
     } else {
       const added = nextPart.filter((id) => !prevPart.includes(id));
       const removed = prevPart.filter((id) => !nextPart.includes(id));
       if (added.length) {
-        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+        const { lines, linesAdmin, linesSelf, linesSelfAdmin } =
+          buildKanbanPersonDueTelegramLines({
           kind: "added_participant",
           actorLabel,
           cardTitle: titleLine,
@@ -163,10 +174,13 @@ export function notifyKanbanCardMemberChange(args: {
           orderId: oid || undefined,
           lines,
           linesAdmin,
+          linesSelf,
+          linesSelfAdmin,
         });
       }
       if (removed.length) {
-        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+        const { lines, linesAdmin, linesSelf, linesSelfAdmin } =
+          buildKanbanPersonDueTelegramLines({
           kind: "removed",
           actorLabel,
           cardTitle: titleLine,
@@ -180,6 +194,8 @@ export function notifyKanbanCardMemberChange(args: {
           orderId: oid || undefined,
           lines,
           linesAdmin,
+          linesSelf,
+          linesSelfAdmin,
         });
       }
     }
@@ -208,6 +224,7 @@ export function notifyKanbanCardDueChange(args: {
   cardId: string;
   boardId: string;
   actorLabel: string;
+  actorUserId?: string | null;
   dueYmd: string;
 }): void {
   const { card, cardId, boardId, actorLabel, dueYmd } = args;
@@ -218,8 +235,10 @@ export function notifyKanbanCardDueChange(args: {
   const targetUserIds = uniqTelegramTargetUserIds(
     members.assignees,
     members.participants,
+    args.actorUserId ? [args.actorUserId] : [],
   );
-  const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+  const { lines, linesAdmin, linesSelf, linesSelfAdmin } =
+    buildKanbanPersonDueTelegramLines({
     kind: dueYmd.trim() ? "due_set" : "due_cleared",
     actorLabel,
     cardTitle: titleLine,
@@ -235,5 +254,7 @@ export function notifyKanbanCardDueChange(args: {
     ...(oid ? { orderId: oid } : {}),
     lines,
     ...(linesAdmin ? { linesAdmin } : {}),
+    ...(linesSelf ? { linesSelf } : {}),
+    ...(linesSelfAdmin ? { linesSelfAdmin } : {}),
   });
 }

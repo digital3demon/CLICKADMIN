@@ -62,6 +62,8 @@ const baseNavItems: readonly {
   { href: "/mail", label: "Почта", module: "MAIL" },
   { href: "/ai-admin", label: "ИИ-Админ", module: "AI_ADMIN" },
   { href: "/warehouse", label: "Склад", module: "WAREHOUSE" },
+  { href: "/work-examples", label: "Примеры работ", module: "WORK_EXAMPLES" },
+  { href: "/protocols", label: "Протоколы и справочники", module: "PROTOCOLS_REFS" },
   { href: "/clients", label: "Клиенты", module: "CLIENTS_VIEW" },
   { href: "/directory", label: "Конфигурация", module: "DIRECTORY" },
 ];
@@ -180,11 +182,13 @@ export function SidebarNav() {
     if (moduleAccess) {
       const a = moduleAccess as Record<AppModule, boolean>;
       if (isKanbanOnlyUser(role, a)) {
-        return filterDemo(
+          return filterDemo(
           baseNavItems.filter(
             (i) =>
               i.href === "/kanban" ||
-              (i.href === "/payroll" && a.PAYROLL === true),
+              i.href === "/protocols" ||
+              (i.href === "/payroll" && a.PAYROLL === true) ||
+              (i.href === "/work-examples" && a.WORK_EXAMPLES === true),
           ),
         );
       }
@@ -200,8 +204,11 @@ export function SidebarNav() {
     if (isKanbanOnlyUser(role)) {
       return filterDemo(
         baseNavItems.filter(
-          (i) => i.href === "/kanban" || i.href === "/payroll",
-        ),
+            (i) =>
+              i.href === "/kanban" ||
+              i.href === "/payroll" ||
+              i.href === "/protocols",
+          ),
       );
     }
     if (!canAccessFinancialAnalytics(role)) {

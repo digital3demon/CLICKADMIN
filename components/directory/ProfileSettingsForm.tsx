@@ -9,6 +9,7 @@ import {
 } from "@/lib/profile-avatar-presets";
 import { CRM_PROFILE_UPDATED_EVENT } from "@/lib/crm-client-events";
 import {
+  KANBAN_TELEGRAM_PREF_HINTS,
   KANBAN_TELEGRAM_PREF_LABELS,
   KANBAN_TELEGRAM_PREF_SECTIONS,
   KANBAN_TELEGRAM_PREF_SECTIONS_PRODUCTION,
@@ -588,8 +589,13 @@ export function ProfileSettingsForm({
                         key={key}
                         className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm"
                       >
-                        <span className="text-[var(--app-text)]">
+                        <span className="min-w-0 text-[var(--app-text)]">
                           {KANBAN_TELEGRAM_PREF_LABELS[key]}
+                          {KANBAN_TELEGRAM_PREF_HINTS[key] ? (
+                            <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
+                              {KANBAN_TELEGRAM_PREF_HINTS[key]}
+                            </span>
+                          ) : null}
                         </span>
                         <input
                           type="checkbox"

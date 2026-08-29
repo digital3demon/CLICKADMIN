@@ -4,7 +4,8 @@
  * (Kaiten свой бот не подменяет эти галочки).
  */
 
-export const KANBAN_TELEGRAM_PREF_KEYS = [
+/** События рассылки (тело POST /api/kanban/telegram-notify). */
+export const KANBAN_TELEGRAM_EVENT_KEYS = [
   "tg_person_added_to_card",
   "tg_person_assigned_responsible",
   "tg_person_removed_from_card",
@@ -23,12 +24,22 @@ export const KANBAN_TELEGRAM_PREF_KEYS = [
   "tg_production_mentioned",
 ] as const;
 
+export const KANBAN_TELEGRAM_PREF_KEYS = [
+  ...KANBAN_TELEGRAM_EVENT_KEYS,
+  "tg_notify_own_actions",
+] as const;
+
 export type KanbanTelegramPrefKey = (typeof KANBAN_TELEGRAM_PREF_KEYS)[number];
 
 export type KanbanTelegramPrefsMap = Partial<Record<KanbanTelegramPrefKey, boolean>>;
 
-const DEFAULT_ON = Object.fromEntries(
-  KANBAN_TELEGRAM_PREF_KEYS.map((k) => [k, true]),
+/** Свои действия — opt-in; остальные типы по умолчанию включены. */
+const DEFAULT_OFF_PREF_KEYS = new Set<KanbanTelegramPrefKey>([
+  "tg_notify_own_actions",
+]);
+
+const DEFAULT_PREFS = Object.fromEntries(
+  KANBAN_TELEGRAM_PREF_KEYS.map((k) => [k, !DEFAULT_OFF_PREF_KEYS.has(k)]),
 ) as Record<KanbanTelegramPrefKey, boolean>;
 
 export const KANBAN_TELEGRAM_PREF_SECTIONS: Array<{
@@ -36,6 +47,11 @@ export const KANBAN_TELEGRAM_PREF_SECTIONS: Array<{
   title: string;
   keys: KanbanTelegramPrefKey[];
 }> = [
+  {
+    id: "own",
+    title: "Свои действия",
+    keys: ["tg_notify_own_actions"],
+  },
   {
     id: "personal",
     title: "Персональные события",
@@ -72,6 +88,7 @@ export const KANBAN_TELEGRAM_PREF_SECTIONS: Array<{
 ];
 
 export const KANBAN_TELEGRAM_PREF_LABELS: Record<KanbanTelegramPrefKey, string> = {
+  tg_notify_own_actions: "Уведомлять о моих действиях",
   tg_person_added_to_card: "Вас добавили в карточку",
   tg_person_assigned_responsible: "Вас назначили ответственным в карточке",
   tg_person_removed_from_card: "Вы были исключены из карточки",
@@ -95,6 +112,13 @@ export const KANBAN_TELEGRAM_PREF_LABELS: Record<KanbanTelegramPrefKey, string> 
     "Упоминание группы производства (@тег из настроек доски)",
 };
 
+export const KANBAN_TELEGRAM_PREF_HINTS: Partial<
+  Record<KanbanTelegramPrefKey, string>
+> = {
+  tg_notify_own_actions:
+    "Если включено — бот напишет и вам: добавили или исключили себя, поставили срок, перенесли карточку.",
+};
+
 /** Только для роли «Производство» — переключатели в профиле. */
 export const KANBAN_TELEGRAM_PREF_SECTIONS_PRODUCTION: Array<{
   id: string;
@@ -112,19 +136,23 @@ function isPrefKey(k: string): k is KanbanTelegramPrefKey {
   return (KANBAN_TELEGRAM_PREF_KEYS as readonly string[]).includes(k);
 }
 
-/** Разбор тела POST для серверных хуков канбана. */
+function isEventKey(k: string): k is KanbanTelegramPrefKey {
+  return (KANBAN_TELEGRAM_EVENT_KEYS as readonly string[]).includes(k);
+}
+
+/** Разбор тела POST для серверных хуков канбана (только события, не галочки-фильтры). */
 export function parseKanbanTelegramPrefKey(
   raw: unknown,
 ): KanbanTelegramPrefKey | null {
-  if (typeof raw !== "string" || !isPrefKey(raw)) return null;
+  if (typeof raw !== "string" || !isEventKey(raw)) return null;
   return raw;
 }
 
-/** Слить сохранённые prefs с дефолтом «всё включено». */
+/** Слить сохранённые prefs: события включены, «мои действия» выключены. */
 export function mergeKanbanTelegramPrefs(
   stored: unknown,
 ): Record<KanbanTelegramPrefKey, boolean> {
-  const out = { ...DEFAULT_ON } as Record<KanbanTelegramPrefKey, boolean>;
+  const out = { ...DEFAULT_PREFS } as Record<KanbanTelegramPrefKey, boolean>;
   if (stored == null || typeof stored !== "object" || Array.isArray(stored)) {
     return out;
   }
@@ -155,4 +183,10 @@ export function isKanbanTelegramPrefEnabled(
   key: KanbanTelegramPrefKey,
 ): boolean {
   return merged[key] === true;
+}
+
+export function shouldNotifyKanbanOwnActions(
+  merged: Record<KanbanTelegramPrefKey, boolean>,
+): boolean {
+  return isKanbanTelegramPrefEnabled(merged, "tg_notify_own_actions");
 }

@@ -14,6 +14,7 @@ import { getPrisma } from "@/lib/get-prisma";
 import { loadOrderKanbanTelegramMemberIds } from "@/lib/telegram-kanban-card-members.server";
 import {
   isCardMemberScopedTelegramEvent,
+  mergeTelegramSelfActorIntoTargets,
   uniqTelegramTargetUserIds,
 } from "@/lib/telegram-kanban-card-scope";
 import {
@@ -171,7 +172,11 @@ export async function POST(req: Request) {
   ) {
     targetUserIds = await loadOrderKanbanTelegramMemberIds(tenantId, orderId);
   }
-  targetUserIds = uniqTelegramTargetUserIds(targetUserIds);
+  targetUserIds = mergeTelegramSelfActorIntoTargets(
+    uniqTelegramTargetUserIds(targetUserIds),
+    actorUserId,
+    Boolean(effectiveLinesSelf?.some(Boolean)),
+  );
 
   try {
     if (targetUserIds.length > 0) {
@@ -181,7 +186,7 @@ export async function POST(req: Request) {
         event,
         alternatePrefKeys:
           alternatePrefKeys.length > 0 ? alternatePrefKeys : undefined,
-        // Личный @себя = напоминание; для mention не исключаем автора из targets.
+        // @себя = напоминание. «Добавил/снял себя» — linesSelf, автор в targets.
         actorUserId: isMentionNotify ? null : actorUserId,
         targetUserIds,
         lines: effectiveLines,

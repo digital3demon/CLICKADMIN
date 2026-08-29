@@ -35,7 +35,9 @@ export type BundleId =
   | "CLICKMIG_KANBAN"
   | "CONFIG_CLICKMIG"
   | "AI_ADMIN"
-  | "AI_MODE";
+  | "AI_MODE"
+  | "WORK_EXAMPLES"
+  | "PROTOCOLS_REFS";
 
 /** Модули, не входящие ни в один пакет (legacy / совместимость). */
 const STANDALONE_ATOMIC_MODULES: AppModule[] = [
@@ -110,6 +112,8 @@ export const BUNDLE_TO_ATOMIC: Record<BundleId, readonly AppModule[]> = {
   CONFIG_CLICKMIG: ["CONFIG_CLICKMIG"],
   AI_ADMIN: ["AI_ADMIN"],
   AI_MODE: ["AI_MODE"],
+  WORK_EXAMPLES: ["WORK_EXAMPLES"],
+  PROTOCOLS_REFS: ["PROTOCOLS_REFS"],
 };
 
 /** Иерархия пакетов: включение дочернего требует родителя; выключение родителя — выключает детей. */
@@ -160,7 +164,7 @@ export const BUNDLE_MATRIX_GROUPS: BundleMatrixGroup[] = [
   {
     id: "ops",
     title: "Операции",
-    bundles: ["MAIL", "SHIPMENTS", "WAREHOUSE"],
+    bundles: ["MAIL", "SHIPMENTS", "WAREHOUSE", "WORK_EXAMPLES", "PROTOCOLS_REFS"],
   },
   {
     id: "clients",
@@ -242,6 +246,8 @@ export const BUNDLE_LABELS: Record<BundleId, string> = {
   CONFIG_CLICKMIG: "Конфиг: КликМиг",
   AI_ADMIN: "ИИ-Админ",
   AI_MODE: "ИИ-Режим (заказы)",
+  WORK_EXAMPLES: "Примеры работ",
+  PROTOCOLS_REFS: "Протоколы и справочники",
 };
 
 /** Все atomic-модули, покрытые пакетами. */

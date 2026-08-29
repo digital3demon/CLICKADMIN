@@ -26,7 +26,12 @@ export function buildKanbanPersonDueTelegramLines(opts: {
   cardUrl: string;
   orderUrl?: string | null;
   dueYmd?: string | null;
-}): { lines: string[]; linesAdmin?: string[] } {
+}): {
+  lines: string[];
+  linesAdmin?: string[];
+  linesSelf?: string[];
+  linesSelfAdmin?: string[];
+} {
   const who = escapeTelegramHtml(
     (opts.actorLabel || "").trim() || "Пользователь",
   );
@@ -46,9 +51,23 @@ export function buildKanbanPersonDueTelegramLines(opts: {
             ? `${who} установил(а) срок ${escapeTelegramHtml(dueLabel)} в карточке ${cardLink}`
             : `${who} снял(а) срок в карточке ${cardLink}`;
 
+  const selfLine =
+    opts.kind === "added_participant"
+      ? `Вы добавили себя в карточку ${cardLink}`
+      : opts.kind === "added_assignee"
+        ? `Вы добавили себя в карточку ${cardLink} как ответственного`
+        : opts.kind === "removed"
+          ? `Вы исключили себя из карточки ${cardLink}`
+          : opts.kind === "due_set"
+            ? `Вы установили срок ${escapeTelegramHtml(dueLabel)} в карточке ${cardLink}`
+            : `Вы сняли срок в карточке ${cardLink}`;
+
   const orderUrl = (opts.orderUrl || "").trim();
   if (!orderUrl || !cardUrl) {
-    return { lines: [line] };
+    return {
+      lines: [line],
+      ...(selfLine ? { linesSelf: [selfLine] } : {}),
+    };
   }
   const cardWord = telegramHtmlLink(cardUrl, "карточке");
   const orderWord = telegramHtmlLink(orderUrl, "заказе");
@@ -63,5 +82,20 @@ export function buildKanbanPersonDueTelegramLines(opts: {
           : opts.kind === "due_set"
             ? `${who} установил(а) срок ${escapeTelegramHtml(dueLabel)} в ${cardWord} и ${orderWord} (${titleHtml})`
             : `${who} снял(а) срок в ${cardWord} и ${orderWord} (${titleHtml})`;
-  return { lines: [line], linesAdmin: [admin] };
+  const selfAdmin =
+    opts.kind === "added_participant"
+      ? `Вы добавили себя в ${cardWord} и ${orderWord} (${titleHtml})`
+      : opts.kind === "added_assignee"
+        ? `Вы добавили себя как ответственного в ${cardWord} и ${orderWord} (${titleHtml})`
+        : opts.kind === "removed"
+          ? `Вы исключили себя из ${cardWord} и ${orderWord} (${titleHtml})`
+          : opts.kind === "due_set"
+            ? `Вы установили срок ${escapeTelegramHtml(dueLabel)} в ${cardWord} и ${orderWord} (${titleHtml})`
+            : `Вы сняли срок в ${cardWord} и ${orderWord} (${titleHtml})`;
+  return {
+    lines: [line],
+    linesAdmin: [admin],
+    ...(selfLine ? { linesSelf: [selfLine] } : {}),
+    ...(selfAdmin ? { linesSelfAdmin: [selfAdmin] } : {}),
+  };
 }

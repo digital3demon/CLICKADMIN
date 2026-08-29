@@ -11,6 +11,8 @@ export const DEFAULT_SIDEBAR_HREF_ORDER = [
   "/mail",
   "/ai-admin",
   "/warehouse",
+  "/work-examples",
+  "/protocols",
   "/clients",
   "/directory",
 ] as const;
