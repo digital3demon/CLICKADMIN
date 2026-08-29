@@ -59,6 +59,14 @@ export async function POST(req: Request, ctxP: Ctx) {
     );
   }
   const started = Date.now();
+  console.info(
+    JSON.stringify({
+      evt: "work_example_files_upload_start",
+      exampleId: example.id,
+      n: incoming.length,
+      bytes: incoming.reduce((s, f) => s + (f.size || 0), 0),
+    }),
+  );
   let sort = example.files.reduce((m, f) => Math.max(m, f.sortOrder), -1) + 1;
   for (const file of incoming) {
     if (file.size > WORK_EXAMPLE_MAX_FILE_BYTES) {

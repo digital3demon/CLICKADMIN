@@ -181,6 +181,7 @@ export function WorkExampleEditorModal({
         method: "POST",
         credentials: "include",
         body: fd,
+        signal: AbortSignal.timeout(55_000),
       });
       const j = (await r.json()) as { item?: WorkExampleItem; error?: string };
       if (!r.ok || !j.item) {
@@ -198,12 +199,28 @@ export function WorkExampleEditorModal({
     try {
       const next = await persistMeta();
       if (!next) return;
-      const withFiles = pending.length ? await uploadPending(next.id) : next;
-      if (pending.length && !withFiles) {
-        onSaved(next);
-        return;
+      let saved = next;
+      if (pending.length) {
+        try {
+          const uploaded = await uploadPending(next.id);
+          if (!uploaded) {
+            onSaved(next);
+            return;
+          }
+          saved = uploaded;
+        } catch (e) {
+          const aborted =
+            e instanceof DOMException &&
+            (e.name === "TimeoutError" || e.name === "AbortError");
+          setErr(
+            aborted
+              ? "Загрузка файлов зависла. Попробуйте ещё раз."
+              : "Не удалось загрузить файлы",
+          );
+          onSaved(next);
+          return;
+        }
       }
-      const saved = withFiles ?? next;
       setPending([]);
       setSavedFiles(saved.files);
       onSaved(saved);

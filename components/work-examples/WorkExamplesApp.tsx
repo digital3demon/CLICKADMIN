@@ -118,14 +118,14 @@ export function WorkExamplesApp() {
           const orderLine = it.unassigned || !it.orderNumber ? "не распределен" : it.orderNumber;
           return (
             <li key={it.id} className="w-[min(100%,30rem)]">
-              {/* 2× канбан (~240px) и пропорция листа A4 210×297 */}
-              <div className="flex aspect-[210/297] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm transition hover:border-[var(--sidebar-blue)]">
+              {/* Как канбан (aspect 1414/1000), ширина 2× колонки ~240px */}
+              <div className="flex aspect-[1414/1000] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm transition hover:border-[var(--sidebar-blue)]">
                 <button
                   type="button"
-                  className="flex min-h-0 flex-1 flex-col px-4 pt-5 text-left"
+                  className="flex min-h-0 flex-1 items-start gap-3 px-3 pt-3 text-left"
                   onClick={() => setEditor(it)}
                 >
-                  <div className="mx-auto h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-[var(--surface-subtle)]">
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-[var(--surface-subtle)]">
                     {cover ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -135,28 +135,24 @@ export function WorkExamplesApp() {
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center text-[10px] text-[var(--text-muted)]">
-                        нет фото
+                        нет
                       </div>
                     )}
                   </div>
-                </button>
-                <div className="flex items-end justify-between gap-2 px-4 pb-4">
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() => setEditor(it)}
-                  >
-                    <p className="truncate text-sm font-semibold text-[var(--text-strong)]">
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-3 text-base font-semibold leading-snug text-[var(--text-strong)]">
                       {workExampleDisplayTitle(it)}
                     </p>
-                    <p className="truncate text-[11px] text-[var(--text-muted)]">
+                    <p className="mt-1 truncate text-xs text-[var(--text-muted)]">
                       {orderLine}
                       {types ? ` · ${types}` : ""}
                     </p>
-                  </button>
+                  </div>
+                </button>
+                <div className="flex justify-end px-3 pb-2.5">
                   <button
                     type="button"
-                    className="shrink-0 rounded-md border border-[var(--card-border)] px-1.5 py-0.5 text-[11px]"
+                    className="rounded-md border border-[var(--card-border)] px-1.5 py-0.5 text-[11px]"
                     onClick={() => void openShare(it.id)}
                   >
                     QR
