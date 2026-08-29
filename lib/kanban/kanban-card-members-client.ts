@@ -1,63 +1,46 @@
 import { kanbanCardAbsoluteUrl } from "@/lib/kanban-card-browser-url";
+import { postKanbanTelegramNotify } from "@/lib/kanban-crm-telegram-notify-client";
 import { shouldSkipCrmKanbanTelegram } from "@/lib/kanban/crm-kanban-telegram";
-import { upsertKanbanCardHeadCache } from "@/lib/kanban/kanban-card-heads-cache";
+import {
+  loadKanbanCardHeadsCache,
+  membersForKanbanAggregateKeep,
+  upsertKanbanCardHeadCache,
+} from "@/lib/kanban/kanban-card-heads-cache";
+import { buildKanbanPersonDueTelegramLines } from "@/lib/kanban/kanban-person-due-telegram";
 import { findCard, pushActivity } from "@/lib/kanban/model";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { persistCrmBoardFieldsClient } from "@/lib/kanban/persist-crm-board-fields-client";
-import { escapeTelegramHtml, telegramHtmlLink } from "@/lib/telegram-html";
+import { uniqTelegramTargetUserIds } from "@/lib/telegram-kanban-card-scope";
 
 export type KanbanMemberPickerMode = "assign" | "part";
 
-function kanbanCardLinkHtml(cardId: string, boardId: string, title: string): string {
-  return telegramHtmlLink(
-    kanbanCardAbsoluteUrl(cardId, boardId),
-    (title || "").trim() || "Без названия",
-  );
+function orderPageUrl(orderId: string): string {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/orders/${encodeURIComponent(orderId)}`;
 }
 
-function cardOrderWordLinks(
-  orderId: string,
-  cardId: string,
-  boardId: string,
-): { cardWord: string; orderWord: string } {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return {
-    cardWord: telegramHtmlLink(kanbanCardAbsoluteUrl(cardId, boardId), "карточке"),
-    orderWord: telegramHtmlLink(
-      `${origin}/orders/${encodeURIComponent(orderId)}`,
-      "заказе",
-    ),
-  };
-}
-
-function postKanbanCrmTelegramNotify(payload: {
+function postMemberTelegram(opts: {
   kaitenCardId?: number | null;
   event: KanbanTelegramPrefKey;
-  lines?: string[];
+  alternatePrefKeys?: KanbanTelegramPrefKey[];
+  targetUserIds: string[];
+  orderId?: string;
+  lines: string[];
   linesAdmin?: string[];
-  targetUserIds?: string[];
-  parseMode?: "HTML";
 }) {
-  void fetch("/api/kanban/telegram-notify", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-}
-
-function postKaitenAssigneesSync(
-  orderId: string,
-  assignees: string[],
-  participants: string[],
-) {
-  void fetch(`/api/orders/${encodeURIComponent(orderId)}/kaiten-assignees`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ assignees, participants }),
-  }).catch(() => {});
+  postKanbanTelegramNotify({
+    kaitenCardId: opts.kaitenCardId,
+    event: opts.event,
+    ...(opts.alternatePrefKeys?.length
+      ? { alternatePrefKeys: opts.alternatePrefKeys }
+      : {}),
+    targetUserIds: opts.targetUserIds,
+    parseMode: "HTML",
+    ...(opts.orderId ? { orderId: opts.orderId } : {}),
+    lines: opts.lines,
+    ...(opts.linesAdmin ? { linesAdmin: opts.linesAdmin } : {}),
+  });
 }
 
 /** Обновляет assignees/participants на доске и пишет activity. */
@@ -119,80 +102,84 @@ export function notifyKanbanCardMemberChange(args: {
   } = args;
   const kaitenId = card.kaitenCardId;
   const titleLine = (card.title || "").trim() || "Без названия";
-  const who = escapeTelegramHtml(actorLabel);
-  const oid = card.linkedOrderId?.trim();
-  const { cardWord, orderWord } = oid
-    ? cardOrderWordLinks(oid, cardId, boardId)
-    : { cardWord: "", orderWord: "" };
+  const oid = card.linkedOrderId?.trim() || "";
+  const cardUrl = kanbanCardAbsoluteUrl(cardId, boardId);
+  const orderUrl = oid ? orderPageUrl(oid) : "";
 
   if (!shouldSkipCrmKanbanTelegram(kaitenId)) {
-    const linkHtml = kanbanCardLinkHtml(cardId, boardId, titleLine);
     if (mode === "assign") {
       const added = nextAssign.filter((id) => !prevAssign.includes(id));
       const removed = prevAssign.filter((id) => !nextAssign.includes(id));
       if (added.length) {
-        postKanbanCrmTelegramNotify({
+        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+          kind: "added_assignee",
+          actorLabel,
+          cardTitle: titleLine,
+          cardUrl,
+          orderUrl,
+        });
+        postMemberTelegram({
           kaitenCardId: kaitenId,
           event: "tg_person_assigned_responsible",
+          alternatePrefKeys: ["tg_person_added_to_card"],
           targetUserIds: added,
-          parseMode: "HTML",
-          lines: [`${who} назначил(а) вас ответственным в ${linkHtml}`],
-          ...(oid
-            ? {
-                linesAdmin: [
-                  `${who} назначил(а) вас ответственным в ${cardWord} и ${orderWord}`,
-                ],
-              }
-            : {}),
+          orderId: oid || undefined,
+          lines,
+          linesAdmin,
         });
       }
       if (removed.length) {
-        postKanbanCrmTelegramNotify({
+        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+          kind: "removed",
+          actorLabel,
+          cardTitle: titleLine,
+          cardUrl,
+          orderUrl,
+        });
+        postMemberTelegram({
           kaitenCardId: kaitenId,
           event: "tg_person_removed_from_card",
           targetUserIds: removed,
-          parseMode: "HTML",
-          lines: [`${who} снял(а) вас с ответственных по ${linkHtml}`],
-          ...(oid
-            ? {
-                linesAdmin: [
-                  `${who} снял(а) вас с ответственных по ${cardWord} и ${orderWord}`,
-                ],
-              }
-            : {}),
+          orderId: oid || undefined,
+          lines,
+          linesAdmin,
         });
       }
     } else {
       const added = nextPart.filter((id) => !prevPart.includes(id));
       const removed = prevPart.filter((id) => !nextPart.includes(id));
       if (added.length) {
-        postKanbanCrmTelegramNotify({
+        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+          kind: "added_participant",
+          actorLabel,
+          cardTitle: titleLine,
+          cardUrl,
+          orderUrl,
+        });
+        postMemberTelegram({
           kaitenCardId: kaitenId,
           event: "tg_person_added_to_card",
           targetUserIds: added,
-          parseMode: "HTML",
-          lines: [`${who} добавил(а) вас в ${linkHtml}`],
-          ...(oid
-            ? {
-                linesAdmin: [`${who} добавил(а) вас в ${cardWord} и ${orderWord}`],
-              }
-            : {}),
+          orderId: oid || undefined,
+          lines,
+          linesAdmin,
         });
       }
       if (removed.length) {
-        postKanbanCrmTelegramNotify({
+        const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+          kind: "removed",
+          actorLabel,
+          cardTitle: titleLine,
+          cardUrl,
+          orderUrl,
+        });
+        postMemberTelegram({
           kaitenCardId: kaitenId,
           event: "tg_person_removed_from_card",
           targetUserIds: removed,
-          parseMode: "HTML",
-          lines: [`${who} исключил(а) вас из участников ${linkHtml}`],
-          ...(oid
-            ? {
-                linesAdmin: [
-                  `${who} исключил(а) вас из участников ${cardWord} и ${orderWord}`,
-                ],
-              }
-            : {}),
+          orderId: oid || undefined,
+          lines,
+          linesAdmin,
         });
       }
     }
@@ -206,6 +193,47 @@ export function notifyKanbanCardMemberChange(args: {
     });
   }
   if (oid && card.kaitenCardId != null && Number.isFinite(card.kaitenCardId)) {
-    postKaitenAssigneesSync(oid, nextAssign, nextPart);
+    void fetch(`/api/orders/${encodeURIComponent(oid)}/kaiten-assignees`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignees: nextAssign, participants: nextPart }),
+    }).catch(() => {});
   }
+}
+
+/** Telegram после смены этапного срока: кто, карточка, дата. */
+export function notifyKanbanCardDueChange(args: {
+  card: KanbanCard;
+  cardId: string;
+  boardId: string;
+  actorLabel: string;
+  dueYmd: string;
+}): void {
+  const { card, cardId, boardId, actorLabel, dueYmd } = args;
+  if (shouldSkipCrmKanbanTelegram(card.kaitenCardId)) return;
+  const titleLine = (card.title || "").trim() || "Без названия";
+  const oid = card.linkedOrderId?.trim() || "";
+  const members = membersForKanbanAggregateKeep(card, loadKanbanCardHeadsCache());
+  const targetUserIds = uniqTelegramTargetUserIds(
+    members.assignees,
+    members.participants,
+  );
+  const { lines, linesAdmin } = buildKanbanPersonDueTelegramLines({
+    kind: dueYmd.trim() ? "due_set" : "due_cleared",
+    actorLabel,
+    cardTitle: titleLine,
+    cardUrl: kanbanCardAbsoluteUrl(cardId, boardId),
+    orderUrl: oid ? orderPageUrl(oid) : "",
+    dueYmd,
+  });
+  postKanbanTelegramNotify({
+    kaitenCardId: card.kaitenCardId,
+    event: "tg_due_changed",
+    parseMode: "HTML",
+    ...(targetUserIds.length ? { targetUserIds } : {}),
+    ...(oid ? { orderId: oid } : {}),
+    lines,
+    ...(linesAdmin ? { linesAdmin } : {}),
+  });
 }

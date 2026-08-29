@@ -22,6 +22,7 @@ import {
   isInsideOrderAccountingUploadZone,
   shouldHandleOrderFilesGlobalPaste,
 } from "@/lib/order-files-paste-target";
+import { formatMoscowDateTime } from "@/lib/moscow-datetime-format";
 
 const MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
 
@@ -44,6 +45,15 @@ function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Когда файл попал в наряд (МСК). Пустой/битый ISO не показываем. */
+function formatAttachmentAddedAt(iso: string): string {
+  const raw = String(iso || "").trim();
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  return formatMoscowDateTime(d);
 }
 
 /** Превью в списке: по MIME или расширению (HEIC в браузере может не отрисоваться). */
@@ -695,6 +705,7 @@ export function OrderFilesPanel({
             {list.map((a) => {
               const thumb = isOrderAttachmentImage(a.mimeType, a.fileName);
               const href = `/api/orders/${orderId}/attachments/${a.id}`;
+              const addedAt = formatAttachmentAddedAt(a.createdAt);
               return (
                 <li
                   key={a.id}
@@ -717,8 +728,14 @@ export function OrderFilesPanel({
                     >
                       {a.fileName}
                     </a>
-                    <div className="text-xs text-[var(--text-muted)]">
+                    <div className="text-[0.65rem] leading-snug text-[var(--text-muted)]">
                       {formatSize(a.size)}
+                      {addedAt ? (
+                        <span title="Добавлен в наряд (МСК)">
+                          {" "}
+                          · {addedAt}
+                        </span>
+                      ) : null}
                       <span className="ml-2 text-emerald-700 dark:text-emerald-400">
                         · в CRM/канбан
                       </span>

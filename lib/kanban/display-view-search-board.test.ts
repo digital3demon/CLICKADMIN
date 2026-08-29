@@ -3,6 +3,7 @@ import {
   buildKanbanDisplayView,
   buildKaitenMirrorColumnsForBoard,
   createCard,
+  KANBAN_BOARD_MY_CARDS_ID,
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
 } from "@/lib/kanban/model";
@@ -263,5 +264,123 @@ describe("buildKanbanDisplayView · search on board", () => {
     const shippedView = displayBoard.columns.find((c) => c.title === "Сдана админам");
     expect(shippedView?.cards.map((c) => c.id)).toEqual(["arch-079"]);
     expect(cardHomeBoardId.get("arch-079")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+  });
+});
+
+describe("buildKanbanDisplayView · фильтры только активная доска", () => {
+  function boardsWithSameAssignee() {
+    const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
+    const odon = mirrorBoard(KANBAN_BOARD_ORTHODONTICS_ID, "Ортодонтия");
+    const approvalOrtho = ortho.columns.find((c) => c.title === "Согласование")!;
+    const approvalOdon = odon.columns.find((c) => c.title === "Согласование")!;
+    approvalOrtho.cards.push(
+      createCard({
+        id: "на-ортопедии",
+        title: "2608-375 Перчак М.Я. Постоянные",
+        linkedOrderId: "o-local",
+        assignees: ["u-всеволод"],
+      }),
+      createCard({
+        id: "на-ортопедии-другой",
+        title: "2608-353 Шубина Т.В. Временные",
+        linkedOrderId: "o-local-other",
+        assignees: ["u-олег"],
+      }),
+    );
+    approvalOdon.cards.push(
+      createCard({
+        id: "с-ортодонтии",
+        title: "2608-352 Невский Д.Д. Временные",
+        linkedOrderId: "o-foreign",
+        assignees: ["u-всеволод"],
+      }),
+    );
+    return { ortho, odon };
+  }
+
+  it("без поиска фильтр не подмешивает чужую доску в данные вида", () => {
+    const { ortho, odon } = boardsWithSameAssignee();
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho, odon],
+      activeBoardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      search: "",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "u-всеволод",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard, cardHomeBoardId } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+      memberHeads: null,
+    });
+    const ids = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(ids).toContain("на-ортопедии");
+    expect(ids).toContain("на-ортопедии-другой");
+    expect(ids).not.toContain("с-ортодонтии");
+    expect(cardHomeBoardId.get("на-ортопедии")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+  });
+
+  it("поиск + фильтр: кириллица вокруг совпадения, чужая доска не подмешивается", () => {
+    const { ortho, odon } = boardsWithSameAssignee();
+    const approvalOdon = odon.columns.find((c) => c.title === "Согласование")!;
+    approvalOdon.cards[0]!.title = "2608-352 Перчак с ортодонтии Временные";
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho, odon],
+      activeBoardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      search: "перчак",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "u-всеволод",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+      memberHeads: null,
+    });
+    const ids = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(ids).toEqual(["на-ортопедии"]);
+  });
+
+  it("«Мои» при том же фильтре по-прежнему собирает с обеих досок", () => {
+    const { ortho, odon } = boardsWithSameAssignee();
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho, odon],
+      activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+      search: "",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "u-всеволод",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard, cardHomeBoardId } = buildKanbanDisplayView(state, {
+      sessionUserId: "u-всеволод",
+      sessionUserRole: "ADMIN",
+      memberHeads: null,
+    });
+    const ids = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(ids).toContain("на-ортопедии");
+    expect(ids).toContain("с-ортодонтии");
+    expect(cardHomeBoardId.get("на-ортопедии")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+    expect(cardHomeBoardId.get("с-ортодонтии")).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
   });
 });

@@ -73,6 +73,7 @@ import type { KanbanTelegramPrefKey } from "@/lib/kanban-telegram-prefs";
 import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
   applyKanbanCardMembersOnBoard,
+  notifyKanbanCardDueChange,
   notifyKanbanCardMemberChange,
 } from "@/lib/kanban/kanban-card-members-client";
 import { persistCrmBoardFieldsClient } from "@/lib/kanban/persist-crm-board-fields-client";
@@ -101,6 +102,7 @@ import {
   updateKanbanBlockReason,
   userNameById,
 } from "@/lib/kanban/model";
+import { runKanbanAutomations } from "@/lib/kanban/automations";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
@@ -983,6 +985,12 @@ export function KanbanCardModal({
         return;
       }
       blockedOk = true;
+      runKanbanAutomations(
+        b,
+        { type: "card_blocked", cardId, columnId: fc.col.id },
+        0,
+        act,
+      );
       setBlockPopupOpen(false);
       setBlockReasonDraft("");
       if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
@@ -1745,23 +1753,12 @@ export function KanbanCardModal({
       });
     }
     if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
-      const titleLine = (card.title || "").trim() || "Без названия";
-      const linkHtml = kanbanCardLinkHtml(cardId, board.id, titleLine);
-      const duePart = v ? `новый срок ${escapeTelegramHtml(v)}` : "срок сброшен";
-      const { cardWord, orderWord } = oid
-        ? cardOrderWordLinks(oid, cardId, board.id)
-        : { cardWord: "", orderWord: "" };
-      postKanbanCrmTelegramNotify({
-        kaitenCardId: card.kaitenCardId,
-        event: "tg_due_changed",
-        cardMembers: card,
-        parseMode: "HTML",
-        lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
-        ...(oid
-          ? {
-              linesAdmin: [`Изменён срок в ${cardWord} и ${orderWord}: ${duePart}`],
-            }
-          : {}),
+      notifyKanbanCardDueChange({
+        card,
+        cardId,
+        boardId: board.id,
+        actorLabel: act || "Пользователь",
+        dueYmd: v,
       });
     }
   };
@@ -2181,6 +2178,12 @@ export function KanbanCardModal({
                     const fc = findCard(b, cardId);
                     if (!fc) return;
                     performUnblock(fc.card, b, act);
+                    runKanbanAutomations(
+                      b,
+                      { type: "card_unblocked", cardId, columnId: fc.col.id },
+                      0,
+                      act,
+                    );
                     if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
                       const t = (fc.card.title || "").trim() || "Без названия";
                       const linkHtml = kanbanCardLinkHtml(cardId, board.id, t);

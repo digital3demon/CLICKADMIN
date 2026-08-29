@@ -5,7 +5,11 @@ import type {
   KanbanBoard,
   KanbanAutomationRule,
 } from "@/lib/kanban/types";
-import { createEmptyAutomationRule } from "@/lib/kanban/automations";
+import {
+  createEmptyAutomationRule,
+  KANBAN_AUTOMATION_ACTION_OPTIONS,
+  KANBAN_AUTOMATION_TRIGGER_OPTIONS,
+} from "@/lib/kanban/automations";
 import { memo, useMemo } from "react";
 import { mergeKanbanPickerUsers, pickerRowLabel } from "./KanbanPersonAvatar";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
@@ -18,18 +22,31 @@ type Props = {
   onPatchRules: (fn: (rules: KanbanAutomationRule[]) => void) => void;
 };
 
-const ACTION_TYPES: { id: KanbanAutomationAction["type"]; label: string }[] = [
-  { id: "move_to_column", label: "Перенести в колонку" },
-  { id: "add_assignee", label: "Добавить ответственного" },
-  { id: "set_due_in_days", label: "Срок через N дней" },
-  { id: "add_comment", label: "Комментарий в чат" },
-  { id: "set_card_type", label: "Установить тип карточки" },
-  { id: "block", label: "Заблокировать (причина)" },
-];
-
 function newAction(board: KanbanBoard): KanbanAutomationAction {
   const col = board.columns[0]?.id ?? "";
   return { type: "move_to_column", columnId: col };
+}
+
+function actionFromType(
+  t: KanbanAutomationAction["type"],
+  board: KanbanBoard,
+  userId: string,
+  cardTypeId: string,
+): KanbanAutomationAction {
+  const col = board.columns[0]?.id ?? "";
+  if (t === "move_to_column") return { type: t, columnId: col };
+  if (t === "archive") return { type: t, afterHours: 48 };
+  if (t === "add_assignee" || t === "remove_assignee" || t === "add_participant" || t === "remove_participant") {
+    return { type: t, userId };
+  }
+  if (t === "set_due_in_days") return { type: t, days: 7 };
+  if (t === "add_comment") return { type: t, text: "" };
+  if (t === "set_card_type") return { type: t, cardTypeId };
+  if (t === "block") return { type: t, reason: "" };
+  if (t === "clear_due" || t === "set_urgent" || t === "clear_urgent" || t === "unblock" || t === "complete_checklists") {
+    return { type: t };
+  }
+  return newAction(board);
 }
 
 function KanbanActionEditor({
@@ -63,20 +80,12 @@ function KanbanActionEditor({
           value={action.type}
           onChange={(e) => {
             const t = e.target.value as KanbanAutomationAction["type"];
-            if (t === "move_to_column") onChange({ type: "move_to_column", columnId: cols[0]?.id ?? "" });
-            else if (t === "add_assignee")
-              onChange({
-                type: "add_assignee",
-                userId: pickerUsers[0]?.id ?? "",
-              });
-            else if (t === "set_due_in_days") onChange({ type: "set_due_in_days", days: 7 });
-            else if (t === "add_comment") onChange({ type: "add_comment", text: "" });
-            else if (t === "set_card_type") onChange({ type: "set_card_type", cardTypeId: types[0]?.id ?? "" });
-            else if (t === "block") onChange({ type: "block", reason: "" });
-            else onChange(newAction(board));
+            onChange(
+              actionFromType(t, board, pickerUsers[0]?.id ?? "", types[0]?.id ?? ""),
+            );
           }}
         >
-          {ACTION_TYPES.map((a) => (
+          {KANBAN_AUTOMATION_ACTION_OPTIONS.map((a) => (
             <option key={a.id} value={a.id}>
               {a.label}
             </option>
@@ -99,9 +108,35 @@ function KanbanActionEditor({
           </select>
         </label>
       ) : null}
-      {action.type === "add_assignee" ? (
+      {action.type === "archive" ? (
+        <label className="flex w-28 flex-col gap-0.5 text-[0.65rem] font-medium uppercase text-[var(--text-muted)]">
+          Через часов
+          <input
+            type="number"
+            min={0}
+            max={24 * 180}
+            className="rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
+            value={action.afterHours}
+            onChange={(e) =>
+              onChange({
+                ...action,
+                afterHours: Math.max(0, Number(e.target.value) || 0),
+              })
+            }
+          />
+          <span className="normal-case font-normal text-[var(--text-muted)]">
+            0 — сразу, 48 — двое суток
+          </span>
+        </label>
+      ) : null}
+      {action.type === "add_assignee" ||
+      action.type === "remove_assignee" ||
+      action.type === "add_participant" ||
+      action.type === "remove_participant" ? (
         <label className="flex min-w-[8rem] flex-col gap-0.5 text-[0.65rem] font-medium uppercase text-[var(--text-muted)]">
-          Участник
+          {action.type === "add_assignee" || action.type === "remove_assignee"
+            ? "Ответственный"
+            : "Участник"}
           <select
             className="rounded border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
             value={action.userId}
@@ -205,9 +240,9 @@ function KanbanAutomationsFormImpl({
   return (
     <div className="space-y-4">
       <p className="m-0 text-sm text-[var(--text-secondary)]">
-        Глобальные правила для всех досок. В блоке «Когда» выбирается доска, событие и условия
-        (колонка, «из колонки», тип карточки). В блоке «Тогда» можно добавить несколько действий;
-        они выполняются по порядку.
+        События и действия как в Kaiten (перенос, архив, ответственные, участники, срок, ASAP,
+        блокировка, чеклист). «Поместить в архив»: 0 часов — сразу, 48 — через двое суток, если
+        карточка всё ещё в колонке «Когда» (как archive_after на done-колонке).
       </p>
 
       {rules.length === 0 ? (
@@ -282,8 +317,11 @@ function KanbanAutomationsFormImpl({
                     })
                   }
                 >
-                  <option value="card_moved_to_column">Карточку перенесли в колонку</option>
-                  <option value="card_created_in_column">Карточку создали в колонке</option>
+                  {KANBAN_AUTOMATION_TRIGGER_OPTIONS.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-[0.65rem] font-medium uppercase text-[var(--text-muted)]">
@@ -302,13 +340,13 @@ function KanbanAutomationsFormImpl({
               </label>
               <label
                 className={`flex flex-col gap-1 text-[0.65rem] font-medium uppercase text-[var(--text-muted)] ${
-                  rule.trigger === "card_created_in_column" ? "opacity-40" : ""
+                  rule.trigger === "card_moved_to_column" ? "" : "opacity-40"
                 }`}
               >
                 Из колонки (пусто = любая)
                 <select
                   className="rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-2 text-sm"
-                  disabled={rule.trigger === "card_created_in_column"}
+                  disabled={rule.trigger !== "card_moved_to_column"}
                   value={rule.fromColumnId}
                   onChange={(e) =>
                     updateRule(rule.id, { fromColumnId: e.target.value })

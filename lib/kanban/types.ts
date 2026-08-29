@@ -203,20 +203,34 @@ export type KanbanStoppedCard = {
   sourceColumnTitle: string;
 };
 
-/** Действие правила «если условие выполнено — сделать …». */
+/** Действие правила. Имена близки к Kaiten /api/spaces/{id}/automations. */
 export type KanbanAutomationAction =
   | { type: "move_to_column"; columnId: string }
   | { type: "add_assignee"; userId: string }
+  | { type: "remove_assignee"; userId: string }
+  | { type: "add_participant"; userId: string }
+  | { type: "remove_participant"; userId: string }
   | { type: "set_due_in_days"; days: number }
   | { type: "clear_due" }
+  | { type: "set_urgent" }
+  | { type: "clear_urgent" }
   | { type: "add_comment"; text: string }
   | { type: "set_card_type"; cardTypeId: string }
-  | { type: "block"; reason: string };
+  | { type: "block"; reason: string }
+  | { type: "unblock" }
+  | { type: "complete_checklists" }
+  | {
+      type: "archive";
+      /** 0 — сразу. Иначе карточка уходит в архив, если всё ещё в колонке правила. */
+      afterHours: number;
+    };
 
-/** Событие-триггер для правил на доске. */
+/** Событие-триггер. Сопоставление с Kaiten: moved_in_path / created / blocked / unblocked. */
 export type KanbanAutomationTrigger =
   | "card_moved_to_column"
-  | "card_created_in_column";
+  | "card_created_in_column"
+  | "card_blocked"
+  | "card_unblocked";
 
 export type KanbanAutomationRule = {
   id: string;
@@ -246,6 +260,16 @@ export type KanbanAutomationEvent =
       type: "card_created_in_column";
       cardId: string;
       columnId: string;
+    }
+  | {
+      type: "card_blocked";
+      cardId: string;
+      columnId: string;
+    }
+  | {
+      type: "card_unblocked";
+      cardId: string;
+      columnId: string;
     };
 
 export type KanbanBoard = {
@@ -265,7 +289,7 @@ export type KanbanBoard = {
   /** id пользователей CRM, которых не показывать в «Ответственные» / «Участники». */
   excludedCrmUserIds?: string[];
   cardTypes: CardTypeDef[];
-  /** Правила автоматизации (локально в браузере). */
+  /** Правила автоматизации. Канон — tenant-ключ kanbanAutomationsV1. */
   automations?: KanbanAutomationRule[];
   /** Автоархивация: выбор колонки и таймаут до архива. */
   autoArchiveRules?: KanbanAutoArchiveRule[];

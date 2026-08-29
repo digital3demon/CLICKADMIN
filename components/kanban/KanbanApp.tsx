@@ -9,7 +9,10 @@ import type {
   KanbanCard,
   KanbanStoppedCard,
 } from "@/lib/kanban/types";
-import { runKanbanAutomations } from "@/lib/kanban/automations";
+import {
+  applyKanbanAutomationDelayedArchives,
+  runKanbanAutomations,
+} from "@/lib/kanban/automations";
 import {
   canUserAccessBoard,
   annulKanbanStageTimerOnMemberAdvance,
@@ -35,6 +38,7 @@ import {
   restoreStoppedCardOnBoard,
   saveKanbanState,
   stopCardByIdOnBoard,
+  boardIdAfterLeavingKanbanAggregate,
   isKanbanAggregateBoardId,
   kanbanAggregateKeepsCard,
   kanbanAggregateMode,
@@ -75,6 +79,7 @@ import {
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
   applyKanbanCardMembersOnBoard,
+  notifyKanbanCardDueChange,
   notifyKanbanCardMemberChange,
   type KanbanMemberPickerMode,
 } from "@/lib/kanban/kanban-card-members-client";
@@ -161,6 +166,10 @@ import {
   KANBAN_ARCHIVE_SETTINGS_KEY,
 } from "@/lib/kanban/archive-settings-sync";
 import {
+  applyKanbanAutomations,
+  KANBAN_AUTOMATIONS_KEY,
+} from "@/lib/kanban/automations-sync";
+import {
   applyKanbanCardTypeLanes,
   extractKanbanCardTypeLanes,
   mergeCardTypeLaneSnapshots,
@@ -184,6 +193,7 @@ import { collectKanbanKaitenRefreshTargets } from "@/lib/kanban/kanban-linked-or
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
 import { BoardCanvas } from "./BoardCanvas";
+import { KanbanFilterQuickAccess } from "./KanbanFilterQuickAccess";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
 import { KanbanViewModePicker } from "./KanbanViewModePicker";
 import { IconArchiveBox } from "./kanban-icons";
@@ -465,6 +475,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   kanbanStateReadyRef.current = kanbanStateReady;
   const appStateRef = useRef<KanbanAppState | null>(null);
   appStateRef.current = appState;
+  /** Настоящая доска до «Мои» / «Ответственный» — не ортопедия по умолчанию. */
+  const lastRealBoardIdRef = useRef("");
   const [cardModalId, setCardModalId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirm, setConfirm] = useState<{
@@ -919,7 +931,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     let next = isDemo ? normalizeDemoKanbanAppState(loaded) : loaded;
     if (!isDemo) {
       const uiLocal = loadKanbanBoardUiLocal();
-      if (uiLocal) next = applyKanbanBoardUiState(next, uiLocal);
+      if (uiLocal) {
+        next = applyKanbanBoardUiState(next, uiLocal);
+        if (uiLocal.lastRealBoardId) lastRealBoardIdRef.current = uiLocal.lastRealBoardId;
+      }
     }
     if (
       !isDemo &&
@@ -1010,6 +1025,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         if (cancelled) return;
         const ui = normalizeKanbanBoardUiState(uiRaw);
         if (ui) {
+          if (ui.lastRealBoardId) lastRealBoardIdRef.current = ui.lastRealBoardId;
           saveKanbanBoardUiLocal(ui);
           setAppState((prev) => {
             if (!prev) return prev;
@@ -1024,7 +1040,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             void writeClientState(
               "user",
               KANBAN_BOARD_UI_KEY,
-              extractKanbanBoardUiState(prev),
+              extractKanbanBoardUiState(prev, lastRealBoardIdRef.current),
             );
             return prev;
           });
@@ -1063,6 +1079,33 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void pullArchiveSettings();
+    }, 15_000);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
+    };
+  }, [isDemo]);
+
+  useEffect(() => {
+    if (isDemo) return;
+    let cancelled = false;
+    const pullAutomations = async () => {
+      const remote = await readClientState<unknown>("tenant", KANBAN_AUTOMATIONS_KEY);
+      if (cancelled || !remote) return;
+      setAppState((prev) => (prev ? applyKanbanAutomations(prev, remote) : prev));
+    };
+    void pullAutomations();
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void pullAutomations();
+    };
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void pullAutomations();
     }, 15_000);
     document.addEventListener("visibilitychange", onVisibleOrFocus);
     window.addEventListener("focus", onVisibleOrFocus);
@@ -1161,7 +1204,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     if (isDemo || !appState || !kanbanStateReady || kanbanPersistPausedRef.current) {
       return;
     }
-    const uiPayload = extractKanbanBoardUiState(appState);
+    const uiPayload = extractKanbanBoardUiState(appState, lastRealBoardIdRef.current);
     saveKanbanBoardUiLocal(uiPayload);
     if (kanbanUiSaveTimerRef.current) {
       clearTimeout(kanbanUiSaveTimerRef.current);
@@ -1195,7 +1238,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       if (!cur || !canPersistTenantKanban(cur)) return;
       writePersistedKanbanState(cur, demo);
       if (!demo) {
-        const ui = extractKanbanBoardUiState(cur);
+        const ui = extractKanbanBoardUiState(cur, lastRealBoardIdRef.current);
         saveKanbanBoardUiLocal(ui);
         void writeClientState("user", KANBAN_BOARD_UI_KEY, ui);
         const lanes = mergeCardTypeLaneSnapshots(
@@ -1569,7 +1612,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     const q = (appState.search || "").trim();
     const homes = agg
       ? listKanbanAggregateSourceBoards(appState)
-      : q
+      : q && countActiveKanbanFilters(appState.filters) === 0
         ? visibleBoards
         : [board];
     const seen = new Set<string>();
@@ -1735,30 +1778,12 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         });
       }
       if (!shouldSkipCrmKanbanTelegram(card.kaitenCardId)) {
-        const boardId = homeBoardId || loc.board.id;
-        const titleLine = (card.title || "").trim() || "Без названия";
-        const linkHtml = telegramHtmlLink(
-          kanbanCardAbsoluteUrl(cardId, boardId),
-          titleLine,
-        );
-        const duePart = ymd
-          ? `новый срок ${escapeTelegramHtml(ymd)}`
-          : "срок сброшен";
-        const origin = typeof window !== "undefined" ? window.location.origin : "";
-        postKanbanTelegramNotify({
-          kaitenCardId: card.kaitenCardId,
-          event: "tg_due_changed",
-          parseMode: "HTML",
-          targetUserIds: kanbanCardTelegramMemberIds(card),
-          orderId: oid || undefined,
-          lines: [`Изменён срок в ${linkHtml}: ${duePart}`],
-          ...(oid
-            ? {
-                linesAdmin: [
-                  `Изменён срок в ${telegramHtmlLink(kanbanCardAbsoluteUrl(cardId, boardId), "карточке")} и ${telegramHtmlLink(`${origin}/orders/${encodeURIComponent(oid)}`, "заказе")}: ${duePart}`,
-                ],
-              }
-            : {}),
+        notifyKanbanCardDueChange({
+          card,
+          cardId,
+          boardId: homeBoardId || loc.board.id,
+          actorLabel: activityActorLabel?.trim() || "Пользователь",
+          dueYmd: ymd,
         });
       }
     },
@@ -1853,7 +1878,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         syncProductionChecklistSnapshotsAcrossBoards(next.boards);
         for (const b of next.boards) {
           const out = applyBoardArchivePolicies(b);
-          archivedCount += out.archivedCount;
+          archivedCount += out.archivedCount + applyKanbanAutomationDelayedArchives(b);
           deletedCount += out.deletedCount;
           productionArchivedCount += autoArchiveReadyProductionChildren(b);
         }
@@ -2052,6 +2077,39 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   useEffect(() => {
     if (!appState) return;
     if (isKanbanAggregateBoardId(appState.activeBoardId)) return;
+    lastRealBoardIdRef.current = appState.activeBoardId;
+  }, [appState]);
+
+  const activateAggregateBoard = useCallback(
+    (targetId: string, toast: string) => {
+      if (!appState) return;
+      if (appState.activeBoardId === targetId) {
+        const nextId = boardIdAfterLeavingKanbanAggregate(
+          lastRealBoardIdRef.current,
+          visibleBoards.map((b) => b.id),
+        );
+        if (!nextId) return;
+        patchApp((s) => {
+          s.activeBoardId = nextId;
+        });
+        const label = appState.boards.find((x) => x.id === nextId)?.title;
+        showToast(label ? `Доска: ${label}` : "Доска");
+        return;
+      }
+      if (!isKanbanAggregateBoardId(appState.activeBoardId)) {
+        lastRealBoardIdRef.current = appState.activeBoardId;
+      }
+      patchApp((s) => {
+        s.activeBoardId = targetId;
+      });
+      showToast(toast);
+    },
+    [appState, visibleBoards, patchApp, showToast],
+  );
+
+  useEffect(() => {
+    if (!appState) return;
+    if (isKanbanAggregateBoardId(appState.activeBoardId)) return;
     if (canUserAccessBoard(getActiveBoard(appState), kanbanSessionUserId, kanbanSessionRole)) {
       return;
     }
@@ -2077,13 +2135,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
   const aggregateView =
     Boolean(appState) && isKanbanAggregateBoardId(appState!.activeBoardId);
   const dndLockedByPerms = Boolean(appState && !kanbanCardPerms.moveColumns);
-  const dndLockedByFilters = Boolean(
-    appState &&
-      (appState.search.trim() ||
-        countActiveKanbanFilters(appState.filters) > 0 ||
-        actualOn),
-  );
-  const dndLocked = dndLockedByPerms || dndLockedByFilters;
+  const dndLockedByActual = Boolean(appState && actualOn);
+  const dndLocked = dndLockedByPerms || dndLockedByActual;
 
   const addColumn = () => {
     applyToBoard((b) => {
@@ -3026,14 +3079,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               className="inline-flex min-h-[2.25rem] max-w-[min(42vw,11rem)] appearance-none truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-1 pl-1.5 pr-6 text-[0.68rem] font-semibold leading-tight text-[var(--kanban-text)] sm:min-h-[2.75rem] sm:max-w-[14rem] sm:py-2 sm:pl-3 sm:pr-7 sm:text-[0.8125rem] md:max-w-[16rem] md:text-[0.875rem]"
               value={
                 isKanbanAggregateBoardId(appState.activeBoardId)
-                  ? (visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
-                      visibleBoards[0]?.id ??
-                      "")
+                  ? ""
                   : appState.activeBoardId
               }
               aria-label="Выбор доски"
               onChange={(e) => {
                 const id = e.target.value;
+                if (!id) return;
+                lastRealBoardIdRef.current = id;
                 patchApp((s) => {
                   s.activeBoardId = id;
                 });
@@ -3041,6 +3094,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 if (label) showToast(`Доска: ${label}`);
               }}
             >
+              {isKanbanAggregateBoardId(appState.activeBoardId) ? (
+                <option value="" disabled>
+                  {appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
+                    ? "Мои"
+                    : "Ответственный"}
+                </option>
+              ) : null}
               {visibleBoards.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.title}
@@ -3091,24 +3151,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
                     : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
                 }`}
-                onClick={() => {
-                  if (!visibleBoards.length) return;
-                  const fallbackId =
-                    visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
-                    visibleBoards[0]!.id;
-                  if (appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID) {
-                    patchApp((s) => {
-                      s.activeBoardId = fallbackId;
-                    });
-                    const label = appState.boards.find((x) => x.id === fallbackId)?.title;
-                    showToast(label ? `Доска: ${label}` : "Доска");
-                  } else {
-                    patchApp((s) => {
-                      s.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
-                    });
-                    showToast("Доска: Мои");
-                  }
-                }}
+                onClick={() => activateAggregateBoard(KANBAN_BOARD_MY_CARDS_ID, "Доска: Мои")}
               >
                 Мои
               </button>
@@ -3120,24 +3163,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
                 }`}
                 title="Ответственный"
-                onClick={() => {
-                  if (!visibleBoards.length) return;
-                  const fallbackId =
-                    visibleBoards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)?.id ??
-                    visibleBoards[0]!.id;
-                  if (appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID) {
-                    patchApp((s) => {
-                      s.activeBoardId = fallbackId;
-                    });
-                    const label = appState.boards.find((x) => x.id === fallbackId)?.title;
-                    showToast(label ? `Доска: ${label}` : "Доска");
-                  } else {
-                    patchApp((s) => {
-                      s.activeBoardId = KANBAN_BOARD_DISTRIBUTE_ID;
-                    });
-                    showToast("Доска: Ответственный");
-                  }
-                }}
+                onClick={() =>
+                  activateAggregateBoard(KANBAN_BOARD_DISTRIBUTE_ID, "Доска: Ответственный")
+                }
               >
                 <span className="sm:hidden">отвст</span>
                 <span className="hidden sm:inline">Ответственный</span>
@@ -3153,6 +3181,11 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 })
               }
               className="min-h-[2.25rem] min-w-0 flex-1 basis-[6.5rem] rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-2 py-1.5 text-[0.8125rem] text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] sm:min-h-[2.75rem] sm:max-w-[320px] sm:flex-[1_1_12rem] sm:basis-auto sm:px-3 sm:py-2 sm:text-base md:text-[0.875rem]"
+            />
+            <KanbanFilterQuickAccess
+              templates={appState.filterTemplates ?? []}
+              filters={appState.filters}
+              patchApp={patchApp}
             />
             <KanbanFiltersButton
               board={board}
@@ -3335,9 +3368,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               <span className="text-[0.75rem] text-amber-700 dark:text-amber-300">
                 {dndLockedByPerms
                   ? "Перетаскивание карточек отключено: нет права «перемещать по колонкам»"
-                  : actualOn
-                    ? "Перетаскивание карточек отключено в режиме «Актуальное»"
-                    : "Перетаскивание карточек отключено при поиске/фильтрах"}
+                  : "Перетаскивание карточек отключено в режиме «Актуальное»"}
               </span>
             )}
               </div>

@@ -53,7 +53,7 @@ describe("formatTelegramHtmlLinkList", () => {
         {
           url: "https://click-lab.online/kanban?orderRef=or_Y210YTY5cm8zMDY1dm56MWlucW0wcWR2Zg",
           label: "2608-361 Сынгаевская А. Староверова К.В. Ортопедия для Севы 11.09 09:00",
-          detail: "Статус: К исполнению\nСрок : 2026-08-27",
+          detail: "Статус: К исполнению\nСрок : 27.08.26",
           showUrl: true,
         },
       ],
@@ -65,7 +65,7 @@ describe("formatTelegramHtmlLinkList", () => {
       "(<a href=\"https://click-lab.online/kanban?orderRef=or_Y210YTY5cm8zMDY1dm56MWlucW0wcWR2Zg\">https://click-lab.online/kanban?orderRef=or_Y210YTY5cm8zMDY1dm56MWlucW0wcWR2Zg</a>)",
     );
     expect(out).toContain("Статус: К исполнению");
-    expect(out).toContain("Срок : 2026-08-27");
+    expect(out).toContain("Срок : 27.08.26");
   });
 
   it("укладывается в лимит Telegram", () => {

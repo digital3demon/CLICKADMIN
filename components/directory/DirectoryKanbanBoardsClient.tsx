@@ -56,6 +56,11 @@ import {
   type KanbanCardTypeLanesSnapshot,
 } from "@/lib/kanban/card-type-lanes-sync";
 import { persistKanbanCatalogCardTypes } from "@/lib/kanban/persist-kanban-catalog-card-types";
+import {
+  applyKanbanAutomations,
+  extractKanbanAutomations,
+  KANBAN_AUTOMATIONS_KEY,
+} from "@/lib/kanban/automations-sync";
 
 const KanbanAutomationsForm = dynamic(
   () => import("@/components/kanban/KanbanAutomationsForm").then((m) => m.KanbanAutomationsForm),
@@ -140,6 +145,12 @@ export function DirectoryKanbanBoardsClient({
     types: [],
   });
   const lastCardTypeLanesSigRef = useRef("");
+  const automationsReadyRef = useRef(isDemo);
+  const [automationsReady, setAutomationsReady] = useState(isDemo);
+  const lastAutomationsSigRef = useRef("");
+  const automationsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTenantKanbanRef = useRef<ReturnType<typeof loadKanbanStateForDirectory> | null>(
     null,
@@ -371,6 +382,84 @@ export function DirectoryKanbanBoardsClient({
       }
     };
   }, [appState, isDemo, cardTypeLanesReady]);
+
+  useEffect(() => {
+    if (isDemo) {
+      automationsReadyRef.current = true;
+      setAutomationsReady(true);
+      return;
+    }
+    if (!kanbanStateReady) return;
+    let cancelled = false;
+    const pullAutomations = async () => {
+      const remote = await readClientState<unknown>("tenant", KANBAN_AUTOMATIONS_KEY);
+      if (cancelled) return;
+      if (automationsSaveTimerRef.current) {
+        automationsReadyRef.current = true;
+        return;
+      }
+      if (remote) {
+        setAppState((prev) => {
+          const next = applyKanbanAutomations(prev, remote);
+          lastAutomationsSigRef.current = JSON.stringify(extractKanbanAutomations(next));
+          return next;
+        });
+      } else if (!automationsReadyRef.current) {
+        const seeded = extractKanbanAutomations(appStateRef.current);
+        lastAutomationsSigRef.current = JSON.stringify(seeded);
+        if (seeded.rules.length > 0) {
+          void writeClientState("tenant", KANBAN_AUTOMATIONS_KEY, seeded);
+        }
+      }
+      automationsReadyRef.current = true;
+      setAutomationsReady(true);
+    };
+    void pullAutomations();
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      void pullAutomations();
+    };
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void pullAutomations();
+    }, 15_000);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
+    };
+  }, [isDemo, kanbanStateReady]);
+
+  useEffect(() => {
+    if (isDemo || !automationsReady) return;
+    const payload = extractKanbanAutomations(appState);
+    const sig = JSON.stringify(payload);
+    if (sig === lastAutomationsSigRef.current) return;
+    lastAutomationsSigRef.current = sig;
+    if (automationsSaveTimerRef.current) {
+      clearTimeout(automationsSaveTimerRef.current);
+    }
+    automationsSaveTimerRef.current = setTimeout(() => {
+      automationsSaveTimerRef.current = null;
+      void writeClientState("tenant", KANBAN_AUTOMATIONS_KEY, payload);
+    }, 400);
+    return () => {
+      if (automationsSaveTimerRef.current) {
+        clearTimeout(automationsSaveTimerRef.current);
+      }
+    };
+  }, [appState, isDemo, automationsReady]);
+
+  useEffect(() => {
+    return () => {
+      if (isDemo || !automationsReadyRef.current) return;
+      const payload = extractKanbanAutomations(appStateRef.current);
+      void writeClientState("tenant", KANBAN_AUTOMATIONS_KEY, payload);
+    };
+  }, [isDemo]);
 
   useEffect(() => {
     if (isDemo) return;
@@ -1127,7 +1216,8 @@ export function DirectoryKanbanBoardsClient({
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Глобальные правила для всех досок. В каждом правиле в блоке «Когда» выбирается доска.
-            В «Тогда» можно добавить несколько действий.
+            В «Тогда» — действия как в Kaiten, в том числе архив сразу или через N часов.
+            Сохраняются сами — кнопка «Сохранить типы» на них не влияет.
           </p>
           {!canEditKanbanBoards ? (
             <p className="mt-2 text-xs text-[var(--text-muted)]">
@@ -1135,7 +1225,7 @@ export function DirectoryKanbanBoardsClient({
             </p>
           ) : null}
           <fieldset
-            disabled={!canEditKanbanBoards}
+            disabled={!canEditKanbanBoards || !automationsReady}
             className="mt-6 min-w-0 border-0 p-0 disabled:pointer-events-none disabled:opacity-45"
           >
             <KanbanAutomationsForm

@@ -108,6 +108,27 @@ describe("merge preserves personal UI", () => {
     expect(merged.viewMode).toBe("calendar");
     expect(merged.search).toBe("local-q");
   });
+
+  it("не затирает локальные автоматизации пустым remote JSON", () => {
+    const local = defaultAppState();
+    local.boards[0]!.automations = [
+      {
+        id: "auto-юля",
+        enabled: true,
+        name: "Срок Юли",
+        boardId: local.boards[0]!.id,
+        trigger: "card_moved_to_column",
+        columnId: "col-1",
+        fromColumnId: "",
+        cardTypeId: "",
+        actions: [{ type: "add_comment", text: "для Юли" }],
+      },
+    ];
+    const remote = defaultAppState();
+    remote.boards[0]!.automations = [];
+    const merged = mergeKanbanStatePreservingLocalBoards(local, remote);
+    expect(merged.boards[0]!.automations?.[0]?.name).toBe("Срок Юли");
+  });
 });
 
 describe("apply / extract", () => {
@@ -133,5 +154,18 @@ describe("apply / extract", () => {
     expect(loaded?.search).toBe("Крупышева");
     expect(loaded?.activeBoardId).toBe(KANBAN_BOARD_MY_CARDS_ID);
     clearKanbanBoardUiLocalForTests();
+  });
+
+  it("помнит последнюю настоящую доску при «Мои», не ортопедию", () => {
+    const state = defaultAppState();
+    state.activeBoardId = KANBAN_BOARD_MY_CARDS_ID;
+    const ui = extractKanbanBoardUiState(state, "kanban-board-клиника-юли");
+    expect(ui.lastRealBoardId).toBe("kanban-board-клиника-юли");
+    expect(ui.activeBoardId).toBe(KANBAN_BOARD_MY_CARDS_ID);
+    const loaded = normalizeKanbanBoardUiState({
+      ...ui,
+      lastRealBoardId: KANBAN_BOARD_MY_CARDS_ID,
+    });
+    expect(loaded?.lastRealBoardId).toBe("");
   });
 });

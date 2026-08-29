@@ -7,6 +7,7 @@ import {
   moscowTodayYmd,
   moscowWorkWeekFridayYmd,
 } from "@/lib/shipments-date-range";
+import { formatKanbanDueYmdForTelegram } from "@/lib/kanban/kanban-person-due-telegram";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
 export type KanbanStageDlineWindow = {
@@ -73,7 +74,7 @@ export function formatKanbanStageDueTelegramDetail(
   statusLabel: string,
   stageDueYmd: string,
 ): string {
-  const due = stageDueYmd.trim().slice(0, 10) || "—";
+  const due = formatKanbanDueYmdForTelegram(stageDueYmd);
   return `Статус: ${statusLabel}\nСрок : ${due}`;
 }
 

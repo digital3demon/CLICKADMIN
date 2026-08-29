@@ -355,9 +355,15 @@ export function KanbanFiltersButton({
               {filterTemplates.length === 0 ? (
                 <p className="mt-2 text-[0.72rem] text-[var(--kanban-text-muted)]">
                   Нет сохранённых шаблонов — настройте фильтры и нажмите «Сохранить».
+                  Первые 4 появятся рядом с поиском.
                 </p>
               ) : (
                 <ul className="mt-2 max-h-[11rem] space-y-1 overflow-y-auto pr-0.5">
+                  {filterTemplates.length > 4 ? (
+                    <li className="px-0.5 text-[0.68rem] text-[var(--kanban-text-muted)]">
+                      Первые 4 — кнопки рядом с поиском.
+                    </li>
+                  ) : null}
                   {filterTemplates.map((t) => (
                     <li
                       key={t.id}

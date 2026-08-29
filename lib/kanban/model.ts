@@ -118,6 +118,19 @@ export function isKanbanAggregateBoardId(id: string): boolean {
   return kanbanAggregateMode(id) != null;
 }
 
+/**
+ * Выход с «Мои» / «Ответственный»: только последняя настоящая доска пользователя.
+ * Ортопедия/ортодонтия не дефолт — у других тенантов набор досок другой.
+ */
+export function boardIdAfterLeavingKanbanAggregate(
+  lastRealBoardId: string | null | undefined,
+  visibleBoardIds: readonly string[],
+): string | null {
+  const last = String(lastRealBoardId || "").trim();
+  if (!last || isKanbanAggregateBoardId(last)) return null;
+  return visibleBoardIds.includes(last) ? last : null;
+}
+
 /** Открытая доска доступна всем; закрытая — только пользователям из списка. */
 export function canUserAccessBoard(
   board: KanbanBoard,
@@ -1563,6 +1576,20 @@ export function mergeKanbanStatePreservingLocalBoards(
       localBoard.cardTypes,
     );
   }
+  const localAutomationRules = localState.boards.find(
+    (b) => (b.automations || []).length > 0,
+  )?.automations;
+  const remoteHasAutomations = merged.boards.some(
+    (b) => (b.automations || []).length > 0,
+  );
+  if (localAutomationRules?.length && !remoteHasAutomations) {
+    for (const board of merged.boards) {
+      board.automations = structuredClone(localAutomationRules).map((r) => ({
+        ...r,
+        boardId: String(r.boardId || board.id),
+      }));
+    }
+  }
   const hasActiveBoard =
     merged.boards.some((b) => b.id === merged.activeBoardId) ||
     isKanbanAggregateBoardId(merged.activeBoardId);
@@ -1981,12 +2008,6 @@ function appendArchivedSearchHits(args: {
   }
 }
 
-/**
- * Вид доски для рендера: при поиске — все доступные доски (как раньше);
- * виртуальные «Мои» / «Ответственный» тоже собирают карточки со всех дорожек.
- * Пустые колонки своей доски не выкидываем — иначе fit-zoom раздувает один столбец.
- * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
- */
 /** «МОИ» / «Ответственный»: люди на карточке; sticky только пока активен поиск. */
 export function kanbanAggregateKeepsCard(
   card: KanbanCard,
@@ -2020,6 +2041,14 @@ export function kanbanAggregateKeepsCard(
   return assignees.includes(uid) || searchLinkedHit || sticky;
 }
 
+/**
+ * Вид доски для рендера.
+ * Поиск без фильтров — все доступные доски.
+ * Фильтры на настоящей доске — только активная (не как «Мои» / «Ответственный»).
+ * Виртуальные «Мои» / «Ответственный» собирают карточки со всех дорожек.
+ * Пустые колонки своей доски не выкидываем — иначе fit-zoom раздувает один столбец.
+ * Карточки в данных остаются на исходной доске; `cardHomeBoardId` — для подписей и DnD-дома.
+ */
 export function buildKanbanDisplayView(
   state: KanbanAppState,
   opts?: {
@@ -2140,38 +2169,46 @@ export function buildKanbanDisplayView(
     col.cards.forEach((c) => cardHomeBoardId.set(c.id, active.id));
   });
 
+  const hasFilters = countActiveKanbanFilters(state.filters) > 0;
   if (!q) {
+    /* Без поиска колонки полные: фильтр режет вид в канвасе, DnD знает скрытые. */
     return { displayBoard: active, cardHomeBoardId };
   }
 
-  /* Поиск — все доступные доски, колонки как у текущей (общие этапы зеркал). */
+  /**
+   * Поиск без фильтров — все доступные доски.
+   * Поиск + фильтры — только активная, не как «Мои» / «Ответственный».
+   */
+  const homes = hasFilters ? [active] : accessibleBoards;
   const displayBoard = structuredClone(active);
   const extraColumns: KanbanColumn[] = [];
   const seenColTitles = new Set(
     displayBoard.columns.map((c) => c.title.trim().toLowerCase()),
   );
-  for (const home of accessibleBoards) {
-    for (const col of home.columns) {
-      const key = col.title.trim().toLowerCase();
-      if (seenColTitles.has(key)) continue;
-      seenColTitles.add(key);
-      extraColumns.push(structuredClone({ ...col, cards: [] }));
+  if (!hasFilters) {
+    for (const home of accessibleBoards) {
+      for (const col of home.columns) {
+        const key = col.title.trim().toLowerCase();
+        if (seenColTitles.has(key)) continue;
+        seenColTitles.add(key);
+        extraColumns.push(structuredClone({ ...col, cards: [] }));
+      }
     }
+    displayBoard.columns.push(...extraColumns);
   }
-  displayBoard.columns.push(...extraColumns);
 
   for (const colView of displayBoard.columns) {
     const acc: KanbanCard[] = [];
     const seen = new Set<string>();
     const titleNorm = colView.title.trim().toLowerCase();
-    for (const home of accessibleBoards) {
+    for (const home of homes) {
       const colO = home.columns.find(
         (c) => c.title.trim().toLowerCase() === titleNorm,
       );
       if (!colO) continue;
       for (const card of colO.cards) {
         if (seen.has(card.id)) continue;
-        if (!textMatches(card, home)) continue;
+        if (q && !textMatches(card, home)) continue;
         if (!passesFiltersWithoutSearchText(card, home)) continue;
         seen.add(card.id);
         acc.push(card);
@@ -2180,13 +2217,15 @@ export function buildKanbanDisplayView(
     }
     colView.cards = acc;
   }
-  appendArchivedSearchHits({
-    displayBoard,
-    homes: accessibleBoards,
-    cardHomeBoardId,
-    textMatches,
-    passesFilters: passesFiltersWithoutSearchText,
-  });
+  if (q) {
+    appendArchivedSearchHits({
+      displayBoard,
+      homes,
+      cardHomeBoardId,
+      textMatches,
+      passesFilters: passesFiltersWithoutSearchText,
+    });
+  }
   /* Свои колонки — всегда (скелет доски). Чужие заголовки — только если есть попадание. */
   const nativeTitles = new Set(
     active.columns.map((c) => c.title.trim().toLowerCase()),

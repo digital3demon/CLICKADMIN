@@ -63,6 +63,8 @@ export type KanbanBoardUiState = {
   filters: KanbanFilters;
   filterTemplates: KanbanFilterTemplate[];
   activeBoardId: string;
+  /** Последняя невиртуальная доска — выход с «Мои» / «Ответственный». */
+  lastRealBoardId: string;
   viewMode: "board" | "calendar" | "list";
   calendarMonth: { y: number; m: number };
   search: string;
@@ -110,6 +112,12 @@ function normalizeFilterTemplates(raw: unknown): KanbanFilterTemplate[] {
   return out;
 }
 
+function normalizeLastRealBoardId(raw: unknown): string {
+  const id = String(raw ?? "").trim();
+  if (!id || AGGREGATE_BOARD_IDS.has(id)) return "";
+  return id;
+}
+
 function normalizeViewMode(raw: unknown): KanbanBoardUiState["viewMode"] {
   if (raw === "calendar" || raw === "list" || raw === "board") return raw;
   return "board";
@@ -135,6 +143,7 @@ export function defaultKanbanBoardUiState(
     filters: emptyKanbanFilters(),
     filterTemplates: [],
     activeBoardId,
+    lastRealBoardId: "",
     viewMode: "board",
     calendarMonth: { y: now.getFullYear(), m: now.getMonth() },
     search: "",
@@ -152,6 +161,7 @@ export function normalizeKanbanBoardUiState(
     filters: normalizeFilters(o.filters),
     filterTemplates: normalizeFilterTemplates(o.filterTemplates),
     activeBoardId: String(o.activeBoardId ?? ""),
+    lastRealBoardId: normalizeLastRealBoardId(o.lastRealBoardId),
     viewMode: normalizeViewMode(o.viewMode),
     calendarMonth: normalizeCalendarMonth(o.calendarMonth),
     search: String(o.search ?? ""),
@@ -160,12 +170,17 @@ export function normalizeKanbanBoardUiState(
 
 export function extractKanbanBoardUiState(
   state: KanbanAppState,
+  lastRealBoardId?: string,
 ): KanbanBoardUiState {
+  const active = String(state.activeBoardId ?? "");
+  const fromArg = normalizeLastRealBoardId(lastRealBoardId);
+  const fromActive = AGGREGATE_BOARD_IDS.has(active) ? "" : active;
   return {
     version: 1,
     filters: normalizeFilters(state.filters),
     filterTemplates: normalizeFilterTemplates(state.filterTemplates),
-    activeBoardId: String(state.activeBoardId ?? ""),
+    activeBoardId: active,
+    lastRealBoardId: fromArg || fromActive,
     viewMode: normalizeViewMode(state.viewMode),
     calendarMonth: normalizeCalendarMonth(state.calendarMonth),
     search: String(state.search ?? ""),

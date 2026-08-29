@@ -50,7 +50,7 @@ describe("kanbanStageDueYmdOnOrBeforeEnd", () => {
 describe("formatKanbanStageDueTelegramDetail", () => {
   it("статус и срок с кириллицей вокруг даты", () => {
     expect(formatKanbanStageDueTelegramDetail("К исполнению", "2026-08-27")).toBe(
-      "Статус: К исполнению\nСрок : 2026-08-27",
+      "Статус: К исполнению\nСрок : 27.08.26",
     );
   });
 });

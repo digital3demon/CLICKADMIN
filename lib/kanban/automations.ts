@@ -2,19 +2,61 @@ import type {
   KanbanAutomationAction,
   KanbanAutomationEvent,
   KanbanAutomationRule,
+  KanbanAutomationTrigger,
   KanbanBoard,
   KanbanCard,
 } from "./types";
-import { setKanbanStageDue } from "./kanban-stage-due";
+import { clearKanbanStageDue, setKanbanStageDue } from "./kanban-stage-due";
 import {
   actorUserId,
+  archiveCardByIdOnBoard,
   findCard,
   generateId,
+  performUnblock,
   pushActivity,
   tryBlockCard,
 } from "./model";
 
 const MAX_DEPTH = 8;
+/** Как Kaiten `archive_after_*`: 0 = сразу, иначе простой в колонке правила. */
+export const KANBAN_ARCHIVE_AFTER_HOURS_MAX = 24 * 180;
+
+export function normalizeArchiveAfterHours(raw: unknown): number {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(KANBAN_ARCHIVE_AFTER_HOURS_MAX, n);
+}
+
+export const KANBAN_AUTOMATION_TRIGGER_OPTIONS: {
+  id: KanbanAutomationTrigger;
+  label: string;
+}[] = [
+  { id: "card_moved_to_column", label: "Карточку перенесли в колонку" },
+  { id: "card_created_in_column", label: "Карточку создали в колонке" },
+  { id: "card_blocked", label: "Карточку заблокировали" },
+  { id: "card_unblocked", label: "С карточки сняли блокировку" },
+];
+
+export const KANBAN_AUTOMATION_ACTION_OPTIONS: {
+  id: KanbanAutomationAction["type"];
+  label: string;
+}[] = [
+  { id: "move_to_column", label: "Перенести в колонку" },
+  { id: "archive", label: "Поместить в архив (срок)" },
+  { id: "add_assignee", label: "Добавить ответственного" },
+  { id: "remove_assignee", label: "Снять ответственного" },
+  { id: "add_participant", label: "Добавить участника" },
+  { id: "remove_participant", label: "Снять участника" },
+  { id: "set_due_in_days", label: "Срок через N дней" },
+  { id: "clear_due", label: "Снять срок" },
+  { id: "set_urgent", label: "Отметить срочной (ASAP)" },
+  { id: "clear_urgent", label: "Снять метку «срочно»" },
+  { id: "add_comment", label: "Комментарий в чат" },
+  { id: "set_card_type", label: "Установить тип карточки" },
+  { id: "block", label: "Заблокировать (причина)" },
+  { id: "unblock", label: "Снять блокировку" },
+  { id: "complete_checklists", label: "Отметить все пункты чеклиста" },
+];
 
 function addDaysISO(days: number): string {
   const d = new Date();
@@ -67,6 +109,11 @@ function ruleMatches(
     return rule.columnId === event.columnId;
   }
 
+  if (event.type === "card_blocked" || event.type === "card_unblocked") {
+    if (rule.columnId.trim() && rule.columnId !== event.columnId) return false;
+    return true;
+  }
+
   return false;
 }
 
@@ -115,13 +162,53 @@ function applyNonMoveAction(
       card.updatedAt = new Date().toISOString();
       return true;
     }
+    case "remove_assignee": {
+      const uid = action.userId.trim();
+      if (!uid) return false;
+      const a = card.assignees || [];
+      if (!a.includes(uid)) return false;
+      card.assignees = a.filter((id) => id !== uid);
+      card.updatedAt = new Date().toISOString();
+      return true;
+    }
+    case "add_participant": {
+      if (!action.userId.trim()) return false;
+      const p = card.participants || [];
+      if (p.includes(action.userId)) return false;
+      card.participants = [...p, action.userId];
+      card.updatedAt = new Date().toISOString();
+      return true;
+    }
+    case "remove_participant": {
+      const uid = action.userId.trim();
+      if (!uid) return false;
+      const p = card.participants || [];
+      if (!p.includes(uid)) return false;
+      card.participants = p.filter((id) => id !== uid);
+      card.updatedAt = new Date().toISOString();
+      return true;
+    }
     case "set_due_in_days": {
       setKanbanStageDue(card, addDaysISO(action.days));
       card.updatedAt = new Date().toISOString();
       return true;
     }
     case "clear_due": {
-      return false;
+      if (!clearKanbanStageDue(card)) return false;
+      card.updatedAt = new Date().toISOString();
+      return true;
+    }
+    case "set_urgent": {
+      if (card.urgent) return false;
+      card.urgent = true;
+      card.updatedAt = new Date().toISOString();
+      return true;
+    }
+    case "clear_urgent": {
+      if (!card.urgent) return false;
+      card.urgent = false;
+      card.updatedAt = new Date().toISOString();
+      return true;
     }
     case "add_comment": {
       const t = (action.text || "").trim();
@@ -148,9 +235,86 @@ function applyNonMoveAction(
       if (card.blocked) return false;
       return tryBlockCard(card, board, r, activityActorLabel);
     }
+    case "unblock": {
+      if (!card.blocked) return false;
+      performUnblock(card, board, activityActorLabel);
+      return true;
+    }
+    case "complete_checklists": {
+      const items = card.checklist || [];
+      if (items.length === 0) return false;
+      const now = new Date().toISOString();
+      let changed = false;
+      for (const it of items) {
+        if (it.completed) continue;
+        it.completed = true;
+        it.completedAt = now;
+        changed = true;
+      }
+      if (!changed) return false;
+      card.updatedAt = now;
+      return true;
+    }
+    case "archive": {
+      const hours = normalizeArchiveAfterHours(action.afterHours);
+      if (hours > 0) {
+        pushActivity(
+          card,
+          `В архив через ${hours} ч`,
+          actor,
+          board,
+          activityActorLabel,
+        );
+        return true;
+      }
+      return archiveCardByIdOnBoard(board, card.id, "auto");
+    }
     default:
       return false;
   }
+}
+
+function cardIdleSince(card: KanbanCard, now: Date): number {
+  const raw = card.lastMovedAt || card.updatedAt || card.createdAt;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return 0;
+  return now.getTime() - d.getTime();
+}
+
+/**
+ * Отложенный архив (Kaiten archive_after на done-колонке):
+ * карточка всё ещё в колонке правила и простояла afterHours.
+ */
+export function applyKanbanAutomationDelayedArchives(
+  board: KanbanBoard,
+  now = new Date(),
+): number {
+  let archived = 0;
+  for (const rule of board.automations || []) {
+    if (!rule?.enabled) continue;
+    if (rule.boardId.trim() && rule.boardId !== board.id) continue;
+    if (
+      rule.trigger !== "card_moved_to_column" &&
+      rule.trigger !== "card_created_in_column"
+    ) {
+      continue;
+    }
+    const col = board.columns.find((c) => c.id === rule.columnId);
+    if (!col) continue;
+    for (const action of rule.actions || []) {
+      if (action.type !== "archive") continue;
+      const hours = normalizeArchiveAfterHours(action.afterHours);
+      if (hours <= 0) continue;
+      const thresholdMs = hours * 60 * 60 * 1000;
+      const typeFilter = rule.cardTypeId.trim();
+      for (const card of [...col.cards]) {
+        if (typeFilter && String(card.cardTypeId || "") !== typeFilter) continue;
+        if (cardIdleSince(card, now) < thresholdMs) continue;
+        if (archiveCardByIdOnBoard(board, card.id, "auto")) archived += 1;
+      }
+    }
+  }
+  return archived;
 }
 
 /**
