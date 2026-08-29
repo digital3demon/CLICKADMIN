@@ -70,12 +70,11 @@ function htmlEscape(s: string): string {
 }
 
 async function gzipBytes(data: Uint8Array): Promise<Uint8Array> {
-  if (typeof CompressionStream === "function") {
-    const stream = new Blob([data]).stream().pipeThrough(new CompressionStream("gzip"));
-    return new Uint8Array(await new Response(stream).arrayBuffer());
+  if (typeof CompressionStream !== "function") {
+    throw new Error("gzip: CompressionStream недоступен");
   }
-  const { gzipSync } = await import("node:zlib");
-  return gzipSync(Buffer.from(data));
+  const stream = new Blob([data]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 function recordToMesh(rec: ExocadCtmMeshRecord, index: number): D3dHtmlMeshV1 | null {

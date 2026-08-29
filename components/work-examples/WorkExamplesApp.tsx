@@ -118,15 +118,15 @@ export function WorkExamplesApp() {
           const types = it.cardTypes.map((t) => t.name).join(" · ");
           const orderLine = it.unassigned || !it.orderNumber ? "не распределен" : it.orderNumber;
           return (
-            <li key={it.id} className="w-[min(100%,30rem)]">
-              {/* Как канбан (aspect 1414/1000), ширина 2× колонки ~240px */}
+            <li key={it.id} className="w-[min(100%,21rem)] sm:w-[min(100%,30rem)]">
+              {/* Как канбан (aspect 1414/1000); на мобилке ширина −30% от 30rem */}
               <div className="flex aspect-[1414/1000] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm transition hover:border-[var(--sidebar-blue)]">
                 <button
                   type="button"
-                  className="flex min-h-0 flex-1 items-start px-3 pt-3 text-left"
+                  className="relative min-h-0 flex-1 text-left"
                   onClick={() => setEditor(it)}
                 >
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-[var(--surface-subtle)]">
+                  <div className="absolute inset-0 overflow-hidden bg-[var(--surface-subtle)]">
                     {cover ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
