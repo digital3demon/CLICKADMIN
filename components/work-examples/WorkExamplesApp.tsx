@@ -122,7 +122,7 @@ export function WorkExamplesApp() {
               <div className="flex aspect-[1414/1000] flex-col overflow-hidden rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm transition hover:border-[var(--sidebar-blue)]">
                 <button
                   type="button"
-                  className="flex min-h-0 flex-1 items-start gap-3 px-3 pt-3 text-left"
+                  className="flex min-h-0 flex-1 items-start px-3 pt-3 text-left"
                   onClick={() => setEditor(it)}
                 >
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-[var(--surface-subtle)]">
@@ -139,20 +139,24 @@ export function WorkExamplesApp() {
                       </div>
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-3 text-base font-semibold leading-snug text-[var(--text-strong)]">
+                </button>
+                <div className="flex items-end justify-between gap-2 border-t border-[var(--card-border)] px-3 py-2">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => setEditor(it)}
+                  >
+                    <p className="truncate text-sm font-semibold text-[var(--text-strong)]">
                       {workExampleDisplayTitle(it)}
                     </p>
-                    <p className="mt-1 truncate text-xs text-[var(--text-muted)]">
+                    <p className="truncate text-[11px] text-[var(--text-muted)]">
                       {orderLine}
                       {types ? ` · ${types}` : ""}
                     </p>
-                  </div>
-                </button>
-                <div className="flex justify-end px-3 pb-2.5">
+                  </button>
                   <button
                     type="button"
-                    className="rounded-md border border-[var(--card-border)] px-1.5 py-0.5 text-[11px]"
+                    className="shrink-0 rounded-md border border-[var(--card-border)] px-1.5 py-0.5 text-[11px]"
                     onClick={() => void openShare(it.id)}
                   >
                     QR

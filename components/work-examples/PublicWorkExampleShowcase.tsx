@@ -20,6 +20,7 @@ export type PublicShowcaseData = {
   cardTypes: Array<{ id: string; name: string }>;
   composition: WorkExampleCompositionLine[];
   cloudUrl: string | null;
+  cloudUrls?: string[];
   technicianNotes: string;
   doctorComments: string;
   files: Array<{
@@ -127,13 +128,23 @@ export function PublicWorkExampleShowcase({
           </div>
         ) : null}
 
-        {data.cloudUrl ? (
-          <p className="mt-8 text-sm">
-            Облако:{" "}
-            <a href={data.cloudUrl} className="text-sky-300 underline" target="_blank" rel="noreferrer">
-              открыть папку
-            </a>
-          </p>
+        {(data.cloudUrls?.length ? data.cloudUrls : data.cloudUrl ? [data.cloudUrl] : [])
+          .length ? (
+          <ul className="mt-8 space-y-1 text-sm">
+            {(data.cloudUrls?.length ? data.cloudUrls : [data.cloudUrl!]).map((href, i) => (
+              <li key={`${href}-${i}`}>
+                Облако{data.cloudUrls && data.cloudUrls.length > 1 ? ` ${i + 1}` : ""}:{" "}
+                <a
+                  href={href}
+                  className="text-sky-300 underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  открыть
+                </a>
+              </li>
+            ))}
+          </ul>
         ) : null}
 
         {meshFiles.length ? (

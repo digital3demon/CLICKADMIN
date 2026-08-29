@@ -37,11 +37,30 @@ describe("buildPublicWorkExampleView", () => {
     });
     expect(view.title).toBe("Сплинт Малинина верх");
     expect(view.cloudUrl).toBeNull();
+    expect(view.cloudUrls).toEqual([]);
     expect(view.files.map((f) => f.id)).toEqual(["f1"]);
     expect(view.files[0]?.fileName).toContain("малинина");
     expect(publicWorkExampleViewHasPii(view)).toBe(false);
     expect(JSON.stringify(view)).not.toMatch(
       /orderNumber|patientName|doctorName|clinicId|deletedBy/,
     );
+  });
+
+  it("несколько облачных ссылок среди кириллицы", () => {
+    const view = buildPublicWorkExampleView({
+      title: "Тындик Невский",
+      cardTypes: [],
+      compositionSnapshot: [],
+      cloudUrl:
+        "витрина https://disk.yandex.ru/d/верх_Тындик\nhttps://drive.google.com/file/d/x Невский",
+      technicianNotes: "",
+      doctorComments: "",
+      files: [],
+    });
+    expect(view.cloudUrls).toEqual([
+      "https://disk.yandex.ru/d/верх_Тындик",
+      "https://drive.google.com/file/d/x",
+    ]);
+    expect(view.cloudUrl).toBe("https://disk.yandex.ru/d/верх_Тындик");
   });
 });

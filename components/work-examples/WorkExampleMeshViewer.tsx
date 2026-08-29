@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { WorkExampleInlineMesh } from "@/lib/work-examples/exocad-html-extract";
 import { workExampleMeshKind } from "@/lib/work-examples/mesh-file";
 
 export type WorkExampleMeshSource = {
@@ -9,7 +10,8 @@ export type WorkExampleMeshSource = {
 };
 
 type Props = {
-  meshes: WorkExampleMeshSource[];
+  meshes?: WorkExampleMeshSource[];
+  inlineMeshes?: WorkExampleInlineMesh[];
   className?: string;
 };
 
@@ -19,13 +21,22 @@ const FILL_LIGHT_OFFSET = { x: -52, y: 22, z: 38 };
 const MESH_COLOR = 0xe6c8a8;
 const VIEWPORT_BG = 0x2a2a30;
 
-export function WorkExampleMeshViewer({ meshes, className }: Props) {
+export function WorkExampleMeshViewer({
+  meshes = [],
+  inlineMeshes = [],
+  className,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const key = meshes.map((m) => `${m.url}\0${m.fileName}`).join("|");
+  const key = [
+    ...meshes.map((m) => `${m.url}\0${m.fileName}`),
+    ...inlineMeshes.map(
+      (m, i) => `inline:${i}:${m.name ?? ""}:${m.positions.length}:${m.indices.length}`,
+    ),
+  ].join("|");
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || meshes.length === 0) return;
+    if (!host || (meshes.length === 0 && inlineMeshes.length === 0)) return;
 
     let disposed = false;
     let animId = 0;
@@ -98,6 +109,22 @@ export function WorkExampleMeshViewer({ meshes, className }: Props) {
         const hasVc = Boolean(geo.getAttribute("color"));
         return new THREE.Mesh(geo, makeMaterial(hasVc));
       };
+
+      const applyInline = (src: WorkExampleInlineMesh) => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(src.positions, 3));
+        geo.setIndex(new THREE.BufferAttribute(src.indices, 1));
+        group.add(applyGeoMesh(geo));
+      };
+
+      for (const src of inlineMeshes) {
+        try {
+          applyInline(src);
+        } catch {
+          /* битый буфер — пропускаем */
+        }
+        if (disposed) return;
+      }
 
       for (const src of meshes) {
         const kind = workExampleMeshKind(src.fileName);
@@ -181,7 +208,7 @@ export function WorkExampleMeshViewer({ meshes, className }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  if (meshes.length === 0) return null;
+  if (meshes.length === 0 && inlineMeshes.length === 0) return null;
 
   return (
     <div

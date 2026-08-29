@@ -1,9 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { WorkExampleHtmlViewer } from "@/components/work-examples/WorkExampleHtmlViewer";
+import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import type { WorkExampleCardType, WorkExampleItem } from "@/components/work-examples/types";
+import {
+  parseWorkExampleCloudUrls,
+  serializeWorkExampleCloudUrls,
+  splitWorkExampleCloudUrlDraft,
+  WORK_EXAMPLE_CLOUD_URL_MAX,
+} from "@/lib/work-examples/cloud-urls";
 import { WORK_EXAMPLE_TITLE_MAX } from "@/lib/work-examples/constants";
 import { guessWorkExampleAttachKind } from "@/lib/work-examples/guess-attach-kind";
+import {
+  isWorkExampleViewableHtml,
+  isWorkExampleViewableMesh,
+} from "@/lib/work-examples/mesh-file";
 
 type OrderHit = {
   id: string;
@@ -49,7 +61,10 @@ export function WorkExampleEditorModal({
   const [cardTypes, setCardTypes] = useState<WorkExampleCardType[]>(item?.cardTypes ?? []);
   const [allTypes, setAllTypes] = useState<WorkExampleCardType[]>([]);
   const [typesOpen, setTypesOpen] = useState(false);
-  const [cloudUrl, setCloudUrl] = useState(item?.cloudUrl ?? "");
+  const [cloudUrls, setCloudUrls] = useState<string[]>(() => {
+    const parsed = parseWorkExampleCloudUrls(item?.cloudUrl ?? "");
+    return parsed.length ? parsed : [""];
+  });
   const [tech, setTech] = useState(item?.technicianNotes ?? "");
   const [doc, setDoc] = useState(item?.doctorComments ?? "");
   const [pending, setPending] = useState<PendingFile[]>([]);
@@ -71,6 +86,19 @@ export function WorkExampleEditorModal({
         file,
       })),
     ]);
+  };
+
+  const setCloudUrlAt = (index: number, raw: string) => {
+    const split = splitWorkExampleCloudUrlDraft(raw);
+    setCloudUrls((prev) => {
+      if (split) {
+        const next = [...prev.slice(0, index), ...split, ...prev.slice(index + 1)];
+        return next.slice(0, WORK_EXAMPLE_CLOUD_URL_MAX);
+      }
+      const next = [...prev];
+      next[index] = raw;
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -149,7 +177,7 @@ export function WorkExampleEditorModal({
       title,
       orderId: orderId || null,
       cardTypes,
-      cloudUrl,
+      cloudUrl: serializeWorkExampleCloudUrls(cloudUrls),
       technicianNotes: tech,
       doctorComments: doc,
     };
@@ -319,8 +347,8 @@ export function WorkExampleEditorModal({
             Закрыть
           </button>
         </header>
-        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-stretch">
             <div className="min-w-0 flex-1">
               <div className="flex min-h-10 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
                 <input
@@ -416,75 +444,114 @@ export function WorkExampleEditorModal({
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex min-h-10 min-w-0 flex-1 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
-              <input
-                className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[var(--text-placeholder)]"
-                placeholder="https://…"
-                value={cloudUrl}
-                onChange={(e) => setCloudUrl(e.target.value)}
-                aria-label="Ссылка на облако"
-              />
-              <span className="ml-2 shrink-0 text-xs text-[var(--text-muted)]">
-                Прикрепите ссылку
-              </span>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-1.5">
+          <div className="shrink-0 space-y-1.5">
+            {cloudUrls.map((href, i) => (
+              <div
+                key={`cloud-${i}`}
+                className="flex min-h-10 min-w-0 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3"
+              >
+                <input
+                  className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[var(--text-placeholder)]"
+                  placeholder="https://…"
+                  value={href}
+                  onChange={(e) => setCloudUrlAt(i, e.target.value)}
+                  aria-label={i === 0 ? "Ссылка на облако" : `Ссылка на облако ${i + 1}`}
+                />
+                {cloudUrls.length > 1 ? (
+                  <button
+                    type="button"
+                    className="ml-2 shrink-0 text-xs text-[var(--sidebar-blue)]"
+                    onClick={() =>
+                      setCloudUrls((prev) => {
+                        const next = prev.filter((_, j) => j !== i);
+                        return next.length ? next : [""];
+                      })
+                    }
+                  >
+                    убрать
+                  </button>
+                ) : (
+                  <span className="ml-2 shrink-0 text-xs text-[var(--text-muted)]">
+                    Ссылка
+                  </span>
+                )}
+              </div>
+            ))}
+            {cloudUrls.length < WORK_EXAMPLE_CLOUD_URL_MAX ? (
               <button
                 type="button"
-                className="rounded-lg border border-[var(--card-border)] px-2.5 py-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
-                onClick={() => photoInputRef.current?.click()}
+                className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
+                onClick={() => setCloudUrls((prev) => [...prev, ""])}
               >
-                + фото
+                + ещё ссылка
               </button>
-              <button
-                type="button"
-                className="rounded-lg border border-[var(--card-border)] px-2.5 py-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
-                onClick={() => cadInputRef.current?.click()}
-              >
-                + проект кад
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-[var(--card-border)] px-2.5 py-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                + файлы
-              </button>
-            </div>
-            <input
-              ref={photoInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              accept="image/*"
-              onChange={(e) => {
-                queueFiles(Array.from(e.target.files ?? []), "PHOTO");
-                e.target.value = "";
-              }}
-            />
-            <input
-              ref={cadInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              accept=".stl,.ply,.obj,.html,.htm,.3mf,.zip,.drc"
-              onChange={(e) => {
-                queueFiles(Array.from(e.target.files ?? []), "CAD");
-                e.target.value = "";
-              }}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              onChange={(e) => {
-                queueFiles(Array.from(e.target.files ?? []), "FILE");
-                e.target.value = "";
-              }}
-            />
+            ) : null}
           </div>
+
+          <div className="grid min-h-[10rem] flex-1 grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              className="flex h-full min-h-[10rem] flex-col items-center justify-center rounded-lg border border-dashed border-[var(--card-border)] px-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
+              onClick={() => photoInputRef.current?.click()}
+            >
+              + фото
+              <span className="mt-1 text-center text-[11px] font-normal text-[var(--text-muted)]">
+                перетащите сюда
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex h-full min-h-[10rem] flex-col items-center justify-center rounded-lg border border-dashed border-[var(--card-border)] px-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
+              onClick={() => cadInputRef.current?.click()}
+            >
+              + проект кад
+              <span className="mt-1 text-center text-[11px] font-normal text-[var(--text-muted)]">
+                перетащите сюда
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex h-full min-h-[10rem] flex-col items-center justify-center rounded-lg border border-dashed border-[var(--card-border)] px-2 text-sm font-medium hover:bg-[var(--surface-hover)]"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              + файлы
+              <span className="mt-1 text-center text-[11px] font-normal text-[var(--text-muted)]">
+                перетащите сюда
+              </span>
+            </button>
+          </div>
+          <input
+            ref={photoInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept="image/*"
+            onChange={(e) => {
+              queueFiles(Array.from(e.target.files ?? []), "PHOTO");
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={cadInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept=".stl,.ply,.obj,.html,.htm,.3mf,.zip,.drc"
+            onChange={(e) => {
+              queueFiles(Array.from(e.target.files ?? []), "CAD");
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => {
+              queueFiles(Array.from(e.target.files ?? []), "FILE");
+              e.target.value = "";
+            }}
+          />
 
           {pending.length || savedFiles.length ? (
             <ul className="space-y-1 text-xs text-[var(--text-muted)]">
@@ -518,7 +585,29 @@ export function WorkExampleEditorModal({
             </ul>
           ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          {savedId && savedFiles.some((f) => isWorkExampleViewableMesh(f.fileName)) ? (
+            <WorkExampleMeshViewer
+              meshes={savedFiles
+                .filter((f) => isWorkExampleViewableMesh(f.fileName))
+                .map((f) => ({
+                  url: `/api/work-examples/${encodeURIComponent(savedId)}/files/${encodeURIComponent(f.id)}`,
+                  fileName: f.fileName,
+                }))}
+            />
+          ) : null}
+          {savedId
+            ? savedFiles
+                .filter((f) => isWorkExampleViewableHtml(f.fileName))
+                .map((f) => (
+                  <WorkExampleHtmlViewer
+                    key={f.id}
+                    url={`/api/work-examples/${encodeURIComponent(savedId)}/files/${encodeURIComponent(f.id)}`}
+                    fileName={f.fileName}
+                  />
+                ))
+            : null}
+
+          <div className="grid shrink-0 gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="text-xs font-medium text-[var(--text-muted)]">
                 Описание от техника

@@ -1,3 +1,4 @@
+import { parseWorkExampleCloudUrls } from "@/lib/work-examples/cloud-urls";
 import { parseCardTypesSnapshot, parseCompositionSnapshot } from "@/lib/work-examples/composition-snapshot";
 import type { WorkExampleCompositionLine } from "@/lib/work-examples/constants";
 
@@ -9,6 +10,7 @@ export type PublicWorkExampleView = {
   cardTypes: Array<{ id: string; name: string }>;
   composition: WorkExampleCompositionLine[];
   cloudUrl: string | null;
+  cloudUrls: string[];
   technicianNotes: string;
   doctorComments: string;
   files: Array<{
@@ -37,15 +39,15 @@ export function buildPublicWorkExampleView(input: {
     deletedAt?: Date | null;
   }>;
 }): PublicWorkExampleView {
-  const cloudUrl =
-    input.cloudUrlDeletedAt || !String(input.cloudUrl || "").trim()
-      ? null
-      : String(input.cloudUrl).trim();
+  const cloudUrls = input.cloudUrlDeletedAt
+    ? []
+    : parseWorkExampleCloudUrls(input.cloudUrl);
   return {
     title: String(input.title ?? "").replace(/\s+/g, " ").trim().slice(0, 160),
     cardTypes: parseCardTypesSnapshot(input.cardTypes),
     composition: parseCompositionSnapshot(input.compositionSnapshot),
-    cloudUrl,
+    cloudUrl: cloudUrls[0] ?? null,
+    cloudUrls,
     technicianNotes: String(input.technicianNotes || "").slice(0, 4000),
     doctorComments: String(input.doctorComments || "").slice(0, 4000),
     files: input.files

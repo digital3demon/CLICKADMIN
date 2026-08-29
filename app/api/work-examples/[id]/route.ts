@@ -7,6 +7,7 @@ import {
 import { parseCardTypesSnapshot } from "@/lib/work-examples/composition-snapshot";
 import { parseWorkExampleTitle } from "@/lib/work-examples/constants";
 import { canDeleteWorkExampleWhole } from "@/lib/work-examples/permissions";
+import { serializeWorkExampleCloudUrls } from "@/lib/work-examples/cloud-urls";
 import { serializeWorkExample } from "@/lib/work-examples/serialize";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +74,8 @@ export async function PATCH(req: Request, ctxP: Ctx) {
     }
   }
   if (o.cloudUrl !== undefined) {
-    const next = typeof o.cloudUrl === "string" ? o.cloudUrl.trim().slice(0, 2000) : "";
+    const next =
+      typeof o.cloudUrl === "string" ? serializeWorkExampleCloudUrls(o.cloudUrl) : "";
     if (!next && existing.cloudUrl) {
       data.cloudUrl = null;
       data.cloudUrlPrevious = existing.cloudUrl;

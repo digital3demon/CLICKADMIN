@@ -11,6 +11,7 @@ import {
   parseWorkExampleTitle,
   type WorkExampleCompositionLine,
 } from "@/lib/work-examples/constants";
+import { serializeWorkExampleCloudUrls } from "@/lib/work-examples/cloud-urls";
 import { serializeWorkExample } from "@/lib/work-examples/serialize";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,9 @@ export async function POST(req: Request) {
     composition = snap.composition;
     if (!cardTypes.length) cardTypes = snap.cardTypes;
   }
-  const cloudUrl = typeof o.cloudUrl === "string" ? o.cloudUrl.trim().slice(0, 2000) : "";
+  const cloudUrl = serializeWorkExampleCloudUrls(
+    typeof o.cloudUrl === "string" ? o.cloudUrl : "",
+  );
   const row = await ctx.prisma.workExample.create({
     data: {
       tenantId: ctx.tenantId,
