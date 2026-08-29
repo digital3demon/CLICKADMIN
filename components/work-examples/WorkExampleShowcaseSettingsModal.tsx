@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { WORK_EXAMPLE_SHOWCASE_NAME_MAX } from "@/lib/work-examples/constants";
 
 export function WorkExampleShowcaseSettingsModal({ onClose }: { onClose: () => void }) {
@@ -86,9 +87,11 @@ export function WorkExampleShowcaseSettingsModal({ onClose }: { onClose: () => v
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-3 sm:p-6"
+      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/55 p-3 sm:p-6"
       role="dialog"
       aria-modal
       onMouseDown={(e) => {
@@ -185,6 +188,7 @@ export function WorkExampleShowcaseSettingsModal({ onClose }: { onClose: () => v
           </button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

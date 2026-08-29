@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
 import { WorkExampleEditorModal } from "@/components/work-examples/WorkExampleEditorModal";
 import { WorkExampleShowcaseSettingsModal } from "@/components/work-examples/WorkExampleShowcaseSettingsModal";
@@ -190,30 +191,33 @@ export function WorkExamplesApp() {
         />
       ) : null}
 
-      {share ? (
-        <div
-          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setShare(null);
-          }}
-        >
-          <div className="w-full max-w-sm rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 text-center">
-            <p className="mb-3 text-sm font-semibold">Поделиться примером</p>
-            {share.qr ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={share.qr} alt="QR" className="mx-auto mb-3 h-48 w-48" />
-            ) : null}
-            <p className="mb-3 break-all text-xs text-[var(--text-muted)]">{share.url}</p>
-            <button
-              type="button"
-              className="rounded-lg bg-[var(--sidebar-blue)] px-3 py-1.5 text-sm text-white"
-              onClick={() => void navigator.clipboard.writeText(share.url)}
+      {share && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[410] flex items-center justify-center bg-black/55 p-4"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setShare(null);
+              }}
             >
-              Скопировать ссылку
-            </button>
-          </div>
-        </div>
-      ) : null}
+              <div className="w-full max-w-sm rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 text-center">
+                <p className="mb-3 text-sm font-semibold">Поделиться примером</p>
+                {share.qr ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={share.qr} alt="QR" className="mx-auto mb-3 h-48 w-48" />
+                ) : null}
+                <p className="mb-3 break-all text-xs text-[var(--text-muted)]">{share.url}</p>
+                <button
+                  type="button"
+                  className="rounded-lg bg-[var(--sidebar-blue)] px-3 py-1.5 text-sm text-white"
+                  onClick={() => void navigator.clipboard.writeText(share.url)}
+                >
+                  Скопировать ссылку
+                </button>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
     </ModuleFrame>
   );

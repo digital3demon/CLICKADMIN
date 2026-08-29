@@ -15,6 +15,14 @@ export type WorkExampleInlineMesh = {
   indices: Uint32Array;
 };
 
+export type ExocadCtmMeshRecord = {
+  hasTexture: boolean;
+  matrix: Float32Array;
+  ctmBlob: Uint8Array;
+  textureBytes: Uint8Array | null;
+  name?: string;
+};
+
 export function extractExocadHtmlPayload(html: string): Uint8Array {
   const pos = html.lastIndexOf(HTML_DATA_MARKER);
   if (pos < 0) {
@@ -157,12 +165,13 @@ class Parser {
     return chunk.subarray(0, Math.min(size, chunk.length));
   }
 
-  readImageEmbedded(): void {
+  readImageEmbedded(): Uint8Array | null {
     const size = this.readI32() >>> 0;
-    if (size === 0) return;
+    if (size === 0) return null;
     this.readString();
     const padded = Math.ceil(size / 4) * 4;
-    this.readBytes(padded);
+    const chunk = this.readBytes(padded);
+    return chunk.subarray(0, Math.min(size, chunk.length));
   }
 
   readTreePaths(): Array<{ name: string }> {
@@ -215,7 +224,7 @@ class Parser {
     if (version > 1) this.readString();
     this.readString();
     this.skipLight();
-    this.readImageEmbedded();
+    this.readImageEmbedded(); // фон сцены, не меш
     this.readViews();
     this.readViews();
     const ann = this.readI32() >>> 0;
@@ -260,12 +269,7 @@ class Parser {
   }
 }
 
-export function parseExocadCtmMeshRecords(raw: Uint8Array): Array<{
-  hasTexture: boolean;
-  matrix: Float32Array;
-  ctmBlob: Uint8Array;
-  name?: string;
-}> {
+export function parseExocadCtmMeshRecords(raw: Uint8Array): ExocadCtmMeshRecord[] {
   const p = new Parser(raw);
   const version = p.readI32();
   if (version > FILE_VERSION_MAX) {
@@ -283,12 +287,7 @@ export function parseExocadCtmMeshRecords(raw: Uint8Array): Array<{
   }
   p.skipCreateScene(version);
   const meshCount = p.readI32() >>> 0;
-  const out: Array<{
-    hasTexture: boolean;
-    matrix: Float32Array;
-    ctmBlob: Uint8Array;
-    name?: string;
-  }> = [];
+  const out: ExocadCtmMeshRecord[] = [];
   for (let i = 0; i < meshCount; i += 1) {
     out.push(p.parseMeshRecord(version));
   }

@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
+import { useEffect, useRef, useState } from "react";
+import { injectD3dEmbedLiteIntoDocument } from "@/lib/work-examples/d3d-embed-lite";
 import {
-  extractExocadHtmlMeshes,
-  type WorkExampleInlineMesh,
-} from "@/lib/work-examples/exocad-html-extract";
+  D3D_SCENE_TEMPLATE_PATH,
+  renderExocadHtmlAsD3dDocument,
+} from "@/lib/work-examples/d3d-html-reexport";
 import { workExampleHtmlSceneKind } from "@/lib/work-examples/html-scene-kind";
 
-/** D3D-реэкспорт — свой standalone iframe. Exocad HTML — меши в D3D-свете, не плеер exocad. */
+/** Хост по 3d viever/embed/AGENTS.md: iframe D3D HTML + lite-hide.css. */
 export function WorkExampleHtmlViewer({
   url,
   fileName,
@@ -18,79 +18,103 @@ export function WorkExampleHtmlViewer({
   fileName: string;
   className?: string;
 }) {
-  const [mode, setMode] = useState<"loading" | "d3d" | "exocad" | "error">("loading");
-  const [inline, setInline] = useState<WorkExampleInlineMesh[]>([]);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [src, setSrc] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setMode("loading");
-    setInline([]);
+    const blobRef = { current: null as string | null };
+    setSrc(null);
     setErr(null);
 
     void (async () => {
       try {
         const r = await fetch(url, {
           credentials: "include",
+          headers: { Range: "bytes=0-65535" },
           signal: AbortSignal.timeout(120_000),
         });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const html = await r.text();
+        if (!r.ok && r.status !== 206) throw new Error(`HTTP ${r.status}`);
+        const peek = await r.text();
         if (cancelled) return;
-        const kind = workExampleHtmlSceneKind(html);
+        const kind = workExampleHtmlSceneKind(peek);
         if (kind === "d3d") {
-          setMode("d3d");
+          setSrc(url);
           return;
         }
-        if (kind === "exocad") {
-          const meshes = extractExocadHtmlMeshes(html);
-          if (!meshes.length) {
-            throw new Error("в HTML нет мешей OpenCTM");
-          }
-          setInline(meshes);
-          setMode("exocad");
-          return;
+        const full =
+          r.status === 206 || peek.length < 60_000
+            ? await (
+                await fetch(url, {
+                  credentials: "include",
+                  signal: AbortSignal.timeout(120_000),
+                })
+              ).text()
+            : peek;
+        if (cancelled) return;
+        if (workExampleHtmlSceneKind(full) !== "exocad") {
+          throw new Error("не D3D и не exocad HTML");
         }
-        throw new Error("не D3D и не exocad HTML");
+        const tplRes = await fetch(D3D_SCENE_TEMPLATE_PATH, {
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!tplRes.ok) throw new Error("нет шаблона D3Dviewer");
+        const doc = await renderExocadHtmlAsD3dDocument(full, fileName, await tplRes.text());
+        if (cancelled) return;
+        blobRef.current = URL.createObjectURL(
+          new Blob([doc], { type: "text/html;charset=utf-8" }),
+        );
+        setSrc(blobRef.current);
       } catch (e) {
         if (cancelled) return;
         setErr(e instanceof Error ? e.message : "не удалось открыть сцену");
-        setMode("error");
       }
     })();
 
     return () => {
       cancelled = true;
+      if (blobRef.current) URL.revokeObjectURL(blobRef.current);
     };
-  }, [url]);
+  }, [url, fileName]);
 
-  const shell = `overflow-hidden rounded-2xl border border-white/10 bg-[#2a2a30] ${className ?? ""}`;
+  const injectLite = () => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    try {
+      injectD3dEmbedLiteIntoDocument(doc);
+    } catch {
+      /* cross-origin — lite уже в HTML при реэкспорте */
+    }
+  };
 
-  if (mode === "d3d") {
+  const shell = `relative overflow-hidden rounded-lg border border-white/10 bg-[#0e1116] ${className ?? ""}`;
+  const frameH = "h-[min(70vh,720px)] min-h-[360px]";
+
+  if (src) {
     return (
-      <div className={shell}>
+      <div className={`${shell} ${frameH}`}>
         <iframe
+          ref={iframeRef}
+          className="d3d-viewer block h-full w-full border-0"
           title={fileName}
-          src={url}
+          src={src}
           sandbox="allow-scripts allow-same-origin allow-pointer-lock"
-          className="h-[min(70vh,560px)] min-h-[360px] w-full border-0"
           allow="fullscreen"
+          referrerPolicy="no-referrer"
+          onLoad={injectLite}
         />
       </div>
     );
   }
 
-  if (mode === "exocad") {
-    return <WorkExampleMeshViewer inlineMeshes={inline} className={className} />;
-  }
-
   return (
     <div
-      className={`${shell} flex h-[min(70vh,560px)] min-h-[360px] items-center justify-center px-4 text-center text-sm text-white/70`}
+      className={`${shell} ${frameH} flex items-center justify-center px-4 text-center text-sm text-white/70`}
     >
-      {mode === "loading"
-        ? "Загрузка сцены…"
-        : `Не удалось открыть «${fileName}»: ${err ?? "неизвестная HTML-сцена"}. Нужен реэкспорт HTML из D3Dviewer.`}
+      {err
+        ? `Не удалось открыть «${fileName}»: ${err}`
+        : "Загрузка сцены D3Dviewer…"}
     </div>
   );
 }

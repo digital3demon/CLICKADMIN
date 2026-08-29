@@ -1,0 +1,30 @@
+/* D3D HTML — lite embed: просмотр без тяжёлых инструментов.
+   Вставить в экспортированный .html перед </head>, либо инжектить same-origin с хоста.
+   НЕ скрывать: #mesh-panel, #exocad-views-panel, #view-orientation-mount
+*/
+
+#articulator-panel,
+#layers-dock,
+#mobile-contacts-bar,
+#comment-bubbles,
+#measure-labels,
+#html-contacts,
+#html-contacts-dynamic,
+#html-contacts-jaws,
+#html-contacts-mobile,
+#html-contacts-dynamic-mobile,
+#html-contacts-jaws-mobile,
+#mobile-dock [data-mobile-sheet="articulator"],
+#mobile-dock [data-mobile-sheet="layers"],
+#mobile-sheet-articulator,
+#mobile-sheet-layers {
+  display: none !important;
+}
+
+/* Слои-кнопки в десктоп-доке (на случай если не hidden) */
+.layers-dock__btn[data-layer="comments"],
+.layers-dock__btn[data-layer="ruler"],
+.layers-dock__btn[data-layer="thickness"],
+.layers-dock__btn[data-layer="marker"] {
+  display: none !important;
+}

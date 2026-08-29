@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { WorkExampleHtmlViewer } from "@/components/work-examples/WorkExampleHtmlViewer";
 import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import type { WorkExampleCardType, WorkExampleItem } from "@/components/work-examples/types";
@@ -283,9 +284,11 @@ export function WorkExampleEditorModal({
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-3 sm:p-6"
+      className="fixed inset-0 isolate z-[400] flex items-center justify-center bg-black/55 p-3 sm:p-6"
       role="dialog"
       aria-modal
       onMouseDown={(e) => {
@@ -348,7 +351,7 @@ export function WorkExampleEditorModal({
           </button>
         </header>
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
-          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-stretch">
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1">
               <div className="flex min-h-10 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
                 <input
@@ -404,19 +407,19 @@ export function WorkExampleEditorModal({
                 </ul>
               ) : null}
             </div>
-            <div className="w-full sm:w-44">
+            <div className="relative w-full shrink-0 sm:w-44">
               <button
                 type="button"
-                className="flex h-full min-h-10 w-full flex-col justify-center rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-left text-sm"
+                className="flex min-h-10 w-full flex-col justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-1.5 text-left text-sm"
                 onClick={() => setTypesOpen((v) => !v)}
               >
                 Типы работ
-                <span className="text-xs text-[var(--text-muted)]">
+                <span className="truncate text-xs text-[var(--text-muted)]">
                   {cardTypes.map((t) => t.name).join(", ") || "не заданы"}
                 </span>
               </button>
               {typesOpen ? (
-                <ul className="mt-1 max-h-48 overflow-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-2 text-sm">
+                <ul className="relative z-20 mt-1 max-h-48 overflow-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] p-2 text-sm shadow-lg">
                   {allTypes.map((t) => {
                     const on = cardTypes.some((x) => x.id === t.id);
                     return (
@@ -480,7 +483,7 @@ export function WorkExampleEditorModal({
             {cloudUrls.length < WORK_EXAMPLE_CLOUD_URL_MAX ? (
               <button
                 type="button"
-                className="text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
+                className="flex min-h-10 w-full items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
                 onClick={() => setCloudUrls((prev) => [...prev, ""])}
               >
                 + ещё ссылка
@@ -667,6 +670,7 @@ export function WorkExampleEditorModal({
           </div>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
