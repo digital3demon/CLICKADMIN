@@ -40,7 +40,40 @@ export const RECON_PDF_PAGE_PAD_BOTTOM = 16;
 export const RECON_PDF_PAGE_BODY_PT =
   RECON_PDF_PAGE_SHORT_PT - RECON_PDF_PAGE_PAD_TOP - RECON_PDF_PAGE_PAD_BOTTOM;
 
-const RECON_PDF_SPINE_PT = 1;
+/** Толщина линии сетки PDF (sibling View, не border ячейки). */
+export const RECON_PDF_SPINE_PT = 1;
+
+/**
+ * Ширина содержимого колонки: по 1pt на правую спину, у последней ещё 1pt
+ * на правый край (11 спин + сумма inner = PAGE_INNER).
+ */
+export function reconPdfInnerCol(i: number): number {
+  return i === 9
+    ? RECON_COL_W_PT[i]! - RECON_PDF_SPINE_PT * 2
+    : RECON_COL_W_PT[i]! - RECON_PDF_SPINE_PT;
+}
+
+/** Ячейки from…to плюс внутренние спины между ними (без крайних). */
+export function reconPdfInnerSpan(from: number, to: number): number {
+  let s = 0;
+  for (let i = from; i <= to; i++) {
+    s += reconPdfInnerCol(i);
+    if (i < to) s += RECON_PDF_SPINE_PT;
+  }
+  return s;
+}
+
+/** Префикс [v][c0]…[c_{from-1}] — до левой спины колонки `from`. */
+export function reconPdfPrefixBeforeCol(from: number): number {
+  if (from <= 0) return 0;
+  return RECON_PDF_SPINE_PT + reconPdfInnerSpan(0, from - 1);
+}
+
+/** Колонки from…to вместе с левой и правой спиной. */
+export function reconPdfBoxedSpan(from: number, to: number): number {
+  return RECON_PDF_SPINE_PT + reconPdfInnerSpan(from, to) + RECON_PDF_SPINE_PT;
+}
+
 const RECON_PDF_PAY_BLOCK_PT = 36;
 
 export type ReconSummaryCompact = {

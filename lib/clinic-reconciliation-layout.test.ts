@@ -5,7 +5,12 @@ import {
   RECON_PDF_PAGE_BODY_PT,
   reconColSpan,
   reconEstimateFirstBlockPt,
+  reconPdfBoxedSpan,
+  reconPdfInnerCol,
+  reconPdfInnerSpan,
+  reconPdfPrefixBeforeCol,
   reconSummaryCompact,
+  RECON_PDF_SPINE_PT,
 } from "@/lib/clinic-reconciliation-layout";
 
 describe("clinic-reconciliation-layout", () => {
@@ -19,11 +24,22 @@ describe("clinic-reconciliation-layout", () => {
     expect(reconColSpan(0, 4) + RECON_COL_W_PT[5]!).toBe(reconColSpan(0, 5));
   });
 
-  it("последняя колонка оставляет 2pt под вертикальные спины PDF", () => {
-    const innerLast = RECON_COL_W_PT[9]! - 2;
-    const innerSum =
-      RECON_COL_W_PT.slice(0, 9).reduce((a, b) => a + b, 0) + innerLast;
-    expect(innerSum).toBe(RECON_PAGE_INNER_PT - 2);
+  it("11 спин + inner колонок = ширина страницы; сводка и оплата на той же сетке", () => {
+    let innerSum = 0;
+    for (let i = 0; i <= 9; i++) innerSum += reconPdfInnerCol(i);
+    expect(innerSum + 11 * RECON_PDF_SPINE_PT).toBe(RECON_PAGE_INNER_PT);
+    expect(
+      reconPdfPrefixBeforeCol(0) + reconPdfBoxedSpan(0, 9),
+    ).toBe(RECON_PAGE_INNER_PT);
+    expect(
+      reconPdfPrefixBeforeCol(5) +
+        reconPdfBoxedSpan(5, 8) +
+        reconPdfInnerCol(9) +
+        RECON_PDF_SPINE_PT,
+    ).toBe(RECON_PAGE_INNER_PT);
+    expect(
+      reconPdfPrefixBeforeCol(8) + reconPdfBoxedSpan(8, 9),
+    ).toBe(RECON_PAGE_INNER_PT);
   });
 
   it("длинный список сводки ужимает ряд, пока блок влезает на страницу", () => {
