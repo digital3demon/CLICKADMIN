@@ -39,6 +39,12 @@ import {
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import { persistKanbanOrderActivityClient } from "@/lib/kanban/persist-kanban-activity-client";
+import { persistKanbanLinkedCardTimer } from "@/lib/kanban/persist-crm-board-fields-client";
+import {
+  applyKanbanTimerOnColumnMove as applyKanbanTimerOnColumnMoveCore,
+  freezeKanbanTimerForBlock,
+  resumeKanbanTimerPreservingRemaining,
+} from "@/lib/kanban/kanban-stage-timer";
 import { overlayMissingLocalLinkedCardsOntoRemote } from "@/lib/kanban/overlay-missing-local-linked-cards";
 import { canonicalKanbanCardTypeNameKey } from "@/lib/kanban/kaiten-card-type-names";
 import { ensureKanbanBoardCardType } from "@/lib/kanban/resolve-kanban-card-type";
@@ -568,6 +574,9 @@ export function performUnblock(
   card.blockReason = "";
   card.blockedByUserId = "";
   card.blockedAt = "";
+  if (resumeKanbanTimerPreservingRemaining(card) && card.linkedOrderId) {
+    persistKanbanLinkedCardTimer(card);
+  }
   pushActivity(
     card,
     "Блокировка снята",
@@ -591,6 +600,9 @@ export function tryBlockCard(
   card.blockReason = r;
   card.blockedByUserId = uid;
   card.blockedAt = new Date().toISOString();
+  if (freezeKanbanTimerForBlock(card) && card.linkedOrderId) {
+    persistKanbanLinkedCardTimer(card);
+  }
   pushActivity(
     card,
     "Карточка заблокирована: " + r.slice(0, 140),
@@ -1107,6 +1119,16 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
       partial.timerDurationMs === undefined ? null : partial.timerDurationMs ?? null,
     timerFrozenAt:
       partial.timerFrozenAt === undefined ? null : partial.timerFrozenAt ?? null,
+    timerStartedByUserId:
+      partial.timerStartedByUserId === undefined
+        ? null
+        : partial.timerStartedByUserId ?? null,
+    timerParkedAt:
+      partial.timerParkedAt === undefined ? null : partial.timerParkedAt ?? null,
+    timerParkedRemainingMs:
+      partial.timerParkedRemainingMs === undefined
+        ? null
+        : partial.timerParkedRemainingMs ?? null,
     ...(partial.sourceEmailCount != null && Number.isFinite(partial.sourceEmailCount)
       ? { sourceEmailCount: Math.max(0, Math.trunc(partial.sourceEmailCount)) }
       : {}),
@@ -1931,7 +1953,43 @@ export function pushActivity(
   if (oid) persistKanbanOrderActivityClient(oid, card.activity);
 }
 
-/** Сброс этапного таймера, если ответственный/участник перенёс карточку на следующую колонку. */
+/**
+ * Таймер при смене колонки: вперёд — снять и запомнить остаток;
+ * назад — не снимать, за 45 мин вернуть с того остатка.
+ */
+export function applyKanbanTimerOnColumnMove(
+  card: KanbanCard,
+  fromColumnIndex: number,
+  toColumnIndex: number,
+  sessionUserId: string | null | undefined,
+  board: KanbanBoard,
+  activityActorLabel?: string,
+): boolean {
+  const result = applyKanbanTimerOnColumnMoveCore(card, fromColumnIndex, toColumnIndex);
+  if (result === "none") return false;
+  const uid = (sessionUserId ?? "").trim() || actorUserId(board);
+  if (result === "parked") {
+    pushActivity(
+      card,
+      "Таймер снят (перенос на следующий этап)",
+      uid,
+      board,
+      activityActorLabel,
+    );
+  } else if (result === "restored") {
+    pushActivity(
+      card,
+      "Таймер восстановлен (возврат на предыдущий этап)",
+      uid,
+      board,
+      activityActorLabel,
+    );
+  }
+  if (card.linkedOrderId) persistKanbanLinkedCardTimer(card);
+  return result === "parked" || result === "restored";
+}
+
+/** @deprecated используйте applyKanbanTimerOnColumnMove */
 export function annulKanbanStageTimerOnMemberAdvance(
   card: KanbanCard,
   fromColumnIndex: number,
@@ -1940,27 +1998,14 @@ export function annulKanbanStageTimerOnMemberAdvance(
   board: KanbanBoard,
   activityActorLabel?: string,
 ): boolean {
-  if (toColumnIndex !== fromColumnIndex + 1) return false;
-  const uid = (sessionUserId ?? "").trim();
-  if (!uid) return false;
-  const assignees = card.assignees ?? [];
-  const participants = card.participants ?? [];
-  if (!assignees.includes(uid) && !participants.includes(uid)) return false;
-  const hadTimer =
-    Boolean(card.timerStartedAt) ||
-    (card.timerDurationMs != null && card.timerDurationMs > 0);
-  if (!hadTimer) return false;
-  card.timerStartedAt = null;
-  card.timerDurationMs = null;
-  card.timerFrozenAt = null;
-  pushActivity(
+  return applyKanbanTimerOnColumnMove(
     card,
-    "Таймер аннулирован (перенос на следующий этап)",
-    uid,
+    fromColumnIndex,
+    toColumnIndex,
+    sessionUserId,
     board,
     activityActorLabel,
   );
-  return true;
 }
 
 export function findCard(

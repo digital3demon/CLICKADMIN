@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isKanbanCardTimerExpired,
   kanbanCardTimerDisplayNowMs,
   kanbanCardTimerTrackFillColor,
 } from "@/lib/kanban/kanban-card-timer";
@@ -25,5 +26,29 @@ describe("kanbanCardTimerDisplayNowMs", () => {
     const now = 1_700_000_000_000;
     expect(kanbanCardTimerDisplayNowMs(null, now)).toBe(now);
     expect(kanbanCardTimerDisplayNowMs(undefined, now)).toBe(now);
+  });
+});
+
+describe("isKanbanCardTimerExpired", () => {
+  it("истёк — да, живой остаток — нет (кириллица в id не влияет)", () => {
+    const now = Date.parse("2026-08-31T12:00:00.000Z");
+    expect(
+      isKanbanCardTimerExpired(
+        {
+          timerStartedAt: "2026-08-31T11:00:00.000Z",
+          timerDurationMs: 60 * 60 * 1000,
+        },
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isKanbanCardTimerExpired(
+        {
+          timerStartedAt: "2026-08-31T11:50:00.000Z",
+          timerDurationMs: 60 * 60 * 1000,
+        },
+        now,
+      ),
+    ).toBe(false);
   });
 });

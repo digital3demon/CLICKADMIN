@@ -136,6 +136,43 @@ export function patchCrmBoardTilesCacheColumn(
   }
 }
 
+/** Сразу после смены таймера — F5 не поднимает старый живой отсчёт из кэша плиток. */
+export function patchCrmBoardTilesCacheTimer(
+  orderId: string,
+  timer: Pick<
+    CrmBoardTile,
+    | "timerStartedAt"
+    | "timerDurationMs"
+    | "timerFrozenAt"
+    | "timerStartedByUserId"
+    | "timerParkedAt"
+    | "timerParkedRemainingMs"
+  >,
+): void {
+  const oid = String(orderId || "").trim();
+  if (!oid) return;
+  const store = readStore();
+  let dirty = false;
+  for (const [boardId, tiles] of Object.entries(store.byBoard)) {
+    let changed = false;
+    const next = tiles.map((t) => {
+      if (t.orderId !== oid) return t;
+      changed = true;
+      return { ...t, ...timer };
+    });
+    if (changed) {
+      store.byBoard[boardId] = next;
+      dirty = true;
+    }
+  }
+  if (!dirty) return;
+  try {
+    storageSet(JSON.stringify(store));
+  } catch {
+    /* квота */
+  }
+}
+
 export function saveCrmBoardTilesCache(
   boardId: string,
   tiles: readonly CrmBoardTile[],

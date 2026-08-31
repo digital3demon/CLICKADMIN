@@ -19,6 +19,9 @@ type Body = {
   timerStartedAt?: unknown;
   timerDurationMs?: unknown;
   timerFrozenAt?: unknown;
+  timerStartedByUserId?: unknown;
+  timerParkedAt?: unknown;
+  timerParkedRemainingMs?: unknown;
   blocked?: unknown;
   blockReason?: unknown;
   blockedAt?: unknown;
@@ -90,6 +93,24 @@ export async function PATCH(request: Request) {
         ? null
         : typeof body.timerFrozenAt === "string"
           ? body.timerFrozenAt
+          : undefined,
+    timerStartedByUserId:
+      body.timerStartedByUserId === null
+        ? null
+        : typeof body.timerStartedByUserId === "string"
+          ? body.timerStartedByUserId
+          : undefined,
+    timerParkedAt:
+      body.timerParkedAt === null
+        ? null
+        : typeof body.timerParkedAt === "string"
+          ? body.timerParkedAt
+          : undefined,
+    timerParkedRemainingMs:
+      body.timerParkedRemainingMs === null
+        ? null
+        : typeof body.timerParkedRemainingMs === "number"
+          ? body.timerParkedRemainingMs
           : undefined,
     blocked: typeof body.blocked === "boolean" ? body.blocked : undefined,
     blockReason:

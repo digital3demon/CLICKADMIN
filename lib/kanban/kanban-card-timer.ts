@@ -30,6 +30,22 @@ export function kanbanCardTimerElapsedRatio(
   return Math.min(1, elapsed / timerDurationMs);
 }
 
+/** Таймер запущен и остаток 0 (в т.ч. на момент freeze). */
+export function isKanbanCardTimerExpired(
+  card: {
+    timerStartedAt?: string | null;
+    timerDurationMs?: number | null;
+    timerFrozenAt?: string | null;
+  },
+  nowMs: number,
+): boolean {
+  if (!card.timerStartedAt || card.timerDurationMs == null || card.timerDurationMs <= 0) {
+    return false;
+  }
+  const displayNow = kanbanCardTimerDisplayNowMs(card.timerFrozenAt, nowMs);
+  return kanbanCardTimerRemainingMs(card.timerStartedAt, card.timerDurationMs, displayNow) === 0;
+}
+
 /** Оставшееся время в мс (0 если истёк или нет таймера). */
 export function kanbanCardTimerRemainingMs(
   timerStartedAt: string | null | undefined,

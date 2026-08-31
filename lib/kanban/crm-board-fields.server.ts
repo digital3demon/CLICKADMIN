@@ -43,6 +43,9 @@ const TILE_SELECT = {
   kanbanTimerStartedAt: true,
   kanbanTimerDurationMs: true,
   kanbanTimerFrozenAt: true,
+  kanbanTimerStartedByUserId: true,
+  kanbanTimerParkedAt: true,
+  kanbanTimerParkedRemainingMs: true,
   kanbanChecklist: true,
   isUrgent: true,
   kaitenBlocked: true,
@@ -207,6 +210,9 @@ export async function persistCrmBoardFieldsOnOrder(input: {
   timerStartedAt?: string | null;
   timerDurationMs?: number | null;
   timerFrozenAt?: string | null;
+  timerStartedByUserId?: string | null;
+  timerParkedAt?: string | null;
+  timerParkedRemainingMs?: number | null;
   blocked?: boolean;
   blockReason?: string | null;
   blockedAt?: string | null;
@@ -217,6 +223,7 @@ export async function persistCrmBoardFieldsOnOrder(input: {
   if (!oid) return false;
   const data: Prisma.OrderUpdateInput = {
     kanbanBoardUpdatedAt: new Date(),
+    kaitenSyncedAt: new Date(),
   };
   if (input.assignees) {
     data.kanbanAssigneeIds = { set: normalizeCrmUserIds(input.assignees) };
@@ -251,6 +258,21 @@ export async function persistCrmBoardFieldsOnOrder(input: {
     const raw = (input.timerFrozenAt || "").trim();
     const d = raw ? new Date(raw) : null;
     data.kanbanTimerFrozenAt = d && !Number.isNaN(d.getTime()) ? d : null;
+  }
+  if (input.timerStartedByUserId !== undefined) {
+    data.kanbanTimerStartedByUserId =
+      (input.timerStartedByUserId || "").trim() || null;
+  }
+  if (input.timerParkedAt !== undefined) {
+    const raw = (input.timerParkedAt || "").trim();
+    const d = raw ? new Date(raw) : null;
+    data.kanbanTimerParkedAt = d && !Number.isNaN(d.getTime()) ? d : null;
+  }
+  if (input.timerParkedRemainingMs !== undefined) {
+    data.kanbanTimerParkedRemainingMs =
+      input.timerParkedRemainingMs != null && Number.isFinite(input.timerParkedRemainingMs)
+        ? Math.max(0, Math.floor(input.timerParkedRemainingMs))
+        : null;
   }
   if (input.blocked !== undefined) {
     const blocked = input.blocked === true;

@@ -10,6 +10,7 @@ import {
   loadCrmBoardTilesCache,
   mergeCrmBoardTilesCache,
   patchCrmBoardTilesCacheColumn,
+  patchCrmBoardTilesCacheTimer,
   saveCrmBoardTilesCache,
 } from "@/lib/kanban/crm-board-tiles-cache";
 
@@ -37,6 +38,9 @@ const tile: CrmBoardTile = {
   timerStartedAt: null,
   timerDurationMs: null,
   timerFrozenAt: null,
+  timerStartedByUserId: null,
+  timerParkedAt: null,
+  timerParkedRemainingMs: null,
   checklist: null,
   sourceEmailCount: 2,
 };
@@ -83,6 +87,23 @@ describe("crm-board-tiles-cache", () => {
     expect(
       loadCrmBoardTilesCache("kanban_board_orthodontics")[0]?.columnTitle,
     ).toBe("Согласование Жеребцов");
+  });
+
+  it("патч таймера в кэше плиток (кириллица в oid)", () => {
+    saveCrmBoardTilesCache("kanban_board_orthodontics", [
+      { ...tile, orderId: "наряд-остренкова", timerStartedAt: "2026-08-31T10:00:00.000Z" },
+    ]);
+    patchCrmBoardTilesCacheTimer("наряд-остренкова", {
+      timerStartedAt: null,
+      timerDurationMs: 1_800_000,
+      timerFrozenAt: null,
+      timerStartedByUserId: "u-всеволод",
+      timerParkedAt: "2026-08-31T12:00:00.000Z",
+      timerParkedRemainingMs: 600_000,
+    });
+    const cached = loadCrmBoardTilesCache("kanban_board_orthodontics")[0];
+    expect(cached?.timerStartedAt).toBeNull();
+    expect(cached?.timerParkedRemainingMs).toBe(600_000);
   });
 
   it("appointment snaps для Актуального с первого кадра", () => {

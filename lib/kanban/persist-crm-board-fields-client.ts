@@ -3,7 +3,10 @@ import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
 import { ymdFromKaitenDueDate } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { kaitenBlockedMetaFromCard } from "@/lib/kaiten-card-block";
 import { forEachKanbanCardInState, getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
-import { patchCrmBoardTilesCacheColumn } from "@/lib/kanban/crm-board-tiles-cache";
+import {
+  patchCrmBoardTilesCacheColumn,
+  patchCrmBoardTilesCacheTimer,
+} from "@/lib/kanban/crm-board-tiles-cache";
 import {
   upsertKanbanCardColumnCache,
   upsertKanbanCardHeadCache,
@@ -14,6 +17,7 @@ import {
 } from "@/lib/kanban/pending-column-moves";
 import { slimKanbanChecklist } from "@/lib/kanban/kanban-linked-checklist";
 import type { ChecklistItem, KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+export { crmColumnPersistFromLinkedMove } from "@/lib/kanban/crm-column-persist";
 
 export function rememberCrmKanbanColumnLocal(input: {
   cardId: string;
@@ -149,7 +153,10 @@ export function persistMissingCrmPeopleFromState(
   }
 }
 
-/** Непустые люди/срок из патча Kaiten → тело PATCH наряда. Пустое не пишем. */
+/**
+ * Кнопка «Обновить»: люди / срок / колонка / блок с Kaiten → наряд.
+ * `isUrgent` наряда не трогаем (срочно карточки ≠ срочно наряда).
+ */
 export function crmBoardFieldsFromKaitenRefreshPatch(
   patch: KaitenRefreshCardPatch,
 ): {
@@ -218,6 +225,9 @@ export function persistCrmBoardFieldsClient(input: {
   timerStartedAt?: string | null;
   timerDurationMs?: number | null;
   timerFrozenAt?: string | null;
+  timerStartedByUserId?: string | null;
+  timerParkedAt?: string | null;
+  timerParkedRemainingMs?: number | null;
   blocked?: boolean;
   blockReason?: string | null;
   blockedAt?: string | null;
@@ -235,6 +245,13 @@ export function persistCrmBoardFieldsClient(input: {
   if (input.timerStartedAt !== undefined) body.timerStartedAt = input.timerStartedAt;
   if (input.timerDurationMs !== undefined) body.timerDurationMs = input.timerDurationMs;
   if (input.timerFrozenAt !== undefined) body.timerFrozenAt = input.timerFrozenAt;
+  if (input.timerStartedByUserId !== undefined) {
+    body.timerStartedByUserId = input.timerStartedByUserId;
+  }
+  if (input.timerParkedAt !== undefined) body.timerParkedAt = input.timerParkedAt;
+  if (input.timerParkedRemainingMs !== undefined) {
+    body.timerParkedRemainingMs = input.timerParkedRemainingMs;
+  }
   if (input.blocked !== undefined) body.blocked = input.blocked;
   if (input.blockReason !== undefined) body.blockReason = input.blockReason;
   if (input.blockedAt !== undefined) body.blockedAt = input.blockedAt;
@@ -257,6 +274,23 @@ export function persistKanbanLinkedCardTimer(card: KanbanCard): void {
     timerStartedAt: card.timerStartedAt ?? null,
     timerDurationMs: card.timerDurationMs ?? null,
     timerFrozenAt: card.timerFrozenAt ?? null,
+    timerStartedByUserId: card.timerStartedByUserId ?? null,
+    timerParkedAt: card.timerParkedAt ?? null,
+    timerParkedRemainingMs:
+      card.timerParkedRemainingMs != null && Number.isFinite(card.timerParkedRemainingMs)
+        ? card.timerParkedRemainingMs
+        : null,
+  });
+  patchCrmBoardTilesCacheTimer(orderId, {
+    timerStartedAt: card.timerStartedAt ?? null,
+    timerDurationMs: card.timerDurationMs ?? null,
+    timerFrozenAt: card.timerFrozenAt ?? null,
+    timerStartedByUserId: card.timerStartedByUserId ?? null,
+    timerParkedAt: card.timerParkedAt ?? null,
+    timerParkedRemainingMs:
+      card.timerParkedRemainingMs != null && Number.isFinite(card.timerParkedRemainingMs)
+        ? card.timerParkedRemainingMs
+        : null,
   });
   upsertKanbanCardHeadCache(card);
 }
@@ -267,13 +301,18 @@ export function persistMissingCrmTimersFromState(
   state: KanbanAppState,
   tiles: readonly Pick<
     CrmBoardTile,
-    "orderId" | "timerStartedAt" | "timerDurationMs"
+    "orderId" | "timerStartedAt" | "timerDurationMs" | "timerParkedAt"
   >[],
 ): void {
   const tileOids = new Set(tiles.map((t) => t.orderId));
   const inDb = new Set(
     tiles
-      .filter((t) => Boolean(t.timerStartedAt) || (t.timerDurationMs != null && t.timerDurationMs > 0))
+      .filter(
+        (t) =>
+          Boolean(t.timerStartedAt) ||
+          (t.timerDurationMs != null && t.timerDurationMs > 0) ||
+          Boolean(t.timerParkedAt),
+      )
       .map((t) => t.orderId),
   );
   let n = 0;
@@ -283,7 +322,8 @@ export function persistMissingCrmTimersFromState(
     if (!orderId || !tileOids.has(orderId) || inDb.has(orderId)) return;
     const has =
       Boolean(card.timerStartedAt) ||
-      (card.timerDurationMs != null && card.timerDurationMs > 0);
+      (card.timerDurationMs != null && card.timerDurationMs > 0) ||
+      Boolean(card.timerParkedAt);
     if (!has) return;
     persistKanbanLinkedCardTimer(card);
     n += 1;

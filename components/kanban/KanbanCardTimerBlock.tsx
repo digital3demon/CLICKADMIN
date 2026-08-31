@@ -10,7 +10,13 @@ import {
   kanbanCardTimerTrackFillColor,
 } from "@/lib/kanban/kanban-card-timer";
 import { persistKanbanLinkedCardTimer } from "@/lib/kanban/persist-crm-board-fields-client";
+import {
+  clearKanbanTimerPark,
+  resumeKanbanTimerPreservingRemaining,
+} from "@/lib/kanban/kanban-stage-timer";
+import { canUserClearKanbanTimer } from "@/lib/kanban/kanban-timer-permissions";
 import { findCard, pushActivity } from "@/lib/kanban/model";
+import type { UserRole } from "@prisma/client";
 
 function durationPartsFromMs(ms: number | null | undefined): {
   days: number;
@@ -41,6 +47,7 @@ export function KanbanCardTimerBlock({
   activityActorLabel,
   canManage,
   sessionUserId,
+  sessionUserRole,
 }: {
   card: KanbanCard;
   cardId: string;
@@ -49,6 +56,7 @@ export function KanbanCardTimerBlock({
   canManage: boolean;
   /** Текущий пользователь CRM — для «Оставить таймер» как участник/ответственный. */
   sessionUserId?: string | null;
+  sessionUserRole?: UserRole | null;
 }) {
   const act = (activityActorLabel ?? "").trim() || undefined;
   const [now, setNow] = useState(() => Date.now());
@@ -89,6 +97,12 @@ export function KanbanCardTimerBlock({
   const fillColor = kanbanCardTimerTrackFillColor(ratio);
 
   const uid = String(sessionUserId || "").trim();
+  const canClearTimer = canUserClearKanbanTimer({
+    sessionUserId: uid,
+    sessionUserRole,
+    timerStartedByUserId: card.timerStartedByUserId,
+    canManageTimer: canManage,
+  });
   const canFreezeTimer = useMemo(() => {
     if (!started || !uid) return canManage;
     const a = card.assignees || [];
@@ -120,8 +134,10 @@ export function KanbanCardTimerBlock({
       if (!fc) return;
       fc.card.timerDurationMs = ms;
       fc.card.timerFrozenAt = null;
+      clearKanbanTimerPark(fc.card);
       if (opts.start) {
         fc.card.timerStartedAt = new Date().toISOString();
+        fc.card.timerStartedByUserId = uid || null;
         pushActivity(
           fc.card,
           `Таймер запущен на ${Math.round(ms / 60000)} мин.`,
@@ -143,6 +159,8 @@ export function KanbanCardTimerBlock({
       fc.card.timerStartedAt = null;
       fc.card.timerDurationMs = null;
       fc.card.timerFrozenAt = null;
+      fc.card.timerStartedByUserId = null;
+      clearKanbanTimerPark(fc.card);
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер сброшен", b.users[0]?.id, b, act);
       persistKanbanLinkedCardTimer(fc.card);
@@ -159,7 +177,9 @@ export function KanbanCardTimerBlock({
       const fc = findCard(b, cardId);
       if (!fc) return;
       fc.card.timerStartedAt = new Date().toISOString();
+      fc.card.timerStartedByUserId = uid || null;
       fc.card.timerFrozenAt = null;
+      clearKanbanTimerPark(fc.card);
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер запущен", b.users[0]?.id, b, act);
       persistKanbanLinkedCardTimer(fc.card);
@@ -181,7 +201,7 @@ export function KanbanCardTimerBlock({
     onApply((b) => {
       const fc = findCard(b, cardId);
       if (!fc) return;
-      fc.card.timerFrozenAt = null;
+      resumeKanbanTimerPreservingRemaining(fc.card);
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер снова в отсчёте", b.users[0]?.id, b, act);
       persistKanbanLinkedCardTimer(fc.card);
@@ -247,9 +267,21 @@ export function KanbanCardTimerBlock({
           </button>
         </div>
       ) : null}
-      {started && canFreezeTimer ? (
+      {started && (canFreezeTimer || canClearTimer) ? (
         <div className="mt-2 flex flex-wrap justify-end gap-2">
-          {!card.timerFrozenAt ? (
+          {canClearTimer ? (
+            <button
+              type="button"
+              className="text-[0.72rem] font-medium text-red-500 underline-offset-2 hover:underline"
+              onClick={() => {
+                if (!window.confirm("Удалить таймер с карточки?")) return;
+                clearTimer();
+              }}
+            >
+              Удалить таймер
+            </button>
+          ) : null}
+          {canFreezeTimer && !card.timerFrozenAt ? (
             <button
               type="button"
               className="text-[0.72rem] font-medium text-[var(--kaiten-modal-muted)] underline-offset-2 hover:text-[var(--kaiten-modal-text)] hover:underline"
@@ -257,7 +289,8 @@ export function KanbanCardTimerBlock({
             >
               Оставить таймер
             </button>
-          ) : (
+          ) : null}
+          {canFreezeTimer && card.timerFrozenAt ? (
             <button
               type="button"
               className="text-[0.72rem] font-medium text-[var(--kaiten-accent,#9333ea)] underline-offset-2 hover:underline"
@@ -265,7 +298,7 @@ export function KanbanCardTimerBlock({
             >
               Продолжить отсчёт
             </button>
-          )}
+          ) : null}
         </div>
       ) : null}
 
@@ -329,13 +362,15 @@ export function KanbanCardTimerBlock({
               >
                 Отмена
               </button>
-              <button
-                type="button"
-                className="rounded-md px-3 py-1.5 text-[0.8rem] text-red-500 hover:bg-red-950/40"
-                onClick={() => clearTimer()}
-              >
-                Сбросить
-              </button>
+              {canClearTimer ? (
+                <button
+                  type="button"
+                  className="rounded-md px-3 py-1.5 text-[0.8rem] text-red-500 hover:bg-red-950/40"
+                  onClick={() => clearTimer()}
+                >
+                  Сбросить
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-3 py-1.5 text-[0.8rem]"

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createCard } from "@/lib/kanban/model";
+import { crmColumnPersistFromLinkedMove } from "@/lib/kanban/crm-column-persist";
 import {
   crmBoardFieldsFromKaitenRefreshPatch,
   listOrderIdsNeedingCrmPeoplePersist,
@@ -202,5 +203,34 @@ describe("crmBoardFieldsFromKaitenRefreshPatch", () => {
       blocked: true,
       blockReason: "ждём КТ Тындик",
     });
+  });
+});
+
+describe("crmColumnPersistFromLinkedMove", () => {
+  it("пишет колонку наряда без Kaiten (кириллица вокруг номера)", () => {
+    expect(
+      crmColumnPersistFromLinkedMove({
+        linkedOrderId: "наряд-остренкова",
+        columnTitle: "Производство",
+      }),
+    ).toEqual({
+      orderId: "наряд-остренкова",
+      columnTitle: "Производство",
+    });
+  });
+
+  it("не пишет пустую колонку или карточку без наряда", () => {
+    expect(
+      crmColumnPersistFromLinkedMove({
+        linkedOrderId: "наряд-остренкова",
+        columnTitle: "  ",
+      }),
+    ).toBeNull();
+    expect(
+      crmColumnPersistFromLinkedMove({
+        linkedOrderId: "",
+        columnTitle: "Производство",
+      }),
+    ).toBeNull();
   });
 });

@@ -31,14 +31,19 @@ import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types
 function applyTileTimer(card: KanbanCard, tile: CrmBoardTile): void {
   const hasTileTimer =
     Boolean(tile.timerStartedAt) ||
-    (tile.timerDurationMs != null && Number(tile.timerDurationMs) > 0);
+    (tile.timerDurationMs != null && Number(tile.timerDurationMs) > 0) ||
+    Boolean(tile.timerParkedAt);
   const hasLocalTimer =
     Boolean(card.timerStartedAt) ||
-    (card.timerDurationMs != null && card.timerDurationMs > 0);
+    (card.timerDurationMs != null && card.timerDurationMs > 0) ||
+    Boolean(card.timerParkedAt);
   if (!hasTileTimer && hasLocalTimer) return;
   card.timerStartedAt = tile.timerStartedAt;
   card.timerDurationMs = tile.timerDurationMs;
   card.timerFrozenAt = tile.timerFrozenAt;
+  card.timerStartedByUserId = tile.timerStartedByUserId;
+  card.timerParkedAt = tile.timerParkedAt;
+  card.timerParkedRemainingMs = tile.timerParkedRemainingMs;
 }
 
 function applyTileChecklist(card: KanbanCard, tile: CrmBoardTile): void {
@@ -111,7 +116,7 @@ function applyTileToCard(
   if (!shouldKeepLocalKanbanStageDue(localDue, tile.stageDueYmd)) {
     if (tile.stageDueYmd) setKanbanStageDue(card, tile.stageDueYmd);
   }
-  card.urgent = tile.urgent;
+  /* card.urgent ≠ Order.isUrgent: плитка наряда срочность карточки не затирает. */
   applyTileBlock(card, tile);
   card.kaitenCardSortOrder = tile.sortOrder;
   card.trackLane = tile.trackLane || card.trackLane || "";
@@ -179,7 +184,7 @@ export function applyCrmBoardTilesToAppState(
           linkedOrderNumber: tile.orderNumber,
           assignees: tile.assignees,
           participants: tile.participants,
-          urgent: tile.urgent,
+          urgent: false,
           blocked: tile.blocked,
           blockReason: tile.blockReason,
           checklist: tile.checklist ?? [],
@@ -222,7 +227,7 @@ export function applyCrmBoardTilesToAppState(
         linkedOrderNumber: tile.orderNumber,
         assignees: tile.assignees,
         participants: tile.participants,
-        urgent: tile.urgent,
+        urgent: false,
         blocked: tile.blocked,
         blockReason: tile.blockReason,
         checklist: tile.checklist ?? [],

@@ -5,6 +5,14 @@ export function showKaitenUi(state: KaitenIntegrationTenantState): boolean {
   return state.active || state.reenableInProgress;
 }
 
+/** Кнопка «Обновить» с Kaiten — только при живой интеграции, не в демо. */
+export function showKanbanKaitenRefreshButton(input: {
+  isDemo: boolean;
+  kaitenIntegrationActive: boolean;
+}): boolean {
+  return !input.isDemo && input.kaitenIntegrationActive;
+}
+
 /** Legacy read-only: старые kaitenCardId / поля можно показывать при выключенной интеграции. */
 export function showLegacyKaitenData(
   state: KaitenIntegrationTenantState,

@@ -101,6 +101,11 @@ export function applyStandaloneRowsFromServer(
             timerStartedAt: prev.timerStartedAt ?? x.payload.timerStartedAt,
             timerDurationMs: prev.timerDurationMs ?? x.payload.timerDurationMs,
             timerFrozenAt: prev.timerFrozenAt ?? x.payload.timerFrozenAt,
+            timerStartedByUserId:
+              prev.timerStartedByUserId ?? x.payload.timerStartedByUserId,
+            timerParkedAt: prev.timerParkedAt ?? x.payload.timerParkedAt,
+            timerParkedRemainingMs:
+              prev.timerParkedRemainingMs ?? x.payload.timerParkedRemainingMs,
           };
         }
         return x.payload;

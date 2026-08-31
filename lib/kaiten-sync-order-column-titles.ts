@@ -1,7 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import {
   kaitenBlockedMetaFromCard,
-  shouldKeepCrmBlockOverKaiten,
 } from "@/lib/kaiten-card-block";
 import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
@@ -329,13 +328,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
         (blockedAtNext != null &&
           row.kaitenBlockedAt != null &&
           blockedAtNext.getTime() === row.kaitenBlockedAt.getTime());
-      const keepCrmBlock = shouldKeepCrmBlockOverKaiten({
-        crmBlocked: row.kaitenBlocked,
-        crmReason: row.kaitenBlockReason,
-        crmSyncedAt: row.kaitenSyncedAt,
-        kaitenBlocked: blocked,
-        kaitenReason: reasonDb,
-      });
+      /* Фон не откатывает блок; кнопка «Обновить» (`applyColumnFromKaiten`) — да. */
+      const keepCrmBlock = !applyColumnFromKaiten;
       const sameBlock =
         keepCrmBlock ||
         (blocked === row.kaitenBlocked &&
@@ -438,6 +432,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
           (p.participants?.length ?? 0) > 0,
       ),
     );
+    if (!applyColumnFromKaiten) continue;
     if (Object.keys(nonempty).length === 0) continue;
     try {
       await persistKaitenStageDueToKanbanState(tenantId, nonempty);

@@ -75,6 +75,7 @@ describe("crm-board-tile", () => {
     expect(tile).not.toHaveProperty("files");
     expect(tile.checklist).toBeNull();
     expect(tile.sourceEmailCount).toBe(0);
+    expect(tile.timerStartedByUserId).toBeNull();
   });
 
   it("считает письма наряда для иконки почты, кириллица в id", () => {
@@ -99,6 +100,56 @@ describe("crm-board-tile", () => {
       _count: { sourceEmailLinks: 3 },
     });
     expect(tile.sourceEmailCount).toBe(3);
+  });
+
+  it("кладёт снимок снятого таймера с кириллицей в oid", () => {
+    const tile = crmBoardTileFromOrderRow({
+      id: "наряд-остренкова",
+      orderNumber: "2608-078",
+      patientName: "Остренкова",
+      doctorFullName: "Енькова",
+      kaitenCardTypeId: null,
+      kaitenCardTitleLabel: null,
+      kaitenCardTitleMirror: null,
+      isUrgent: false,
+      kaitenBlocked: false,
+      kaitenBlockReason: null,
+      kaitenColumnTitle: "Производство",
+      kaitenCardSortOrder: null,
+      kaitenTrackLane: "ORTHOPEDICS",
+      appointmentDate: null,
+      dueToAdminsAt: null,
+      kaitenAdminDueHasTime: true,
+      updatedAt: "2026-08-31T12:00:00.000Z",
+      kanbanTimerParkedAt: "2026-08-31T12:00:00.000Z",
+      kanbanTimerParkedRemainingMs: 600_000,
+    });
+    expect(tile.timerParkedAt).toBe("2026-08-31T12:00:00.000Z");
+    expect(tile.timerParkedRemainingMs).toBe(600_000);
+  });
+
+  it("кладёт автора таймера с кириллицей в id", () => {
+    const tile = crmBoardTileFromOrderRow({
+      id: "наряд-пехконен",
+      orderNumber: "2607-438",
+      patientName: "Пехконен",
+      doctorFullName: "Енькова",
+      kaitenCardTypeId: null,
+      kaitenCardTitleLabel: null,
+      kaitenCardTitleMirror: null,
+      isUrgent: false,
+      kaitenBlocked: false,
+      kaitenBlockReason: null,
+      kaitenColumnTitle: "Согласование",
+      kaitenCardSortOrder: null,
+      kaitenTrackLane: "ORTHOPEDICS",
+      appointmentDate: null,
+      dueToAdminsAt: null,
+      kaitenAdminDueHasTime: true,
+      updatedAt: "2026-08-31T10:00:00.000Z",
+      kanbanTimerStartedByUserId: "u-всеволод",
+    });
+    expect(tile.timerStartedByUserId).toBe("u-всеволод");
   });
 
   it("Мои / Ответственный — SQL по людям, не скан всех досок", () => {

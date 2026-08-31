@@ -1642,6 +1642,11 @@ model Order {
   kanbanTimerStartedAt               DateTime?
   kanbanTimerDurationMs              Int?
   kanbanTimerFrozenAt                DateTime?
+  /// Кто поставил таймер (снятие: автор или старшие).
+  kanbanTimerStartedByUserId         String?
+  /// Снимок таймера при переносе вперёд — возврат, если откатили за 45 мин.
+  kanbanTimerParkedAt                DateTime?
+  kanbanTimerParkedRemainingMs       Int?
   /// CRM-канбан: чеклист linked-карточки (общее для всех сотрудников).
   kanbanChecklist                    Json?
   /// CRM-канбан: когда плитка менялась (дельта доски).

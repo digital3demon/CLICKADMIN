@@ -41,6 +41,9 @@ export type CrmBoardTile = {
   timerStartedAt: string | null;
   timerDurationMs: number | null;
   timerFrozenAt: string | null;
+  timerStartedByUserId: string | null;
+  timerParkedAt: string | null;
+  timerParkedRemainingMs: number | null;
   /** null — в БД ещё не писали; [] — очистили. */
   checklist: ChecklistItem[] | null;
   /** Письма наряда — иконка почты в карточке. */
@@ -132,6 +135,9 @@ export function crmBoardTileFromOrderRow(row: {
   kanbanTimerStartedAt?: Date | string | null;
   kanbanTimerDurationMs?: number | null;
   kanbanTimerFrozenAt?: Date | string | null;
+  kanbanTimerStartedByUserId?: string | null;
+  kanbanTimerParkedAt?: Date | string | null;
+  kanbanTimerParkedRemainingMs?: number | null;
   kanbanChecklist?: unknown;
   sourceEmailCount?: number;
   _count?: { sourceEmailLinks?: number };
@@ -183,6 +189,12 @@ export function crmBoardTileFromOrderRow(row: {
         ? row.kanbanTimerDurationMs
         : null,
     timerFrozenAt: toIso(row.kanbanTimerFrozenAt),
+    timerStartedByUserId: String(row.kanbanTimerStartedByUserId || "").trim() || null,
+    timerParkedAt: toIso(row.kanbanTimerParkedAt),
+    timerParkedRemainingMs:
+      row.kanbanTimerParkedRemainingMs != null && Number.isFinite(row.kanbanTimerParkedRemainingMs)
+        ? row.kanbanTimerParkedRemainingMs
+        : null,
     checklist: parseKanbanChecklistJson(row.kanbanChecklist),
     sourceEmailCount: Math.max(
       0,

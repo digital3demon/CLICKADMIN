@@ -4,7 +4,11 @@ import {
   parseKaitenIntegrationBackfillState,
 } from "@/lib/kaiten-integration/settings";
 import { ordersChangedDuringDisabledWhere } from "@/lib/kaiten-integration/backfill-query";
-import { showKaitenUi, showLegacyKaitenData } from "@/lib/kaiten-integration/ui";
+import {
+  showKaitenUi,
+  showLegacyKaitenData,
+  showKanbanKaitenRefreshButton,
+} from "@/lib/kaiten-integration/ui";
 
 describe("kaiten integration tenant state", () => {
   it("active=false когда интеграция выключена", () => {
@@ -79,5 +83,26 @@ describe("kaiten integration ui helpers", () => {
     expect(showKaitenUi(state)).toBe(false);
     expect(showLegacyKaitenData(state, true)).toBe(true);
     expect(showLegacyKaitenData(state, false)).toBe(false);
+  });
+
+  it("кнопка Обновить на канбане скрыта без интеграции", () => {
+    expect(
+      showKanbanKaitenRefreshButton({
+        isDemo: false,
+        kaitenIntegrationActive: false,
+      }),
+    ).toBe(false);
+    expect(
+      showKanbanKaitenRefreshButton({
+        isDemo: true,
+        kaitenIntegrationActive: true,
+      }),
+    ).toBe(false);
+    expect(
+      showKanbanKaitenRefreshButton({
+        isDemo: false,
+        kaitenIntegrationActive: true,
+      }),
+    ).toBe(true);
   });
 });

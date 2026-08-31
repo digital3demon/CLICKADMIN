@@ -76,6 +76,7 @@ import {
   patchOrderKaitenCard,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-disabled";
+import { showKanbanKaitenRefreshButton } from "@/lib/kaiten-integration/ui";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
   applyKanbanCardMembersOnBoard,
@@ -89,6 +90,7 @@ import {
   persistKanbanLinkedCardTimer,
   commitKanbanColumnFromKaitenRefresh,
   rememberCrmKanbanColumnLocal,
+  crmColumnPersistFromLinkedMove,
   persistMissingCrmPeopleFromState,
   persistMissingCrmStageDuesFromState,
   persistMissingCrmTimersFromState,
@@ -472,7 +474,14 @@ function StoppedKanbanCard({
   );
 }
 
-export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
+export function KanbanApp({
+  isDemo = false,
+  kaitenIntegrationActive = true,
+}: {
+  isDemo?: boolean;
+  /** Кнопка «Обновить» с Kaiten — только при живой интеграции. */
+  kaitenIntegrationActive?: boolean;
+}) {
   /** null до монтирования: иначе SSR и первый клиентский кадр расходятся (server state vs default) → #418 и ломается Sortable. */
   const [appState, setAppState] = useState<KanbanAppState | null>(null);
   const [kanbanStateReady, setKanbanStateReady] = useState(isDemo);
@@ -1998,6 +2007,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             sortOrder: number;
           }
         | undefined;
+      let crmPersistFollowUp:
+        | {
+            orderId: string;
+            columnTitle: string;
+            sortOrder?: number;
+          }
+        | undefined;
       let moveFromTitle = "";
       let moveToTitle = "";
       setAppState((s) => {
@@ -2030,10 +2046,25 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         );
         if (!res.ok) return s;
         if (res.kaiten) kaitenFollowUp = res.kaiten;
+        if (res.crmPersist) crmPersistFollowUp = res.crmPersist;
         moveFromTitle = fromDisp?.title || "";
-        moveToTitle = toDisp?.title || res.kaiten?.columnTitle || "";
+        moveToTitle = toDisp?.title || res.crmPersist?.columnTitle || res.kaiten?.columnTitle || "";
         return isDemo ? normalizeDemoKanbanAppState(next) : next;
       });
+      if (!isDemo && crmPersistFollowUp) {
+        rememberCrmKanbanColumnLocal({
+          cardId: drag.cardId,
+          orderId: crmPersistFollowUp.orderId,
+          columnTitle: crmPersistFollowUp.columnTitle,
+        });
+        persistCrmBoardFieldsClient({
+          orderId: crmPersistFollowUp.orderId,
+          columnTitle: crmPersistFollowUp.columnTitle,
+          ...(crmPersistFollowUp.sortOrder != null
+            ? { sortOrder: crmPersistFollowUp.sortOrder }
+            : {}),
+        });
+      }
       if (!isDemo && kaitenFollowUp) {
         void syncKaitenMirrorAfterKanbanMove(kaitenFollowUp);
       }
@@ -2636,6 +2667,18 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         sortOrder,
       });
     }
+    if (!isDemo && cardSnapshot.linkedOrderId) {
+      rememberCrmKanbanColumnLocal({
+        cardId,
+        orderId: cardSnapshot.linkedOrderId,
+        columnTitle: nextTitle,
+      });
+      persistCrmBoardFieldsClient({
+        orderId: cardSnapshot.linkedOrderId,
+        columnTitle: nextTitle,
+        sortOrder,
+      });
+    }
     if (!isDemo) {
       notifyKanbanColumnTelegram(
         cardSnapshot,
@@ -2689,6 +2732,14 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       c.lastMovedAt = now;
       c.updatedAt = now;
       pushActivity(c, `Перемещена в «${prevCol.title}»`, b.users[0]?.id, b, activityActorLabel);
+      annulKanbanStageTimerOnMemberAdvance(
+        c,
+        colIdx,
+        colIdx - 1,
+        kanbanSessionUserId,
+        b,
+        activityActorLabel,
+      );
       runKanbanAutomations(
         b,
         {
@@ -2741,6 +2792,18 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         kaitenCardId: cardSnapshot.kaitenCardId,
         columnTitle: prevTitle,
         kaitenTrackLane: kaitenLaneForKanbanBoardId(home.id),
+        sortOrder,
+      });
+    }
+    if (!isDemo && cardSnapshot.linkedOrderId) {
+      rememberCrmKanbanColumnLocal({
+        cardId,
+        orderId: cardSnapshot.linkedOrderId,
+        columnTitle: prevTitle,
+      });
+      persistCrmBoardFieldsClient({
+        orderId: cardSnapshot.linkedOrderId,
+        columnTitle: prevTitle,
         sortOrder,
       });
     }
@@ -3257,7 +3320,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 Актуальное
               </button>
             ) : null}
-            {!isDemo &&
+            {showKanbanKaitenRefreshButton({
+              isDemo,
+              kaitenIntegrationActive,
+            }) &&
             (kanbanCardPerms.manageAssignees || kanbanCardPerms.manageParticipants) ? (
               <KanbanMembersBackfillButton
                 refreshTargets={collectKanbanKaitenRefreshTargets(
@@ -3514,6 +3580,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                     toColumnId,
                     columnTitle: toCol.title,
                   });
+                  const columnPersist = crmColumnPersistFromLinkedMove({
+                    linkedOrderId: card.linkedOrderId,
+                    columnTitle: toCol.title,
+                  });
+                  if (!isDemo && columnPersist) {
+                    persistCrmBoardFieldsClient(columnPersist);
+                  }
                   if (card.linkedOrderId) persistKanbanLinkedCardTimer(card);
                   if (card.parentCardId) {
                     const doneRaw = settings.childDoneColumnTitle.trim().toLowerCase();

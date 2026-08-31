@@ -24,6 +24,9 @@ export type KanbanCardHeadCacheRow = {
   timerStartedAt?: string | null;
   timerDurationMs?: number | null;
   timerFrozenAt?: string | null;
+  timerStartedByUserId?: string | null;
+  timerParkedAt?: string | null;
+  timerParkedRemainingMs?: number | null;
   checklist?: ChecklistItem[];
   /** Колонка CRM после переноса — F5 не откатывает, пока плитка/Kaiten догоняют. */
   columnTitle?: string;
@@ -39,11 +42,41 @@ function slimChecklist(items: readonly ChecklistItem[] | undefined): ChecklistIt
   }));
 }
 
-function headHasTimer(row: Pick<KanbanCardHeadCacheRow, "timerStartedAt" | "timerDurationMs">): boolean {
+function headHasTimer(
+  row: Pick<
+    KanbanCardHeadCacheRow,
+    "timerStartedAt" | "timerDurationMs" | "timerParkedAt"
+  >,
+): boolean {
   return (
     Boolean(row.timerStartedAt) ||
-    (row.timerDurationMs != null && row.timerDurationMs > 0)
+    (row.timerDurationMs != null && row.timerDurationMs > 0) ||
+    Boolean(row.timerParkedAt)
   );
+}
+
+function timerFieldsFrom(
+  row: Pick<
+    KanbanCardHeadCacheRow,
+    | "timerStartedAt"
+    | "timerDurationMs"
+    | "timerFrozenAt"
+    | "timerStartedByUserId"
+    | "timerParkedAt"
+    | "timerParkedRemainingMs"
+  >,
+) {
+  return {
+    timerStartedAt: row.timerStartedAt ?? null,
+    timerDurationMs: row.timerDurationMs ?? null,
+    timerFrozenAt: row.timerFrozenAt ?? null,
+    timerStartedByUserId: row.timerStartedByUserId ?? null,
+    timerParkedAt: row.timerParkedAt ?? null,
+    timerParkedRemainingMs:
+      row.timerParkedRemainingMs != null && Number.isFinite(row.timerParkedRemainingMs)
+        ? row.timerParkedRemainingMs
+        : null,
+  };
 }
 
 export type KanbanCardHeadsCache = Record<string, KanbanCardHeadCacheRow>;
@@ -81,9 +114,7 @@ export function collectKanbanCardHeadsCache(
           participants: [...(card.participants || [])],
           fingerprint: card.kaitenMembersFingerprint ?? null,
           stageDue,
-          timerStartedAt: card.timerStartedAt ?? null,
-          timerDurationMs: card.timerDurationMs ?? null,
-          timerFrozenAt: card.timerFrozenAt ?? null,
+          ...timerFieldsFrom(card),
           checklist,
           columnTitle,
         };
@@ -114,9 +145,7 @@ export function mergeKanbanCardHeadsCache(
         participants: [...(row.participants || [])],
         fingerprint: row.fingerprint ?? null,
         stageDue: incomingDue,
-        timerStartedAt: row.timerStartedAt ?? null,
-        timerDurationMs: row.timerDurationMs ?? null,
-        timerFrozenAt: row.timerFrozenAt ?? null,
+        ...timerFieldsFrom(row),
         checklist: slimChecklist(row.checklist),
         columnTitle: (row.columnTitle || "").trim(),
       };
@@ -133,9 +162,7 @@ export function mergeKanbanCardHeadsCache(
         ? (row.fingerprint ?? null)
         : (prev.fingerprint ?? row.fingerprint ?? null),
       stageDue: incomingDue || prev.stageDue || "",
-      timerStartedAt: headHasTimer(row) ? row.timerStartedAt ?? null : prev.timerStartedAt ?? null,
-      timerDurationMs: headHasTimer(row) ? row.timerDurationMs ?? null : prev.timerDurationMs ?? null,
-      timerFrozenAt: headHasTimer(row) ? row.timerFrozenAt ?? null : prev.timerFrozenAt ?? null,
+      ...(headHasTimer(row) ? timerFieldsFrom(row) : timerFieldsFrom(prev)),
       checklist:
         (row.checklist?.length ?? 0) > 0 ? slimChecklist(row.checklist) : slimChecklist(prev.checklist),
       columnTitle: (row.columnTitle || "").trim() || prev.columnTitle || "",
@@ -173,9 +200,7 @@ export function upsertKanbanCardHeadCache(card: KanbanCard): void {
       participants: [...(card.participants || [])],
       fingerprint: card.kaitenMembersFingerprint ?? null,
       stageDue: getKanbanStageDue(card),
-      timerStartedAt: card.timerStartedAt ?? null,
-      timerDurationMs: card.timerDurationMs ?? null,
-      timerFrozenAt: card.timerFrozenAt ?? null,
+      ...timerFieldsFrom(card),
       checklist: slimChecklist(card.checklist),
       columnTitle: existing[key]?.columnTitle || "",
     };
@@ -202,9 +227,7 @@ export function upsertKanbanCardColumnCache(
       participants: [...(prev?.participants || [])],
       fingerprint: prev?.fingerprint ?? null,
       stageDue: prev?.stageDue || "",
-      timerStartedAt: prev?.timerStartedAt ?? null,
-      timerDurationMs: prev?.timerDurationMs ?? null,
-      timerFrozenAt: prev?.timerFrozenAt ?? null,
+      ...timerFieldsFrom(prev ?? {}),
       checklist: slimChecklist(prev?.checklist),
       columnTitle: title,
     };
@@ -393,9 +416,13 @@ export function applyKanbanCardHeadsCache(
       changed = true;
     }
     if (headHasTimer(row) && !headHasTimer(card)) {
-      card.timerStartedAt = row.timerStartedAt ?? null;
-      card.timerDurationMs = row.timerDurationMs ?? null;
-      card.timerFrozenAt = row.timerFrozenAt ?? null;
+      const t = timerFieldsFrom(row);
+      card.timerStartedAt = t.timerStartedAt;
+      card.timerDurationMs = t.timerDurationMs;
+      card.timerFrozenAt = t.timerFrozenAt;
+      card.timerStartedByUserId = t.timerStartedByUserId;
+      card.timerParkedAt = t.timerParkedAt;
+      card.timerParkedRemainingMs = t.timerParkedRemainingMs;
       changed = true;
     }
     if ((row.checklist?.length ?? 0) > 0 && (card.checklist?.length ?? 0) === 0) {

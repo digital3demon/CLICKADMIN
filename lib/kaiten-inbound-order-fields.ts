@@ -26,15 +26,15 @@ export function kaitenMirrorFieldsFromCard(card: Record<string, unknown>): {
   return out;
 }
 
-/** asap из Kaiten → isUrgent в CRM (без изменения urgentCoefficient). */
+/**
+ * «Срочно» наряда (`isUrgent`) и asap в Kaiten / срочно карточки канбана —
+ * разные флаги. Kaiten не пишет isUrgent.
+ */
 export function kaitenUrgentPatchFromCard(
-  card: Record<string, unknown>,
-  currentIsUrgent: boolean,
+  _card: Record<string, unknown>,
+  _currentIsUrgent: boolean,
 ): { isUrgent?: boolean } {
-  if (!("asap" in card)) return {};
-  const asap = card.asap === true;
-  if (asap === currentIsUrgent) return {};
-  return { isUrgent: asap };
+  return {};
 }
 
 export type KaitenInboundHeadDetectInput = {

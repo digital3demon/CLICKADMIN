@@ -169,6 +169,11 @@ export type KanbanCard = {
   timerDurationMs?: number | null;
   /** Заморозка отображения: ISO момент «оставить таймер» — полоса и остаток не тикают, цвет по доле на этот момент. */
   timerFrozenAt?: string | null;
+  /** Кто запустил таймер (CRM user id) — снять могут автор и старшие. */
+  timerStartedByUserId?: string | null;
+  /** Снимок при переносе вперёд: восстановление, если вернули назад за 45 мин. */
+  timerParkedAt?: string | null;
+  timerParkedRemainingMs?: number | null;
 };
 
 export type KanbanColumn = {

@@ -105,7 +105,11 @@ type KanbanHeadTarget = {
   blockedByUserId?: string;
 };
 
-/** asap / due_date → поля карточки канбана (не наряд CRM). */
+/**
+ * asap / due_date / блок → карточка канбана.
+ * Вызывается с кнопки «Обновить» (единственный откат на Kaiten).
+ * asap ≠ `Order.isUrgent` (срочно наряда).
+ */
 export function applyKaitenHeadFieldsToKanbanCard(
   card: KanbanHeadTarget,
   kaitenCard: Record<string, unknown>,

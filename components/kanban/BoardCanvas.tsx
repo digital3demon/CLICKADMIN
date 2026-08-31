@@ -10,6 +10,7 @@ import { readClientState, writeClientState } from "@/lib/client-state-client";
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "@/lib/kanban/kanban-card-move-preview";
 import { VirtualizedKanbanColumnCards } from "@/components/kanban/VirtualizedKanbanColumnCards";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import { isKanbanCardTimerExpired } from "@/lib/kanban/kanban-card-timer";
 import {
   annulKanbanStageTimerOnMemberAdvance,
   cardMatchesFilters,
@@ -62,7 +63,6 @@ import {
   IconBrick,
   IconDots,
   IconGrip,
-  IconMail,
   IconPen,
   IconPlus,
   IconTrash,
@@ -200,6 +200,21 @@ function scrollContainerAncestors(start: HTMLElement | null): HTMLElement[] {
   return acc;
 }
 
+function useKanbanCardTimerExpired(card: KanbanCard): boolean {
+  const [now, setNow] = useState(() => Date.now());
+  const live = Boolean(card.timerStartedAt && card.timerDurationMs && !card.timerFrozenAt);
+  useEffect(() => {
+    if (!live) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [live, card.timerStartedAt, card.timerDurationMs]);
+  return isKanbanCardTimerExpired(card, now);
+}
+
+const TIMER_EXPIRED_RING_STYLE: CSSProperties = {
+  background: "linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #991b1b 100%)",
+};
+
 function KanbanCardView({
   card,
   homeBoard,
@@ -331,12 +346,15 @@ function KanbanCardView({
       " border-[var(--kanban-border)] bg-black/[0.04] text-[var(--kanban-text-muted)] dark:bg-white/[0.04]";
   }
 
+  const timerExpired = useKanbanCardTimerExpired(card);
   const typeRing = dragOverStop
     ? {
         background:
           "linear-gradient(135deg, #ef4444 0%, #b91c1c 50%, #7f1d1d 100%)",
       }
-    : kanbanTypeRingStyle(accent);
+    : timerExpired
+      ? TIMER_EXPIRED_RING_STYLE
+      : kanbanTypeRingStyle(accent);
   const dragArticleClass = dragOverStop
     ? "kanban-card-drag-over-stop transition-none"
     : dragVibrate
@@ -348,6 +366,7 @@ function KanbanCardView({
   return (
     <div
       data-card-id={card.id}
+      data-timer-expired={timerExpired ? "1" : undefined}
       className={KANBAN_BOARD_CARD_FRAME_CLASS}
     >
       <div
@@ -393,6 +412,11 @@ function KanbanCardView({
               <span className="min-w-0 truncate text-[calc(0.62rem+3px)] font-bold uppercase tracking-wide">
                 {ct?.name ?? "—"}
               </span>
+              <KanbanTimerIcon
+                card={card}
+                className="shrink-0"
+                sizeClassName="h-[1.125rem] w-[1.125rem]"
+              />
               {urgent ? (
                 <span
                   className="inline-flex shrink-0 items-center rounded-full border border-orange-300/50 bg-gradient-to-b from-orange-500 to-red-600 px-1.5 py-0.5 text-[calc(0.5rem+3px)] font-extrabold uppercase leading-none tracking-wide text-white shadow-sm"
@@ -460,20 +484,6 @@ function KanbanCardView({
                     ) : null}
                   </>
                 ) : null}
-                {(card.sourceEmailCount ?? 0) > 0 ? (
-                  <span
-                    className="mb-0.5 inline-flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center text-[var(--kanban-text-muted)]"
-                    title={`Письма наряда (${card.sourceEmailCount})`}
-                    aria-label="Письма наряда"
-                  >
-                    <IconMail className="h-[1.125rem] w-[1.125rem]" />
-                  </span>
-                ) : null}
-                <KanbanTimerIcon
-                  card={card}
-                  className="mb-0.5 shrink-0"
-                  sizeClassName="h-[1.125rem] w-[1.125rem]"
-                />
               </div>
             </div>
           </div>

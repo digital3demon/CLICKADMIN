@@ -47,6 +47,9 @@ function tile(partial: Partial<CrmBoardTile> & Pick<CrmBoardTile, "orderId">): C
     timerStartedAt: null,
     timerDurationMs: null,
     timerFrozenAt: null,
+    timerStartedByUserId: null,
+    timerParkedAt: null,
+    timerParkedRemainingMs: null,
     checklist: null,
     sourceEmailCount: 0,
     ...partial,
@@ -448,6 +451,80 @@ describe("applyCrmBoardTilesToAppState", () => {
         assigneeId: null,
       },
     ]);
+  });
+
+  it("после F5 плитка «Производство» оставляет карточку там, без pending", () => {
+    let state = defaultAppState();
+    const ortho = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    const approval = ortho.columns.find((c) => c.title === "Согласование")!;
+    approval.cards.push(
+      createCard({
+        id: "остренкова-карта",
+        title: "2608-078 Остренкова Л.Ф.",
+        linkedOrderId: "наряд-остренкова",
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "наряд-остренкова",
+          orderNumber: "2608-078",
+          title: "2608-078 Остренкова Л.Ф. Енькова А.А.",
+          columnTitle: "Производство",
+          trackLane: "ORTHOPEDICS",
+          boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+        }),
+      ],
+      { pendingMoves: [] },
+    );
+    const loc = findCardByLinkedOrderId(state, "наряд-остренкова");
+    expect(loc).not.toBeNull();
+    expect(state.boards[loc!.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+    expect(state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.title).toBe(
+      "Производство",
+    );
+  });
+
+  it("плитка несёт снимок снятого таймера (кириллица в oid)", () => {
+    let state = defaultAppState();
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "наряд-остренкова",
+        title: "2608-078 Остренкова",
+        timerStartedAt: null,
+        timerDurationMs: 30 * 60 * 1000,
+        timerParkedAt: "2026-08-31T12:00:00.000Z",
+        timerParkedRemainingMs: 10 * 60 * 1000,
+        trackLane: "ORTHOPEDICS",
+        boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      }),
+    ]);
+    const loc = findCardByLinkedOrderId(state, "наряд-остренкова");
+    const card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.timerStartedAt).toBeNull();
+    expect(card.timerParkedAt).toBe("2026-08-31T12:00:00.000Z");
+    expect(card.timerParkedRemainingMs).toBe(10 * 60 * 1000);
+  });
+
+  it("плитка несёт автора таймера (кириллица в id)", () => {
+    let state = defaultAppState();
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "наряд-пехконен",
+        title: "2607-438 Пехконен С.",
+        timerStartedAt: "2026-08-31T10:00:00.000Z",
+        timerDurationMs: 30 * 60 * 1000,
+        timerStartedByUserId: "u-всеволод",
+        trackLane: "ORTHOPEDICS",
+        boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      }),
+    ]);
+    const loc = findCardByLinkedOrderId(state, "наряд-пехконен");
+    const card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.timerStartedByUserId).toBe("u-всеволод");
   });
 
   it("локальная блокировка не слетает с пустой плитки", () => {

@@ -8,6 +8,7 @@ import {
   KANBAN_BOARD_ORTHODONTICS_ID,
   pushActivity,
 } from "./model";
+import { crmColumnPersistFromLinkedMove } from "./crm-column-persist";
 
 export type AggregateCardDragArgs = {
   cardId: string;
@@ -47,6 +48,12 @@ export function applyAggregateCardDrag(
     /** Смена дорожки Kaiten (ортопедия/ортодонтия) — иначе column_id подставлялся с чужой доски. */
     kaitenTrackLane?: KaitenTrackLane;
     sortOrder: number;
+  };
+  /** Колонка в CRM (наряд), даже если Kaiten выключен / нет kaitenCardId. */
+  crmPersist?: {
+    orderId: string;
+    columnTitle: string;
+    sortOrder?: number;
   };
 } {
   const fromDisp = displayBoard.columns.find((c) => c.id === drag.fromDisplayColId);
@@ -190,5 +197,14 @@ export function applyAggregateCardDrag(
     };
   }
 
-  return { ok: true, kaiten };
+  const crmPersist =
+    drag.fromDisplayColId !== drag.toDisplayColId
+      ? crmColumnPersistFromLinkedMove({
+          linkedOrderId: card.linkedOrderId,
+          columnTitle: toCol.title,
+          sortOrder: sortPreview,
+        }) ?? undefined
+      : undefined;
+
+  return { ok: true, kaiten, crmPersist };
 }

@@ -2898,6 +2898,7 @@ export function KanbanCardModal({
                 activityActorLabel={act}
                 canManage={canManageKanbanTimer}
                 sessionUserId={commentAuthorUserId ?? null}
+                sessionUserRole={sessionUserRole ?? null}
               />
 
               {!card.parentCardId && childStatusRows.length > 0 ? (

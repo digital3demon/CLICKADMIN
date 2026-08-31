@@ -677,10 +677,6 @@ export async function GET(
     ...kaitenImagesFromRecord(cardObj, orderIdTrim, null),
     ...comments.flatMap((c) => c.images || []),
   ]);
-  const blockMeta = kaitenBlockedMetaFromCard(cardObj);
-  const kBlocked = blockMeta.blocked;
-  const kBlockReason = blockMeta.reason;
-
   const payload = {
     configured: true,
     card: cardRes.card,
@@ -722,12 +718,6 @@ export async function GET(
       console.error("[kaiten GET] ingest (deferred)", e);
     }
     try {
-      const blockedAtPatch =
-        !kBlocked
-          ? { kaitenBlockedAt: null as Date | null }
-          : blockMeta.blockedAtIso
-            ? { kaitenBlockedAt: new Date(blockMeta.blockedAtIso) }
-            : {};
       const mirrorFields = kaitenMirrorFieldsFromCard(cardObj);
       await ordersPrisma.order.update({
         where: { id: orderIdTrim },
@@ -735,10 +725,6 @@ export async function GET(
           ...(mirrorFields.kaitenCardDescriptionMirror !== undefined
             ? { kaitenCardDescriptionMirror: mirrorFields.kaitenCardDescriptionMirror }
             : {}),
-          kaitenBlocked: kBlocked,
-          kaitenBlockReason: kBlockReason,
-          ...blockedAtPatch,
-          ...kaitenUrgentPatchFromCard(cardObj, order.isUrgent),
         },
       });
     } catch (e) {
