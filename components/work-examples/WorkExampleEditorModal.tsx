@@ -28,6 +28,18 @@ import {
   isWorkExampleViewableHtml,
   isWorkExampleViewableMesh,
 } from "@/lib/work-examples/mesh-file";
+import { workExampleEditorHasContent } from "@/lib/work-examples/editor-dirty";
+
+type CloudLinkLive = {
+  status: "detecting" | "importing" | "ok" | "err";
+  label: string;
+};
+
+function cloudImportKey(url: string): string | null {
+  const t = parseCloudFolderImportUrl(url);
+  if (!t) return null;
+  return (t.yandexPublicUrl || t.driveId || url).toLowerCase();
+}
 
 type OrderHit = {
   id: string;
@@ -85,9 +97,12 @@ export function WorkExampleEditorModal({
   const [busy, setBusy] = useState(false);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudNote, setCloudNote] = useState<string | null>(null);
+  const [cloudLive, setCloudLive] = useState<Record<string, CloudLinkLive>>({});
+  const initialSavedFileCountRef = useRef(item?.files?.length ?? 0);
   const [err, setErr] = useState<string | null>(null);
   const importedCloudRef = useRef<Set<string>>(new Set());
-  const skipCloudAutoRef = useRef(true);
+  const cloudInflightRef = useRef<Set<string>>(new Set());
+  const mountCloudSigRef = useRef(serializeWorkExampleCloudUrls(cloudUrls));
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cadInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -168,21 +183,53 @@ export function WorkExampleEditorModal({
   }, [q]);
 
   useEffect(() => {
-    if (skipCloudAutoRef.current) {
-      skipCloudAutoRef.current = false;
+    if (serializeWorkExampleCloudUrls(cloudUrls) === mountCloudSigRef.current) {
+      for (const u of cloudUrls) {
+        const key = cloudImportKey(u);
+        if (key) importedCloudRef.current.add(key);
+      }
       return;
     }
     const fresh = cloudUrls
       .map((u) => u.trim())
       .filter((u) => {
         const key = cloudImportKey(u);
-        return key != null && !importedCloudRef.current.has(key);
+        return (
+          key != null &&
+          !importedCloudRef.current.has(key) &&
+          !cloudInflightRef.current.has(key)
+        );
       });
     if (!fresh.length) return;
+    for (const url of fresh) {
+      const key = cloudImportKey(url);
+      if (!key) continue;
+      cloudInflightRef.current.add(key);
+      setCloudLive((prev) => ({
+        ...prev,
+        [key]: { status: "detecting", label: "Определяю папку…" },
+      }));
+    }
+    let launched = false;
     const t = window.setTimeout(() => {
+      launched = true;
       void pullCloudNow(fresh);
-    }, 700);
-    return () => window.clearTimeout(t);
+    }, 280);
+    return () => {
+      window.clearTimeout(t);
+      if (launched) return;
+      for (const url of fresh) {
+        const key = cloudImportKey(url);
+        if (!key) continue;
+        cloudInflightRef.current.delete(key);
+        setCloudLive((prev) => {
+          if (prev[key]?.status !== "detecting") return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }
+    };
   }, [cloudUrls]);
 
   const pickOrder = async (hit: OrderHit | null) => {
@@ -231,12 +278,6 @@ export function WorkExampleEditorModal({
     return j.item;
   };
 
-  const cloudImportKey = (url: string): string | null => {
-    const t = parseCloudFolderImportUrl(url);
-    if (!t) return null;
-    return (t.yandexPublicUrl || t.driveId || url).toLowerCase();
-  };
-
   const importCloudFolders = async (
     exampleId: string,
     urls: string[],
@@ -246,7 +287,16 @@ export function WorkExampleEditorModal({
     for (const url of urls) {
       const target = parseCloudFolderImportUrl(url);
       if (!target) continue;
-      const key = cloudImportKey(url);
+      const liveKey = cloudImportKey(url);
+      if (liveKey) {
+        setCloudLive((prev) => ({
+          ...prev,
+          [liveKey]: {
+            status: "importing",
+            label: `Ищу и загружаю фото · ${cloudFolderProviderLabel(target.provider)}`,
+          },
+        }));
+      }
       setCloudNote(`Забираю фото с ${cloudFolderProviderLabel(target.provider)}…`);
       try {
         const r = await fetch(`/api/work-examples/${exampleId}/cloud-import`, {
@@ -273,22 +323,47 @@ export function WorkExampleEditorModal({
           }
         }
         if (!r.ok) {
-          notes.push(j.error || "Не удалось забрать фото");
+          const fail = j.error || "Не удалось забрать фото";
+          notes.push(fail);
+          if (liveKey) {
+            cloudInflightRef.current.delete(liveKey);
+            setCloudLive((prev) => ({
+              ...prev,
+              [liveKey]: { status: "err", label: fail },
+            }));
+          }
           continue;
         }
-        if (key) importedCloudRef.current.add(key);
+        if (liveKey) {
+          importedCloudRef.current.add(liveKey);
+          cloudInflightRef.current.delete(liveKey);
+        }
         const parts: string[] = [];
         if (j.imported) parts.push(`забрано ${j.imported}`);
         if (j.skipped) parts.push(`уже были ${j.skipped}`);
         if (j.truncated) parts.push("лимит 40 за раз");
+        const okLabel = parts.length ? parts.join(", ") : "фото загружены";
         notes.push(
           parts.length
             ? `${cloudFolderProviderLabel(target.provider)}: ${parts.join(", ")}`
             : `${cloudFolderProviderLabel(target.provider)}: готово`,
         );
+        if (liveKey) {
+          setCloudLive((prev) => ({
+            ...prev,
+            [liveKey]: { status: "ok", label: okLabel },
+          }));
+        }
         if (j.errors?.length) notes.push(j.errors.slice(0, 3).join(" · "));
       } catch {
         notes.push("Сеть недоступна при загрузке из облака");
+        if (liveKey) {
+          cloudInflightRef.current.delete(liveKey);
+          setCloudLive((prev) => ({
+            ...prev,
+            [liveKey]: { status: "err", label: "Сеть недоступна" },
+          }));
+        }
       }
     }
     setCloudNote(notes.filter(Boolean).join(" · ") || null);
@@ -305,7 +380,18 @@ export function WorkExampleEditorModal({
     setErr(null);
     try {
       const next = await persistMeta();
-      if (!next) return;
+      if (!next) {
+        for (const url of list) {
+          const key = cloudImportKey(url);
+          if (!key) continue;
+          cloudInflightRef.current.delete(key);
+          setCloudLive((prev) => ({
+            ...prev,
+            [key]: { status: "err", label: "Не удалось сохранить карточку" },
+          }));
+        }
+        return;
+      }
       const imported = await importCloudFolders(next.id, list);
       if (imported) onSaved(imported);
     } catch {
@@ -441,13 +527,55 @@ export function WorkExampleEditorModal({
 
   if (typeof document === "undefined") return null;
 
+  const hasFormContent = workExampleEditorHasContent({
+    title,
+    tech,
+    doc,
+    cloudUrls,
+    pendingCount: pending.length,
+    savedFileCount: savedFiles.length,
+    initialSavedFileCount: initialSavedFileCountRef.current,
+    orderId,
+    cardTypeCount: cardTypes.length,
+    busy: busy || cloudBusy,
+  });
+  const changedFromSaved = Boolean(
+    isEdit &&
+      (title !== (item?.title ?? "") ||
+        tech !== (item?.technicianNotes ?? "") ||
+        doc !== (item?.doctorComments ?? "") ||
+        serializeWorkExampleCloudUrls(cloudUrls) !== (item?.cloudUrl ?? "") ||
+        pending.length > 0 ||
+        savedFiles.length !== initialSavedFileCountRef.current ||
+        orderId !== (item?.orderId ?? "") ||
+        cardTypes.map((t) => t.id).sort().join(",") !==
+          (item?.cardTypes ?? []).map((t) => t.id).sort().join(",") ||
+        busy ||
+        cloudBusy),
+  );
+  const shouldConfirmClose = isEdit ? changedFromSaved : hasFormContent;
+
+  const requestClose = () => {
+    if (!shouldConfirmClose) {
+      onClose();
+      return;
+    }
+    if (
+      window.confirm(
+        "Закрыть окно? Несохранённые название, ссылки и файлы пропадут.",
+      )
+    ) {
+      onClose();
+    }
+  };
+
   return createPortal(
     <div
       className="fixed inset-0 isolate z-[400] flex items-center justify-center bg-black/55 p-3 sm:p-6"
       role="dialog"
       aria-modal
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
       onDragOver={(e) => {
         e.preventDefault();
@@ -485,27 +613,32 @@ export function WorkExampleEditorModal({
           }
         }}
       >
-        <header className="flex items-center gap-3 border-b border-[var(--card-border)] px-4 py-3">
-          <label className="min-w-0 flex-1">
-            <span className="sr-only">Название примера работы</span>
+        <header className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
+          <h2 className="text-sm font-medium text-[var(--text-muted)]">
+            {isEdit ? "Пример работы" : "Новый пример в портфолио"}
+          </h2>
+          <button
+            type="button"
+            className="shrink-0 text-sm text-[var(--text-muted)] hover:text-[var(--text-strong)]"
+            onClick={requestClose}
+          >
+            Закрыть
+          </button>
+        </header>
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
+          <label className="block shrink-0">
+            <span className="mb-1 block text-sm font-semibold text-[var(--text-strong)]">
+              Введите название для портфолио
+            </span>
             <input
-              className="w-full bg-transparent text-base font-semibold text-[var(--text-strong)] outline-none placeholder:font-semibold placeholder:text-[var(--text-strong)]"
-              placeholder="Новый пример работы"
+              className="min-h-11 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-base font-medium text-[var(--text-strong)] outline-none placeholder:font-normal placeholder:text-[var(--text-placeholder)]"
+              placeholder="Например: коронка 26, цирконий"
               value={title}
               maxLength={WORK_EXAMPLE_TITLE_MAX}
               onChange={(e) => setTitle(e.target.value)}
               autoFocus={!isEdit}
             />
           </label>
-          <button
-            type="button"
-            className="shrink-0 text-sm text-[var(--text-muted)] hover:text-[var(--text-strong)]"
-            onClick={onClose}
-          >
-            Закрыть
-          </button>
-        </header>
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1">
               <div className="flex min-h-10 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
@@ -603,48 +736,73 @@ export function WorkExampleEditorModal({
           </div>
 
           <div className="shrink-0 space-y-1.5">
-            {cloudUrls.map((href, i) => (
-              <div
-                key={`cloud-${i}`}
-                className="flex min-h-10 min-w-0 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3"
-              >
-                <input
-                  className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[var(--text-placeholder)]"
-                  placeholder="папка Яндекс Диска или Google Drive…"
-                  value={href}
-                  onChange={(e) => setCloudUrlAt(i, e.target.value)}
-                  aria-label={i === 0 ? "Ссылка на облако" : `Ссылка на облако ${i + 1}`}
-                />
-                {isImportableCloudFolderUrl(href) ? (
-                  <button
-                    type="button"
-                    className="ml-2 shrink-0 text-xs text-[var(--sidebar-blue)] disabled:opacity-50"
-                    disabled={busy || cloudBusy}
-                    onClick={() => void pullCloudNow([href])}
-                  >
-                    забрать
-                  </button>
-                ) : null}
-                {cloudUrls.length > 1 ? (
-                  <button
-                    type="button"
-                    className="ml-2 shrink-0 text-xs text-[var(--sidebar-blue)]"
-                    onClick={() =>
-                      setCloudUrls((prev) => {
-                        const next = prev.filter((_, j) => j !== i);
-                        return next.length ? next : [""];
-                      })
-                    }
-                  >
-                    убрать
-                  </button>
-                ) : !isImportableCloudFolderUrl(href) ? (
-                  <span className="ml-2 shrink-0 text-xs text-[var(--text-muted)]">
-                    Ссылка
-                  </span>
-                ) : null}
-              </div>
-            ))}
+            {cloudUrls.map((href, i) => {
+              const liveKey = cloudImportKey(href);
+              const live = liveKey ? cloudLive[liveKey] : undefined;
+              const looksLikeUrl = /^https?:\/\//i.test(href.trim());
+              return (
+                <div key={`cloud-${i}`} className="space-y-1">
+                  <div className="flex min-h-10 min-w-0 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
+                    <input
+                      className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[var(--text-placeholder)]"
+                      placeholder="папка Яндекс Диска или Google Drive…"
+                      value={href}
+                      onChange={(e) => setCloudUrlAt(i, e.target.value)}
+                      aria-label={i === 0 ? "Ссылка на облако" : `Ссылка на облако ${i + 1}`}
+                    />
+                    {isImportableCloudFolderUrl(href) &&
+                    live?.status !== "detecting" &&
+                    live?.status !== "importing" ? (
+                      <button
+                        type="button"
+                        className="ml-2 shrink-0 text-xs text-[var(--sidebar-blue)] disabled:opacity-50"
+                        disabled={busy || cloudBusy}
+                        onClick={() => void pullCloudNow([href])}
+                      >
+                        забрать
+                      </button>
+                    ) : null}
+                    {cloudUrls.length > 1 ? (
+                      <button
+                        type="button"
+                        className="ml-2 shrink-0 text-xs text-[var(--sidebar-blue)]"
+                        onClick={() =>
+                          setCloudUrls((prev) => {
+                            const next = prev.filter((_, j) => j !== i);
+                            return next.length ? next : [""];
+                          })
+                        }
+                      >
+                        убрать
+                      </button>
+                    ) : !isImportableCloudFolderUrl(href) && !live ? (
+                      <span className="ml-2 shrink-0 text-xs text-[var(--text-muted)]">
+                        Ссылка
+                      </span>
+                    ) : null}
+                  </div>
+                  {live ? (
+                    <p
+                      className={`flex items-center gap-2 px-1 text-xs ${
+                        live.status === "err"
+                          ? "text-red-600"
+                          : live.status === "ok"
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-[var(--sidebar-blue)]"
+                      }`}
+                      aria-live="polite"
+                    >
+                      <CloudLinkLiveDot status={live.status} />
+                      {live.label}
+                    </p>
+                  ) : looksLikeUrl && !isImportableCloudFolderUrl(href) ? (
+                    <p className="px-1 text-xs text-[var(--text-muted)]">
+                      Нужна ссылка на папку Google Drive или Яндекс Диска
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
             {cloudUrls.length < WORK_EXAMPLE_CLOUD_URL_MAX ? (
               <button
                 type="button"
@@ -829,7 +987,7 @@ export function WorkExampleEditorModal({
             ) : null}
           </div>
           <div className="flex gap-2">
-            <button type="button" className="rounded-lg px-3 py-1.5 text-sm" onClick={onClose}>
+            <button type="button" className="rounded-lg px-3 py-1.5 text-sm" onClick={requestClose}>
               Отмена
             </button>
             <button
@@ -845,5 +1003,22 @@ export function WorkExampleEditorModal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+function CloudLinkLiveDot({ status }: { status: CloudLinkLive["status"] }) {
+  if (status === "ok") {
+    return (
+      <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+    );
+  }
+  if (status === "err") {
+    return <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden />;
+  }
+  return (
+    <span className="relative inline-flex h-2 w-2 shrink-0" aria-hidden>
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--sidebar-blue)] opacity-60" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--sidebar-blue)]" />
+    </span>
   );
 }
