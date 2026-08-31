@@ -7,7 +7,7 @@ import { deleteS3Object, getS3ObjectBytes, isS3StorageEnabled, putS3ObjectBytes 
 import { resolvePathUnderRoot } from "@/lib/storage-path-safe";
 
 /**
- * Upload: лимит 25 МБ, таймаут тела у роута, SQLITE_BUSY — повтор на уровне Prisma.
+ * Upload: лимит как у наряда, таймаут тела у роута, SQLITE_BUSY — повтор на уровне Prisma.
  * Путь: work-examples/{exampleId}/{fileId}
  */
 export function getWorkExampleStorageRoot(): string {

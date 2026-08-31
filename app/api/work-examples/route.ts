@@ -57,21 +57,29 @@ export async function POST(req: Request) {
   const cloudUrl = serializeWorkExampleCloudUrls(
     typeof o.cloudUrl === "string" ? o.cloudUrl : "",
   );
-  const row = await ctx.prisma.workExample.create({
-    data: {
-      tenantId: ctx.tenantId,
-      title: parseWorkExampleTitle(o.title),
-      orderId: boundOrderId,
-      cloudUrl: cloudUrl || null,
-      technicianNotes: String(o.technicianNotes || "").slice(0, 4000),
-      doctorComments: String(o.doctorComments || "").slice(0, 4000),
-      cardTypes,
-      compositionSnapshot: composition,
-      shareToken: newWorkExampleShareToken(),
-      createdByUserId: ctx.actorUserId,
-    },
-    select: exampleSelect,
-  });
+  const createData = {
+    tenantId: ctx.tenantId,
+    title: parseWorkExampleTitle(o.title),
+    orderId: boundOrderId,
+    cloudUrl: cloudUrl || null,
+    technicianNotes: String(o.technicianNotes || "").slice(0, 4000),
+    doctorComments: String(o.doctorComments || "").slice(0, 4000),
+    cardTypes,
+    compositionSnapshot: composition,
+    createdByUserId: ctx.actorUserId,
+  };
+  let row;
+  try {
+    row = await ctx.prisma.workExample.create({
+      data: { ...createData, shareToken: newWorkExampleShareToken() },
+      select: exampleSelect,
+    });
+  } catch {
+    row = await ctx.prisma.workExample.create({
+      data: { ...createData, shareToken: newWorkExampleShareToken() },
+      select: exampleSelect,
+    });
+  }
   return NextResponse.json({
     item: serializeWorkExample(row, { includeInternal: true }),
   });

@@ -4,15 +4,14 @@ import { loadPublicWorkExampleShowcase } from "@/lib/work-examples/load-public-s
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicWorkExamplePage({
+export default async function ShortPublicWorkExamplePage({
   params,
 }: {
-  params: Promise<{ tenantSlug: string; token: string }>;
+  params: Promise<{ token: string }>;
 }) {
-  const { tenantSlug, token } = await params;
-  const slug = String(tenantSlug || "").trim();
+  const { token } = await params;
   const loaded = await loadPublicWorkExampleShowcase(token);
-  if (!loaded || (slug && loaded.tenantSlug !== slug)) notFound();
+  if (!loaded) notFound();
   return (
     <PublicWorkExampleShowcase
       tenantSlug={loaded.tenantSlug}

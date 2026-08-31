@@ -98,6 +98,11 @@ type KanbanHeadTarget = {
   urgent: boolean;
   stageDueDate?: string;
   dueDate?: string;
+  linkedOrderId?: string;
+  blocked?: boolean;
+  blockReason?: string;
+  blockedAt?: string;
+  blockedByUserId?: string;
 };
 
 /** asap / due_date → поля карточки канбана (не наряд CRM). */

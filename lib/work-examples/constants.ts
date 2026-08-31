@@ -1,8 +1,11 @@
 /** Карта модуля: корзина 5 суток, подписи в МСК, даты в БД — ISO DateTime. */
 
+import { CRM_UPLOAD_MAX_BYTES } from "@/lib/crm-upload-limits";
+
 export const WORK_EXAMPLE_TRASH_DAYS = 5;
 export const WORK_EXAMPLE_TRASH_MS = WORK_EXAMPLE_TRASH_DAYS * 24 * 60 * 60 * 1000;
-export const WORK_EXAMPLE_MAX_FILE_BYTES = 25 * 1024 * 1024;
+/** Как вложения наряда: Exocad zip/html часто больше 25 МБ. */
+export const WORK_EXAMPLE_MAX_FILE_BYTES = CRM_UPLOAD_MAX_BYTES;
 /** CLI d3d-html-export: AGENTS.md рекомендует 120–300 с. */
 export const D3D_HTML_EXPORT_TIMEOUT_MS = 300_000;
 export const WORK_EXAMPLE_MAX_FILES_PER_UPLOAD = 40;

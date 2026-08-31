@@ -9,6 +9,7 @@ import { userPersonDisplayName } from "@/lib/user-activity-display-label";
 import { snapshotLabComposition } from "@/lib/work-examples/composition-snapshot";
 import { isWorkExampleTrashExpired } from "@/lib/work-examples/trash";
 import { deleteWorkExampleFileBytes } from "@/lib/work-examples/storage";
+import { WORK_EXAMPLE_SHARE_TOKEN_BYTES } from "@/lib/work-examples/share-url";
 
 export async function requireWorkExamplesCtx() {
   const session = await getSessionFromCookies();
@@ -35,8 +36,9 @@ export async function requireWorkExamplesCtx() {
   };
 }
 
+/** ~8 символов base64url. Уникальность — индекс shareToken. */
 export function newWorkExampleShareToken(): string {
-  return randomBytes(18).toString("base64url");
+  return randomBytes(WORK_EXAMPLE_SHARE_TOKEN_BYTES).toString("base64url");
 }
 
 export async function loadOrderLabSnapshot(

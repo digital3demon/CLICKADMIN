@@ -14,6 +14,12 @@ import {
 import { WORK_EXAMPLE_TITLE_MAX } from "@/lib/work-examples/constants";
 import { guessWorkExampleAttachKind } from "@/lib/work-examples/guess-attach-kind";
 import {
+  formatWorkExampleUploadHttpError,
+  isWorkExampleFileOverLimit,
+  workExampleFileTooLargeMessage,
+  workExampleUploadTimeoutMs,
+} from "@/lib/work-examples/upload-client";
+import {
   isWorkExampleViewableHtml,
   isWorkExampleViewableMesh,
 } from "@/lib/work-examples/mesh-file";
@@ -198,28 +204,59 @@ export function WorkExampleEditorModal({
     return j.item;
   };
 
-  const uploadPending = async (exampleId: string): Promise<WorkExampleItem | null> => {
+  const uploadPending = async (
+    exampleId: string,
+  ): Promise<{ item: WorkExampleItem | null; errors: string[]; doneLocalIds: string[] }> => {
     let latest: WorkExampleItem | null = null;
-    for (const kind of ["PHOTO", "CAD", "FILE"] as const) {
-      const batch = pending.filter((p) => p.kind === kind);
-      if (!batch.length) continue;
-      const fd = new FormData();
-      fd.set("kind", kind);
-      for (const p of batch) fd.append("files", p.file);
-      const r = await fetch(`/api/work-examples/${exampleId}/files`, {
-        method: "POST",
-        credentials: "include",
-        body: fd,
-        signal: AbortSignal.timeout(55_000),
-      });
-      const j = (await r.json()) as { item?: WorkExampleItem; error?: string };
-      if (!r.ok || !j.item) {
-        setErr(j.error || "Не удалось загрузить файлы");
-        return latest;
+    const errors: string[] = [];
+    const doneLocalIds: string[] = [];
+    for (const p of pending) {
+      if (isWorkExampleFileOverLimit(p.file.size)) {
+        errors.push(workExampleFileTooLargeMessage(p.file.name));
+        continue;
       }
-      latest = j.item;
+      const fd = new FormData();
+      fd.set("kind", p.kind);
+      fd.append("files", p.file);
+      try {
+        const r = await fetch(`/api/work-examples/${exampleId}/files`, {
+          method: "POST",
+          credentials: "include",
+          body: fd,
+          signal: AbortSignal.timeout(workExampleUploadTimeoutMs(p.file.size)),
+        });
+        const raw = await r.text();
+        let j: { item?: WorkExampleItem; error?: string } = {};
+        try {
+          j = raw.trim() ? (JSON.parse(raw) as { item?: WorkExampleItem; error?: string }) : {};
+        } catch {
+          j = {};
+        }
+        if (!r.ok || !j.item) {
+          errors.push(
+            formatWorkExampleUploadHttpError(
+              r.status,
+              j as Record<string, unknown>,
+              raw,
+              p.file.name,
+            ),
+          );
+          continue;
+        }
+        latest = j.item;
+        doneLocalIds.push(p.localId);
+      } catch (e) {
+        const aborted =
+          e instanceof DOMException &&
+          (e.name === "TimeoutError" || e.name === "AbortError");
+        errors.push(
+          aborted
+            ? `«${p.file.name}»: загрузка зависла. Попробуйте ещё раз.`
+            : `«${p.file.name}»: сеть недоступна`,
+        );
+      }
     }
-    return latest;
+    return { item: latest, errors, doneLocalIds };
   };
 
   const save = async () => {
@@ -230,23 +267,17 @@ export function WorkExampleEditorModal({
       if (!next) return;
       let saved = next;
       if (pending.length) {
-        try {
-          const uploaded = await uploadPending(next.id);
-          if (!uploaded) {
-            onSaved(next);
-            return;
-          }
-          saved = uploaded;
-        } catch (e) {
-          const aborted =
-            e instanceof DOMException &&
-            (e.name === "TimeoutError" || e.name === "AbortError");
-          setErr(
-            aborted
-              ? "Загрузка файлов зависла. Попробуйте ещё раз."
-              : "Не удалось загрузить файлы",
-          );
-          onSaved(next);
+        const uploaded = await uploadPending(next.id);
+        if (uploaded.doneLocalIds.length) {
+          setPending((prev) => prev.filter((x) => !uploaded.doneLocalIds.includes(x.localId)));
+        }
+        if (uploaded.item) {
+          saved = uploaded.item;
+          setSavedFiles(uploaded.item.files);
+        }
+        if (uploaded.errors.length) {
+          setErr(uploaded.errors.join(" · "));
+          onSaved(saved);
           return;
         }
       }

@@ -3,6 +3,7 @@ import {
   exampleSelect,
   requireWorkExamplesCtx,
 } from "@/lib/work-examples/access.server";
+import { formatCrmUploadMaxShortRu } from "@/lib/crm-upload-limits";
 import {
   WORK_EXAMPLE_MAX_FILE_BYTES,
   WORK_EXAMPLE_MAX_FILES_PER_UPLOAD,
@@ -16,7 +17,7 @@ import { serializeWorkExample } from "@/lib/work-examples/serialize";
 import { newWorkExampleFileId, writeWorkExampleFile } from "@/lib/work-examples/storage";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -30,8 +31,23 @@ function guessKind(file: File, forced: WorkExampleFileKindValue): WorkExampleFil
   return guessWorkExampleAttachKind(file);
 }
 
-/** POST multipart: files[], kind. Лимит 25 МБ, пачка до 40. SQLITE_BUSY — Prisma retry. */
+/** POST multipart: files[], kind. Лимит как у наряда, пачка до 40. SQLITE_BUSY — Prisma retry. */
 export async function POST(req: Request, ctxP: Ctx) {
+  try {
+    return await postFiles(req, ctxP);
+  } catch (e) {
+    const details = e instanceof Error ? e.message : String(e);
+    console.error(
+      JSON.stringify({ evt: "work_example_files_upload_fail", details: details.slice(0, 240) }),
+    );
+    return NextResponse.json(
+      { error: "Не удалось сохранить файлы", details: details.slice(0, 240) },
+      { status: 500 },
+    );
+  }
+}
+
+async function postFiles(req: Request, ctxP: Ctx) {
   const ctx = await requireWorkExamplesCtx();
   if (!ctx.ok) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   const { id } = await ctxP.params;
@@ -71,7 +87,7 @@ export async function POST(req: Request, ctxP: Ctx) {
   for (const file of incoming) {
     if (file.size > WORK_EXAMPLE_MAX_FILE_BYTES) {
       return NextResponse.json(
-        { error: `Файл «${file.name}» больше 25 МБ` },
+        { error: `Файл «${file.name}» больше ${formatCrmUploadMaxShortRu()}` },
         { status: 400 },
       );
     }

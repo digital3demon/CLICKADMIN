@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
+import { WorkExampleCardPhotoGrid } from "@/components/work-examples/WorkExampleCardPhotoGrid";
 import { WorkExampleEditorModal } from "@/components/work-examples/WorkExampleEditorModal";
 import { WorkExampleShowcaseSettingsModal } from "@/components/work-examples/WorkExampleShowcaseSettingsModal";
 import {
@@ -113,8 +114,10 @@ export function WorkExamplesApp() {
       {err ? <p className="mb-3 text-sm text-red-600">{err}</p> : null}
       <ul className="flex flex-wrap gap-4">
         {items.map((it) => {
-          const photos = it.files.filter((f) => f.kind === "PHOTO");
-          const cover = it.coverFileId || photos[0]?.id;
+          const photos = it.files
+            .filter((f) => f.kind === "PHOTO")
+            .slice()
+            .sort((a, b) => a.sortOrder - b.sortOrder);
           const types = it.cardTypes.map((t) => t.name).join(" · ");
           const orderLine = it.unassigned || !it.orderNumber ? "не распределен" : it.orderNumber;
           return (
@@ -127,18 +130,9 @@ export function WorkExamplesApp() {
                   onClick={() => setEditor(it)}
                 >
                   <div className="absolute inset-0 overflow-hidden bg-[var(--surface-subtle)]">
-                    {cover ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={fileUrl(it.id, cover)}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-[10px] text-[var(--text-muted)]">
-                        нет
-                      </div>
-                    )}
+                    <WorkExampleCardPhotoGrid
+                      urls={photos.map((p) => fileUrl(it.id, p.id))}
+                    />
                   </div>
                 </button>
                 <div className="flex items-end justify-between gap-2 border-t border-[var(--card-border)] px-3 py-2">
