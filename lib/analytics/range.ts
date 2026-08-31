@@ -91,3 +91,16 @@ export function defaultAnalyticsRange(): { from: Date; to: Date } {
 export function toYmd(d: Date): string {
   return analyticsBusinessDayKey(d);
 }
+
+/** Календарный месяц «сегодня» по MSK: с 1-го по последний день месяца. */
+export function currentMskMonthYmdRange(now = new Date()): {
+  from: string;
+  to: string;
+} {
+  const today = analyticsBusinessDayKey(now);
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  const { from, toExclusive } = analyticsMonthBounds(y, m);
+  const last = new Date(toExclusive.getTime() - 1);
+  return { from: toYmd(from), to: toYmd(last) };
+}

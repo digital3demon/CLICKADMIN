@@ -2295,11 +2295,20 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const ok = stopCardByIdOnBoard(boardRef, cardId);
       if (!ok) return s;
       syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+      if (!isDemo && canPersistTenantKanban(next)) {
+        void writePersistedKanbanStateNow(next, false);
+      }
       return next;
     });
     if (cardModalId === cardId) setCardModalId(null);
     showToast(`Карточка «${titleSnapshot}» перемещена в СТОП`);
-    if (linkedOrderId) clearPendingKanbanColumnMove(linkedOrderId);
+    if (linkedOrderId) {
+      clearPendingKanbanColumnMove(linkedOrderId);
+      persistCrmBoardFieldsClient({
+        orderId: linkedOrderId,
+        columnTitle: "СТОП",
+      });
+    }
     if (
       !isDemo &&
       linkedOrderId &&
@@ -2359,9 +2368,18 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       const ok = restoreStoppedCardOnBoard(b, stoppedId);
       if (!ok) return s;
       syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+      if (!isDemo && canPersistTenantKanban(next)) {
+        void writePersistedKanbanStateNow(next, false);
+      }
       return next;
     });
     showToast("Карточка возвращена из СТОП");
+    if (linkedOrderId && sourceColumnTitle) {
+      persistCrmBoardFieldsClient({
+        orderId: linkedOrderId,
+        columnTitle: sourceColumnTitle,
+      });
+    }
     if (linkedOrderId && sourceColumnTitle) {
       rememberCrmKanbanColumnLocal({
         cardId: linkedOrderId,

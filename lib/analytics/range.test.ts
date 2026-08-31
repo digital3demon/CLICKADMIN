@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   analyticsBusinessDayKey,
   analyticsMonthBounds,
+  currentMskMonthYmdRange,
   parseAnalyticsRange,
   toYmd,
   defaultAnalyticsRange,
@@ -65,5 +66,13 @@ describe("defaultAnalyticsRange", () => {
     const spanMs = to.getTime() - from.getTime();
     expect(spanMs).toBeGreaterThan(0);
     expect(spanMs).toBeLessThanOrEqual(31 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("currentMskMonthYmdRange", () => {
+  it("август 2026 по MSK: с 01 по 31", () => {
+    const r = currentMskMonthYmdRange(new Date("2026-08-15T12:00:00.000Z"));
+    expect(r.from).toBe("2026-08-01");
+    expect(r.to).toBe("2026-08-31");
   });
 });

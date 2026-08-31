@@ -102,6 +102,20 @@ describe("resolveKanbanColumnByKaitenTitle", () => {
 });
 
 describe("applyKaitenPositionToKanbanState", () => {
+  it("дорожка СТОП из Kaiten паркует карточку, не кладёт в «К исполнению»", () => {
+    const state = miniState();
+    const changed = applyKaitenPositionToKanbanState(state, "ord-a", {
+      columnTitle: "СТОП",
+    });
+    expect(changed).toBe(true);
+    expect(state.boards[0]!.columns[0]!.cards.some((c) => c.id === "card-a")).toBe(
+      false,
+    );
+    expect(
+      state.boards[0]!.stoppedCards?.some((r) => r.card.linkedOrderId === "ord-a"),
+    ).toBe(true);
+  });
+
   it("moves card to kaiten column and updates sort order", () => {
     const state = miniState();
     const changed = applyKaitenPositionToKanbanState(state, "ord-a", {

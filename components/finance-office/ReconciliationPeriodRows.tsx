@@ -1,6 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import {
+  resolveReconDownloadPeriod,
+  type ReconDownloadPeriodDraft,
+} from "@/lib/recon-download-period";
+import { isZeroReconRow } from "@/lib/recon-zero-row";
 
 export type ReconRowVm = {
   id: string | null;
@@ -44,14 +49,22 @@ export function ReconciliationPeriodRows({
   items: ReconRowVm[];
   archive: boolean;
   canEdit: boolean;
-  downloadHref: (row: ReconRowVm, lockPeriod: boolean) => string;
+  downloadHref: (
+    row: ReconRowVm,
+    lockPeriod: boolean,
+    period: { from: string; to: string; slot: ReconRowVm["slot"] },
+  ) => string;
   onChanged: () => void;
 }) {
   const [lockByKey, setLockByKey] = useState<Record<string, boolean>>({});
+  const [draftByKey, setDraftByKey] = useState<Record<string, ReconDownloadPeriodDraft>>(
+    {},
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [dragKey, setDragKey] = useState<string | null>(null);
+  const [zerosOpen, setZerosOpen] = useState(false);
 
   const rowKey = (r: ReconRowVm) =>
     r.id ?? `${r.groupKey}|${r.slot}|${r.periodFromStr}|${r.periodToStr}`;
@@ -142,6 +155,9 @@ export function ReconciliationPeriodRows({
     }
   };
 
+  const zeros = items.filter(isZeroReconRow);
+  const live = items.filter((r) => !isZeroReconRow(r));
+
   if (items.length === 0) {
     return (
       <p className="text-sm text-[var(--text-muted)]">
@@ -160,9 +176,51 @@ export function ReconciliationPeriodRows({
       {hint ? (
         <p className="text-sm text-[var(--text-secondary)]">{hint}</p>
       ) : null}
-      {items.map((row) => {
+      {zeros.length > 0 ? (
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)]">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--text-body)]"
+            aria-expanded={zerosOpen}
+            onClick={() => setZerosOpen((v) => !v)}
+          >
+            <span>Нулевые сверки за период</span>
+            <span className="tabular-nums text-[var(--text-muted)]">{zeros.length}</span>
+          </button>
+          {zerosOpen ? (
+            <ul className="space-y-2 border-t border-[var(--card-border)] px-3 py-2 text-sm">
+              {zeros.map((row) => (
+                <li
+                  key={rowKey(row)}
+                  className="text-[var(--text-body)]"
+                >
+                  <p className="font-medium">
+                    {row.legalEntityLabel}
+                    {row.inn ? (
+                      <span className="ms-1 font-normal text-[var(--text-secondary)]">
+                        ИНН {row.inn}
+                      </span>
+                    ) : null}
+                  </p>
+                  <ul className="mt-0.5 list-none text-[var(--text-secondary)]">
+                    {row.clinicNames.map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    {row.periodLabelRu}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      {live.map((row) => {
         const k = rowKey(row);
         const lock = lockByKey[k] ?? false;
+        const draft = draftByKey[k] ?? { from: "", to: "" };
+        const resolved = resolveReconDownloadPeriod(row, draft);
         return (
           <article
             key={k}
@@ -198,12 +256,58 @@ export function ReconciliationPeriodRows({
                 </p>
               </div>
               <div className="flex flex-col items-stretch gap-1.5 sm:items-end">
-                <a
-                  href={downloadHref(row, !archive && lock)}
-                  className="inline-flex h-8 items-center justify-center rounded-md bg-[var(--sidebar-blue)] px-2.5 text-xs font-semibold text-white"
-                >
-                  Скачать сверку
-                </a>
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  <label className="flex items-center gap-1 text-[11px] text-[var(--text-body)]">
+                    с
+                    <input
+                      type="date"
+                      className="h-8 w-[8.5rem] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-1.5 text-xs"
+                      value={draft.from}
+                      onChange={(e) =>
+                        setDraftByKey((prev) => ({
+                          ...prev,
+                          [k]: { ...draft, from: e.target.value },
+                        }))
+                      }
+                      aria-label="Период сверки с"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1 text-[11px] text-[var(--text-body)]">
+                    по
+                    <input
+                      type="date"
+                      className="h-8 w-[8.5rem] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-1.5 text-xs"
+                      value={draft.to}
+                      onChange={(e) =>
+                        setDraftByKey((prev) => ({
+                          ...prev,
+                          [k]: { ...draft, to: e.target.value },
+                        }))
+                      }
+                      aria-label="Период сверки по"
+                    />
+                  </label>
+                  {resolved.ok ? (
+                    <a
+                      href={downloadHref(row, !archive && lock, {
+                        from: resolved.from,
+                        to: resolved.to,
+                        slot: resolved.slot,
+                      })}
+                      className="inline-flex h-8 items-center justify-center rounded-md bg-[var(--sidebar-blue)] px-2.5 text-xs font-semibold text-white"
+                    >
+                      Скачать сверку
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center justify-center rounded-md bg-[var(--sidebar-blue)] px-2.5 text-xs font-semibold text-white"
+                      onClick={() => setErr(resolved.error)}
+                    >
+                      Скачать сверку
+                    </button>
+                  )}
+                </div>
                 {!archive && canEdit ? (
                   <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-body)]">
                     <input

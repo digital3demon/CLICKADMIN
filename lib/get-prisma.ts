@@ -22,6 +22,7 @@ import {
   ensureWorkExampleTables,
   ensureWorkExampleTitleColumn,
 } from "@/lib/ensure-work-example-tables";
+import { ensureAnalyticsTreatAsExistingColumn } from "@/lib/ensure-analytics-treat-as-existing-column";
 import { ensureSqlitePragmas } from "@/lib/ensure-sqlite-pragmas";
 import { getDemoPrisma } from "@/lib/prisma-demo";
 import { getDemoDatabaseUrl } from "@/lib/prisma-demo";
@@ -53,6 +54,7 @@ async function prepareClient(
   await ensureLegalEntityReconciliationTable(client);
   await ensureInventoryItemColumns(client);
   await ensureWorkExampleTitleColumn(client);
+  await ensureAnalyticsTreatAsExistingColumn(client);
   return client;
 }
 

@@ -292,6 +292,8 @@ model Clinic {
   createdAt                    DateTime                       @default(now())
   /// Мягкое удаление: скрыта в списках, восстановление из «Истории»
   deletedAt                    DateTime?
+  /// Был в работе раньше, чем появился в CRM — не показывать в «Новые клиники»
+  analyticsTreatAsExisting     Boolean                        @default(false)
 
   @@index([tenantId])
 }
@@ -450,6 +452,8 @@ model Doctor {
   createdAt                    DateTime                      @default(now())
   /// Мягкое удаление: скрыта в списках, восстановление из «Истории»
   deletedAt                    DateTime?
+  /// Был в работе раньше, чем появился в CRM — не показывать в «Новые доктора»
+  analyticsTreatAsExisting     Boolean                       @default(false)
   telegramGroups               DoctorTelegramGroup[]
   messengerItems               DoctorMessengerItem[]
   telegramMessages             DoctorTelegramMessage[]

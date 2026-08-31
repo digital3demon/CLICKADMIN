@@ -152,12 +152,12 @@ export function FinanceOfficeReconciliationsCard({
                   items={items}
                   archive={tab === "archive"}
                   canEdit={canEdit}
-                  downloadHref={(row, lockPeriod) => {
+                  downloadHref={(row, lockPeriod, period) => {
                     const q = new URLSearchParams({
                       groupKey: row.groupKey,
-                      from: row.periodFromStr,
-                      to: row.periodToStr,
-                      slot: row.slot,
+                      from: period.from,
+                      to: period.to,
+                      slot: period.slot,
                       clinicIds: row.clinicIds.join(","),
                       title: row.legalEntityLabel,
                     });

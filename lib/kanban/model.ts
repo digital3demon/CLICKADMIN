@@ -14,6 +14,7 @@ import type {
 import type { UserRole } from "@prisma/client";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
+import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 import {
   resolveLinkedOrderKanbanDescription,
   resolveLinkedOrderKanbanTitle,
@@ -657,6 +658,47 @@ function isLinkedOrderArchivedOnBoard(board: KanbanBoard, orderId: string): bool
   const key = orderId.trim();
   if (!key) return false;
   return (board.archivedCards || []).some((x) => x.card.linkedOrderId === key);
+}
+
+export function isLinkedOrderStoppedOnBoard(
+  board: KanbanBoard,
+  orderId: string,
+): boolean {
+  const key = orderId.trim();
+  if (!key) return false;
+  return (board.stoppedCards || []).some((x) => x.card.linkedOrderId === key);
+}
+
+/** Уже стоящую на доске карточку (или только что созданную) убрать в СТОП. */
+export function parkLinkedCardInStop(
+  board: KanbanBoard,
+  card: KanbanCard,
+  sourceColumnId: string,
+  sourceColumnTitle: string,
+): void {
+  board.stoppedCards = board.stoppedCards || [];
+  const oid = String(card.linkedOrderId || "").trim();
+  if (
+    board.stoppedCards.some(
+      (r) => r.card.id === card.id || (oid && r.card.linkedOrderId === oid),
+    )
+  ) {
+    return;
+  }
+  for (const col of board.columns) {
+    col.cards = col.cards.filter(
+      (c) => c.id !== card.id && (!oid || c.linkedOrderId !== oid),
+    );
+  }
+  const now = new Date().toISOString();
+  card.lastMovedAt = now;
+  board.stoppedCards.unshift({
+    id: generateId("stop"),
+    card: structuredClone(card),
+    stoppedAt: now,
+    sourceColumnId,
+    sourceColumnTitle,
+  });
 }
 
 function archiveCardIntoBoard(input: {
@@ -2950,6 +2992,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     );
     if (!targetBoard || !targetBoard.columns.length) continue;
     if (isLinkedOrderArchivedOnBoard(targetBoard, row.id)) continue;
+    if (isLinkedOrderStoppedOnBoard(targetBoard, row.id)) continue;
     const reuseCard = reuseFromOtherBoard?.card ?? null;
     for (const b of next.boards) {
       if (b.id !== targetBoard.id) {
@@ -2995,7 +3038,11 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     if (foundEff) {
       const hasKaiten =
         row.kaitenCardId != null && Number.isFinite(row.kaitenCardId);
-      if (foundEff.col.id !== targetCol.id && (hasKaiten || demo)) {
+      if (
+        !isKanbanStopColumnTitle(row.kaitenColumnTitle) &&
+        foundEff.col.id !== targetCol.id &&
+        (hasKaiten || demo)
+      ) {
         pushActivity(
           foundEff.card,
           `Перемещена в «${targetCol.title}» (Kaiten)`,
@@ -3056,6 +3103,17 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       mergeOrderAttachmentsIntoLinkedCard(card, row.id, row);
       restoreKanbanMembersFromSnap(card, kept);
       targetCol.cards.unshift(card);
+    }
+    if (isKanbanStopColumnTitle(row.kaitenColumnTitle)) {
+      const loc = findLinkedCardOnBoard(targetBoard, row.id);
+      if (loc) {
+        parkLinkedCardInStop(
+          targetBoard,
+          loc.card,
+          loc.col.id,
+          loc.col.title,
+        );
+      }
     }
   }
   for (const b of next.boards) {

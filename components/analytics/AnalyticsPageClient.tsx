@@ -14,10 +14,15 @@ import {
   YAxis,
 } from "recharts";
 import {
+  currentMskMonthYmdRange,
   defaultAnalyticsRange,
   toYmd,
 } from "@/lib/analytics/range";
+import type { ContractorsLifecycleReport } from "@/lib/analytics/clients-lifecycle";
+import { emptyContractorsLifecycle } from "@/lib/analytics/clients-lifecycle";
 import { AnalyticsDeadlinesPanel } from "@/components/analytics/AnalyticsDeadlinesPanel";
+import { AnalyticsCompareModal } from "@/components/analytics/AnalyticsCompareModal";
+import { AnalyticsContractorsLifecyclePanel } from "@/components/analytics/AnalyticsContractorsLifecyclePanel";
 
 const TABS = [
   { id: "finance" as const, label: "Финансы" },
@@ -130,7 +135,10 @@ export function AnalyticsPageClient() {
       revenue: number;
       ordersPerMonth: number;
     }[];
+    lifecycle?: ContractorsLifecycleReport;
   } | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const contractorsMonthAppliedRef = useRef(false);
 
   const [warehouse, setWarehouse] = useState<{
     movementCount: number;
@@ -258,6 +266,15 @@ export function AnalyticsPageClient() {
 
   useEffect(() => {
     if (tab === "deadlines") return;
+    if (tab === "contractors" && !contractorsMonthAppliedRef.current) {
+      contractorsMonthAppliedRef.current = true;
+      const month = currentMskMonthYmdRange();
+      if (fromStr !== month.from || toStr !== month.to) {
+        setFromStr(month.from);
+        setToStr(month.to);
+        return;
+      }
+    }
     if (loadedForQRef.current[tab] === activeQ) return;
     const ac = new AbortController();
     const tabNow = tab;
@@ -329,7 +346,7 @@ export function AnalyticsPageClient() {
       }
     })();
     return () => ac.abort();
-  }, [tab, q, reconQ, activeQ, reloadTick]);
+  }, [tab, q, reconQ, activeQ, reloadTick, fromStr, toStr]);
 
   const exportHref = (type: "finance" | "price" | "contractors" | "warehouse") =>
     `/api/analytics/export?type=${type}&${q}`;
@@ -406,6 +423,24 @@ export function AnalyticsPageClient() {
             className="rounded-full border border-[var(--card-border)] px-2.5 py-1 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
           >
             30 дн.
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const m = currentMskMonthYmdRange();
+              setFromStr(m.from);
+              setToStr(m.to);
+            }}
+            className="rounded-full border border-[var(--card-border)] px-2.5 py-1 text-xs text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+          >
+            Этот месяц
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompareOpen(true)}
+            className="rounded-full border border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)]/10 px-2.5 py-1 text-xs font-semibold text-[var(--sidebar-blue)] hover:bg-[var(--sidebar-blue)]/15"
+          >
+            Сравнить с периодом
           </button>
         </div>
       </div>
@@ -1177,6 +1212,10 @@ export function AnalyticsPageClient() {
               </ResponsiveContainer>
             </div>
           </section>
+          <AnalyticsContractorsLifecyclePanel
+            data={contractors.lifecycle ?? emptyContractorsLifecycle()}
+            onChanged={() => refetchActiveTab()}
+          />
         </div>
       ) : null}
 
@@ -1452,6 +1491,18 @@ export function AnalyticsPageClient() {
 
       {tab === "deadlines" ? (
         <AnalyticsDeadlinesPanel dateQuery={q} loading={loading} error={error} />
+      ) : null}
+
+      {compareOpen ? (
+        <AnalyticsCompareModal
+          key={tab}
+          tab={tab}
+          fromStr={fromStr}
+          toStr={toStr}
+          reconYear={reconYear}
+          reconMonth={reconMonth}
+          onClose={() => setCompareOpen(false)}
+        />
       ) : null}
     </div>
   );

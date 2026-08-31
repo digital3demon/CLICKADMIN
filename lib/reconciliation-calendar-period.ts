@@ -165,6 +165,28 @@ export function isPeriodHighlighted(
   return h != null && h === todayYmd;
 }
 
+/**
+ * Слот для ручного «с»/«по»: половина месяца или весь месяц, если границы
+ * лежат в разных половинах одного месяца.
+ */
+export function slotForYmdRange(
+  fromYmd: string,
+  toYmd: string,
+): ReconCalendarSlot {
+  const start = standardPeriodContainingYmd(fromYmd, "MONTHLY_2");
+  const end = standardPeriodContainingYmd(toYmd, "MONTHLY_2");
+  if (
+    start &&
+    end &&
+    start.slot === "FIRST_HALF" &&
+    end.slot === "SECOND_HALF" &&
+    start.periodFromStr.slice(0, 7) === end.periodFromStr.slice(0, 7)
+  ) {
+    return "MONTHLY_FULL";
+  }
+  return start?.slot ?? end?.slot ?? "MONTHLY_FULL";
+}
+
 export function frequencyLabelRu(
   frequency: ReconciliationFrequency,
   mixed?: boolean,

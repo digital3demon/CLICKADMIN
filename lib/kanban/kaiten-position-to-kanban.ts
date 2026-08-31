@@ -8,7 +8,9 @@ import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import {
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
+  parkLinkedCardInStop,
 } from "@/lib/kanban/model";
+import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 
 /** Колонка зеркала CRM по названию колонки Kaiten. */
 export function resolveKanbanColumnByKaitenTitle(
@@ -117,6 +119,11 @@ export function applyKaitenPositionToKanbanState(
   ) {
     card.kaitenCardSortOrder = opts.sortOrder;
     changed = true;
+  }
+
+  if (isKanbanStopColumnTitle(opts.columnTitle)) {
+    parkLinkedCardInStop(board, card, fromCol.id, fromCol.title);
+    return true;
   }
 
   const inboundLane = normalizeInboundTrackLane(opts.trackLane);

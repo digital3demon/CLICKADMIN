@@ -15,6 +15,7 @@ import { formatReconciliationPeriodLabelRu, formatYmdInMsk } from "@/lib/msk-cal
 import { orderWhereReconciliationPeriod } from "@/lib/clinic-reconciliation-period";
 import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconciliation-export";
 import { legalEntityLabelFromClinic } from "@/lib/clinic-legal-label";
+import { isZeroReconRow } from "@/lib/recon-zero-row";
 
 export type LegalReconListTab = "open" | "archive";
 
@@ -307,7 +308,7 @@ export async function listLegalEntityReconciliations(input: {
   });
 
   const highlightCount = rows.filter(
-    (r) => r.paymentStatus === "UNPAID" && r.highlight,
+    (r) => r.paymentStatus === "UNPAID" && r.highlight && !isZeroReconRow(r),
   ).length;
 
   return { rows, highlightCount };

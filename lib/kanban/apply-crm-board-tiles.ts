@@ -8,8 +8,10 @@ import {
   createCard,
   isKanbanAggregateBoardId,
   KANBAN_BOARD_PRODUCTION_ID,
+  parkLinkedCardInStop,
   resolveOrderKanbanColumnFromKaitenMirrorTitle,
 } from "@/lib/kanban/model";
+import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 import {
   shouldKeepLocalKanbanMembers,
   shouldKeepLocalKanbanStageDue,
@@ -155,6 +157,46 @@ export function applyCrmBoardTilesToAppState(
     if (parkedByBoard.get(board.id)?.has(tile.orderId)) continue;
     const columnTitle =
       pendingColumnTitleForOrder(tile.orderId, pending) || tile.columnTitle;
+    if (isKanbanStopColumnTitle(columnTitle)) {
+      const found = findLinkedOnBoard(next, board.id, tile.orderId);
+      let card: KanbanCard | null = null;
+      let sourceId = board.columns[0]?.id ?? "";
+      let sourceTitle = board.columns[0]?.title ?? "";
+      if (found) {
+        const fromCol = board.columns[found.colIndex]!;
+        const spliced = fromCol.cards.splice(found.cardIndex, 1)[0];
+        if (!spliced) continue;
+        card = spliced;
+        sourceId = fromCol.id;
+        sourceTitle = fromCol.title;
+      } else {
+        card = createCard({
+          id: crmKanbanLinkedCardId(tile.orderId),
+          title: tile.title,
+          description: "",
+          cardTypeId: ensureKanbanBoardCardType(board, tile),
+          linkedOrderId: tile.orderId,
+          linkedOrderNumber: tile.orderNumber,
+          assignees: tile.assignees,
+          participants: tile.participants,
+          urgent: tile.urgent,
+          blocked: tile.blocked,
+          blockReason: tile.blockReason,
+          checklist: tile.checklist ?? [],
+          kaitenCardSortOrder: tile.sortOrder,
+          trackLane: tile.trackLane || "",
+          createdAt: tile.createdAt || undefined,
+          sourceEmailCount: tile.sourceEmailCount,
+        });
+      }
+      applyTileToCard(card, tile, board);
+      parkLinkedCardInStop(board, card, sourceId, sourceTitle);
+      parkedByBoard.get(board.id)?.add(tile.orderId);
+      const set = seenOnBoard.get(board.id) ?? new Set<string>();
+      set.add(tile.orderId);
+      seenOnBoard.set(board.id, set);
+      continue;
+    }
     const targetCol = resolveOrderKanbanColumnFromKaitenMirrorTitle(
       board,
       columnTitle,

@@ -46,6 +46,7 @@ import {
   sortOrderFromKaitenCard,
 } from "@/lib/kanban/kaiten-position-to-kanban";
 import { kaitenColumnTitleFromBoard } from "@/lib/kaiten-column-title";
+import { kaitenBlockedMetaFromCard } from "@/lib/kaiten-card-block";
 import type { KanbanAppState } from "@/lib/kanban/types";
 
 /** Полный проход: одна запись снимка в конце, без промежуточных дёрганий доски. */
@@ -229,6 +230,9 @@ export async function runKanbanMembersBackfillBatch(
       participants?: string[];
       stageDueYmd?: string;
       columnTitle?: string;
+      blocked?: boolean;
+      blockReason?: string | null;
+      blockedAt?: string | null;
     }
   >();
   const patches: KaitenRefreshCardPatch[] = [];
@@ -359,7 +363,10 @@ export async function runKanbanMembersBackfillBatch(
         : null;
       const hasPeople =
         fetched.assignees.length > 0 || fetched.participants.length > 0;
-      if (hasPeople || dueYmd) {
+      const blockMeta = fetched.patchHead
+        ? kaitenBlockedMetaFromCard(fetched.patchHead)
+        : null;
+      if (hasPeople || dueYmd || blockMeta) {
         pendingCrmByOrderId.set(persistOid, {
           ...(hasPeople
             ? {
@@ -368,6 +375,13 @@ export async function runKanbanMembersBackfillBatch(
               }
             : {}),
           ...(dueYmd ? { stageDueYmd: dueYmd } : {}),
+          ...(blockMeta
+            ? {
+                blocked: blockMeta.blocked,
+                blockReason: blockMeta.reason,
+                blockedAt: blockMeta.blockedAtIso,
+              }
+            : {}),
         });
       }
     }
@@ -523,6 +537,9 @@ export async function runKanbanMembersBackfillBatch(
         participants: row.participants,
         stageDueYmd: row.stageDueYmd,
         columnTitle: row.columnTitle,
+        blocked: row.blocked,
+        blockReason: row.blockReason,
+        blockedAt: row.blockedAt,
       });
     } catch {
       /* клиент допишет PATCH /board-fields */

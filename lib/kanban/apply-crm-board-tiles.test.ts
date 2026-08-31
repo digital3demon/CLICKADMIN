@@ -337,6 +337,21 @@ describe("applyCrmBoardTilesToAppState", () => {
     ).toBe("ord-stop");
   });
 
+  it("колонка СТОП в плитке восстанавливает парковку после F5 (кириллица)", () => {
+    let state = defaultAppState();
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [tile({ orderId: "наряд-стоп", columnTitle: "СТОП", title: "2608-010 Петров" })],
+      { replaceBoardId: KANBAN_BOARD_ORTHODONTICS_ID },
+    );
+    expect(findCardByLinkedOrderId(state, "наряд-стоп")).toBeNull();
+    expect(
+      state.boards
+        .find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!
+        .stoppedCards?.some((r) => r.card.linkedOrderId === "наряд-стоп"),
+    ).toBe(true);
+  });
+
   it("pending-перенос не откатывает карточку, пока плитка ещё в старой колонке", () => {
     let state = defaultAppState();
     const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;

@@ -4,7 +4,10 @@ import {
   formatConstructionDescription,
   lineAllocatedTotalRub,
 } from "@/lib/format-order-construction";
-import { formatDateDdMmYyMsk } from "@/lib/clinic-reconciliation-pdf-format";
+import {
+  formatDateDdMmYyMsk,
+  formatYmdDdMmYy,
+} from "@/lib/clinic-reconciliation-pdf-format";
 import { cleanLegalFullName } from "@/lib/document-workflow-markers";
 import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconciliation-export";
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
@@ -140,8 +143,10 @@ export async function buildClinicReconciliationPdfPayload(
         : legal;
   const clinicTitleLine = inn ? `${clinicDisplay} ИНН ${inn}` : clinicDisplay;
 
-  const periodFromLabel = formatDateDdMmYyMsk(range.from);
-  const periodToLabel = formatDateDdMmYyMsk(range.to);
+  const periodFromYmd = range.from.toISOString().slice(0, 10);
+  const periodToYmd = range.to.toISOString().slice(0, 10);
+  const periodFromLabel = formatYmdDdMmYy(periodFromYmd);
+  const periodToLabel = formatYmdDdMmYy(periodToYmd);
 
   const selected = new Set(
     (selectedOrderIds ?? [])

@@ -334,4 +334,24 @@ describe("removeLinkedOrderCardsFromAppState", () => {
     const loc = findCardByLinkedOrderId(kept, "наряд-дорожка")!;
     expect(kept.boards[loc.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
   });
+
+  it("kaitenColumnTitle СТОП паркует наряд, не кладёт на «К исполнению»", () => {
+    const next = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [
+        sampleRow("наряд-стоп-кайтен", {
+          kaitenColumnTitle: "СТОП",
+          kaitenCardId: 88,
+          orderNumber: "2608-088",
+          patientName: "Смирнов",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    expect(findCardByLinkedOrderId(next, "наряд-стоп-кайтен")).toBeNull();
+    const parked = next.boards.some((b) =>
+      (b.stoppedCards || []).some((r) => r.card.linkedOrderId === "наряд-стоп-кайтен"),
+    );
+    expect(parked).toBe(true);
+  });
 });

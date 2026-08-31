@@ -13,6 +13,7 @@ import {
   sumCorrectionPriceLinesAllocatedRub,
 } from "@/lib/pricing/correction-price-item";
 import { analyticsBusinessDayKey } from "@/lib/analytics/range";
+import { loadContractorsLifecycle } from "@/lib/analytics/contractors-lifecycle.server";
 import { reworkSourceItem } from "@/lib/analytics/rework-source-item";
 import {
   ORDER_PAYMENT_PAID,
@@ -416,12 +417,15 @@ export async function loadContractorsReport(from: Date, to: Date) {
     }))
     .sort((a, b) => b.revenue - a.revenue);
 
+  const lifecycle = await loadContractorsLifecycle(from, to);
+
   return {
     from: from.toISOString(),
     to: to.toISOString(),
     periodDays: Math.round(days),
     clinics: clinicRows,
     doctors: doctorRows,
+    lifecycle,
   };
 }
 

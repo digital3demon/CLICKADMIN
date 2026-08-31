@@ -94,11 +94,11 @@ export function ClinicLegalReconciliationBlock({
             items={items}
             archive={tab === "archive"}
             canEdit={canEdit}
-            downloadHref={(row, lockPeriod) => {
+            downloadHref={(row, lockPeriod, period) => {
               const q = new URLSearchParams({
-                from: row.periodFromStr,
-                to: row.periodToStr,
-                slot: row.slot,
+                from: period.from,
+                to: period.to,
+                slot: period.slot,
                 title: row.legalEntityLabel,
               });
               if (lockPeriod) q.set("lockPeriod", "1");
