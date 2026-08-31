@@ -21,6 +21,8 @@ import { fetchMergedOrderChatCorrections } from "@/lib/order-chat-corrections-re
 import { depositPartyForOrder } from "@/lib/deposit-ledger";
 import { orderConstructionsFingerprint } from "@/lib/order-constructions-fingerprint";
 import { fetchMergedOrderProstheticsRequests } from "@/lib/order-prosthetics-requests-read";
+import { overlayCrmStopColumnTitle } from "@/lib/kanban/crm-stop-column-overlay";
+import { loadStoppedLinkedOrderIdSet } from "@/lib/kanban/load-stopped-linked-order-ids.server";
 
 export type FetchOrderEditInitialResult = {
   initial: OrderEditInitial;
@@ -280,7 +282,11 @@ export async function fetchOrderEditInitial(
     kaitenCardTypeId: order.kaitenCardTypeId,
     kaitenCardTypeName: kaitenCardType?.name ?? null,
     demoKanbanColumn: order.demoKanbanColumn,
-    kaitenColumnTitle: order.kaitenColumnTitle,
+    kaitenColumnTitle: overlayCrmStopColumnTitle(
+      order.id,
+      order.kaitenColumnTitle,
+      await loadStoppedLinkedOrderIdSet(tenantId),
+    ),
     kaitenCardUrl:
       isDemoMode && kanbanAbs
         ? kanbanAbs

@@ -20,6 +20,8 @@ import {
   extractOrderNumberFromSearchQuery,
   orderSearchPrismaNeedles,
 } from "@/lib/order-search-query";
+import { overlayCrmStopColumnTitle } from "@/lib/kanban/crm-stop-column-overlay";
+import { loadStoppedLinkedOrderIdSet } from "@/lib/kanban/load-stopped-linked-order-ids.server";
 
 /** Поля списка заказов (страница «Заказы» и GET /api/orders). */
 export const ordersListPageSelect = {
@@ -508,7 +510,7 @@ export async function fetchOrdersListPage(
     raw: OrderListPageRowRaw[],
   ): Promise<OrderListPageRow[]> {
     const orders = await hydrateContractors(raw.map((o) => toOrderListPageRow(o)));
-    return hydrateListPendingProstheticsFromInbox(
+    const hydrated = await hydrateListPendingProstheticsFromInbox(
       db,
       await hydrateListPendingChatCorrectionsFromInbox(
         db,
@@ -519,6 +521,15 @@ export async function fetchOrdersListPage(
         ),
       ),
     );
+    const stopped = await loadStoppedLinkedOrderIdSet(opts.tenantId);
+    return hydrated.map((r) => ({
+      ...r,
+      kaitenColumnTitle: overlayCrmStopColumnTitle(
+        r.id,
+        r.kaitenColumnTitle,
+        stopped,
+      ),
+    }));
   }
 
   if (useOffset) {

@@ -9,6 +9,10 @@ import {
   kaitenStatusDisplay,
 } from "@/lib/kaiten-column-title";
 import { LAB_WORK_STATUS_PILL_STYLES } from "@/lib/lab-work-status";
+import {
+  isKanbanStopColumnTitle,
+  KANBAN_STOP_COLUMN_TITLE,
+} from "@/lib/kanban/kanban-stop-column";
 import { useMenuDismiss } from "@/components/orders/LabStatusPillMenu";
 import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
 
@@ -150,7 +154,9 @@ function KaitenHeaderPillMenuWithKaiten({
         }
         const card = data.card;
         const cols = data.columns ?? [];
-        if (card && typeof card === "object") {
+        if (isKanbanStopColumnTitle(initialColumnTitle)) {
+          setColumnTitle(KANBAN_STOP_COLUMN_TITLE);
+        } else if (card && typeof card === "object") {
           const t = kaitenColumnTitleFromBoard(
             card as Record<string, unknown>,
             cols,
@@ -168,7 +174,7 @@ function KaitenHeaderPillMenuWithKaiten({
         }
       }
     },
-    [orderId, kaitenCardId],
+    [orderId, kaitenCardId, initialColumnTitle],
   );
 
   useEffect(() => {

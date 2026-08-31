@@ -14,6 +14,7 @@ import {
   kaitenOrderToHarmonyTone,
   resolveListPillClass,
 } from "@/lib/harmony-list-pill";
+import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 
 function kanbanColumnLabelForNoKaitenPill(
   demoKanbanColumn: string | null | undefined,
@@ -124,7 +125,7 @@ type Props = {
   kaitenColumnTitle: string | null;
   /** Доска Kaiten: ортопедия / ортодонтия — вторая пилюля под статусом. */
   kaitenTrackLane?: string | null;
-  /** Карточка в СТОП / заблокирована в Kaiten — вместо колонки красная пилюля «СТОП». */
+  /** Устарело для пилюли: блок — справа «Заблокировано», не колонка СТОП. */
   kaitenBlocked?: boolean;
   kaitenBlockReason?: string | null;
   /** Ссылка фильтра по колонке Kaiten; без неё — только пилюля. */
@@ -165,11 +166,11 @@ export function OrderListKaitenColumnTag({
     ? "flex w-full min-w-0 justify-center"
     : "inline-flex min-w-0 max-w-full items-center text-center";
 
-  if (kaitenBlocked && !isDemoMode) {
+  if (!isDemoMode && isKanbanStopColumnTitle(kaitenColumnTitle)) {
     const reason = String(kaitenBlockReason || "").trim();
     const stopTitle = reason
       ? `СТОП: ${reason}`
-      : "СТОП — карточка остановлена";
+      : "СТОП — карточка в колонке СТОП";
     const stopPill = (
       <span
         className={

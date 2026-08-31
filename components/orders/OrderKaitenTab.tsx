@@ -13,6 +13,9 @@ import {
   dedupeParsedKaitenComments,
   parseKaitenListComment,
 } from "@/lib/kaiten-comment-parse";
+import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
+
+const CRM_STOP_COLUMN_VALUE = "__crm_stop__";
 
 type SpaceOpt = { lane: KaitenTrackLane; boardId: number; label: string };
 
@@ -288,6 +291,7 @@ export function OrderKaitenTab({
   initialKaitenBlockReason,
   kaitenSyncError = null,
   kaitenCardTypeId = null,
+  initialKaitenColumnTitle = null,
 }: {
   orderId: string;
   kaitenCardId: number | null;
@@ -300,6 +304,7 @@ export function OrderKaitenTab({
   kaitenDecideLater?: boolean;
   kaitenSyncError?: string | null;
   kaitenCardTypeId?: string | null;
+  initialKaitenColumnTitle?: string | null;
 }) {
   const router = useRouter();
   const [snap, setSnap] = useState<KaitenSnapshot | null>(null);
@@ -314,6 +319,9 @@ export function OrderKaitenTab({
     initialTrackLane,
   );
   const [columnId, setColumnId] = useState<number | "">("");
+  const [forceStopColumn, setForceStopColumn] = useState(() =>
+    isKanbanStopColumnTitle(initialKaitenColumnTitle),
+  );
   const [laneId, setLaneId] = useState<number | "">("");
 
   const [saving, setSaving] = useState(false);
@@ -381,6 +389,10 @@ export function OrderKaitenTab({
   }, [kaitenCardTypeId, orderId]);
 
   useEffect(() => {
+    setForceStopColumn(isKanbanStopColumnTitle(initialKaitenColumnTitle));
+  }, [initialKaitenColumnTitle, orderId]);
+
+  useEffect(() => {
     setNoCardBlocked(initialKaitenBlocked === true);
     setNoCardBlockReason(
       initialKaitenBlockReason?.trim() ? initialKaitenBlockReason.trim() : null,
@@ -434,7 +446,9 @@ export function OrderKaitenTab({
         setTitle(typeof t === "string" ? t : "");
         titleDirtyRef.current = false;
         const col = c.column_id;
-        setColumnId(typeof col === "number" ? col : "");
+        if (!isKanbanStopColumnTitle(initialKaitenColumnTitle)) {
+          setColumnId(typeof col === "number" ? col : "");
+        }
         const ln = c.lane_id;
         setLaneId(typeof ln === "number" ? ln : "");
       }
@@ -447,7 +461,7 @@ export function OrderKaitenTab({
     } finally {
       setLoading(false);
     }
-  }, [orderId, kaitenCardId]);
+  }, [orderId, kaitenCardId, initialKaitenColumnTitle]);
 
   useEffect(() => {
     void load();
@@ -638,14 +652,18 @@ export function OrderKaitenTab({
       if (spaceDirty && trackLane != null) {
         body.kaitenTrackLane = trackLane;
       }
-      if (columnId !== "") {
+      if (forceStopColumn) {
+        body.moveToStop = true;
+      } else if (columnId !== "") {
         body.columnId = columnId;
       }
-      if (laneId !== "") {
-        body.laneId = laneId;
-      } else if (columnId !== "" && laneOptions[0]?.id != null) {
-        /* «—» + колонка: иначе на сервер уходит lane от пространства и Kaiten даёт Position inconsistency. */
-        body.laneId = laneOptions[0].id;
+      if (!forceStopColumn) {
+        if (laneId !== "") {
+          body.laneId = laneId;
+        } else if (columnId !== "" && laneOptions[0]?.id != null) {
+          /* «—» + колонка: иначе на сервер уходит lane от пространства и Kaiten даёт Position inconsistency. */
+          body.laneId = laneOptions[0].id;
+        }
       }
       if (cardTypeDirty) {
         const typeId = String(createKaitenCardTypeId).trim();
@@ -684,7 +702,7 @@ export function OrderKaitenTab({
           titleDirtyRef.current = false;
         }
         const col = c.column_id;
-        if (typeof col === "number") setColumnId(col);
+        if (!forceStopColumn && typeof col === "number") setColumnId(col);
         const ln = c.lane_id;
         if (typeof ln === "number") setLaneId(ln);
         setSnap((prev) =>
@@ -1172,13 +1190,26 @@ export function OrderKaitenTab({
                 Колонка (этап на доске)
                 <select
                   className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm"
-                  value={columnId === "" ? "" : String(columnId)}
+                  value={
+                    forceStopColumn
+                      ? CRM_STOP_COLUMN_VALUE
+                      : columnId === ""
+                        ? ""
+                        : String(columnId)
+                  }
                   onChange={(e) => {
                     const v = e.target.value;
+                    if (v === CRM_STOP_COLUMN_VALUE) {
+                      setForceStopColumn(true);
+                      setColumnId("");
+                      return;
+                    }
+                    setForceStopColumn(false);
                     setColumnId(v === "" ? "" : Number(v));
                   }}
                   disabled={trackLane == null || columnOptions.length === 0}
                 >
+                  <option value={CRM_STOP_COLUMN_VALUE}>СТОП</option>
                   <option value="">
                     {trackLane == null ? "Сначала пространство" : "— выберите колонку —"}
                   </option>
@@ -1386,7 +1417,7 @@ export function OrderKaitenTab({
           titleDirtyRef.current = false;
         }
         const col = c.column_id;
-        if (typeof col === "number") setColumnId(col);
+        if (!forceStopColumn && typeof col === "number") setColumnId(col);
         const ln = c.lane_id;
         if (typeof ln === "number") setLaneId(ln);
         setSnap((prev) =>
@@ -1582,12 +1613,25 @@ export function OrderKaitenTab({
             Колонка (статус / этап)
             <select
               className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-2 text-sm text-[var(--app-text)]"
-              value={columnId === "" ? "" : String(columnId)}
+              value={
+                forceStopColumn
+                  ? CRM_STOP_COLUMN_VALUE
+                  : columnId === ""
+                    ? ""
+                    : String(columnId)
+              }
               onChange={(e) => {
                 const v = e.target.value;
+                if (v === CRM_STOP_COLUMN_VALUE) {
+                  setForceStopColumn(true);
+                  setColumnId("");
+                  return;
+                }
+                setForceStopColumn(false);
                 setColumnId(v === "" ? "" : Number(v));
               }}
             >
+              <option value={CRM_STOP_COLUMN_VALUE}>СТОП</option>
               <option value="">—</option>
               {columnOptions.map((c) => (
                 <option key={c.id} value={c.id}>

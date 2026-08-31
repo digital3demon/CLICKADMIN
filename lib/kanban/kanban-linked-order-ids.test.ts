@@ -4,7 +4,24 @@ import {
   collectKanbanKaitenRefreshTargets,
   linkedOrderIdsOnKanbanBoard,
   nextLinkedOrderIdPage,
+  stoppedLinkedOrderIdsFromKanbanState,
 } from "./kanban-linked-order-ids";
+
+describe("stoppedLinkedOrderIdsFromKanbanState", () => {
+  it("берёт linkedOrderId из СТОП, кириллица в id ок", () => {
+    const state = {
+      boards: [
+        {
+          stoppedCards: [
+            { card: { linkedOrderId: "наряд-стоп" } },
+            { card: { linkedOrderId: "  " } },
+          ],
+        },
+      ],
+    } as KanbanAppState;
+    expect(stoppedLinkedOrderIdsFromKanbanState(state)).toEqual(["наряд-стоп"]);
+  });
+});
 
 describe("linkedOrderIdsOnKanbanBoard", () => {
   it("собирает linkedOrderId только с колонок, кириллица в title не мешает", () => {

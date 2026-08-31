@@ -1,6 +1,7 @@
 import type { DemoKanbanColumn } from "@prisma/client";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
+import { KANBAN_STOP_COLUMN_TITLE } from "@/lib/kanban/kanban-stop-column";
 import { isHandedToAdminsKaitenColumnTitle } from "@/lib/sticker-public-client-copy";
 import {
   KANBAN_MOVE_TO_COLUMN_RE,
@@ -60,6 +61,7 @@ export function kanbanSnippetForLinkedOrder(
     if (!card) continue;
     const col =
       b.columns?.find((c) => (c.cards || []).some((x) => x.id === card.id)) ?? null;
+    const stopped = cardIsStoppedOnBoard(b, card.id);
     const assignees = (card.assignees || [])
       .map((id) => userNameById(b, id))
       .filter(Boolean);
@@ -76,7 +78,9 @@ export function kanbanSnippetForLinkedOrder(
       .filter((x) => x.text);
     return {
       boardTitle: (b.title || "").trim() || null,
-      columnTitle: (col?.title || "").trim() || null,
+      columnTitle: stopped
+        ? KANBAN_STOP_COLUMN_TITLE
+        : (col?.title || "").trim() || null,
       assignees,
       participants,
       activity,

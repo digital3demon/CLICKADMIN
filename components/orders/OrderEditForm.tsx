@@ -4281,6 +4281,7 @@ export function OrderEditForm({
               kaitenDecideLater={initial.kaitenDecideLater === true}
               kaitenSyncError={initial.kaitenSyncError ?? null}
               kaitenCardTypeId={initial.kaitenCardTypeId ?? null}
+              initialKaitenColumnTitle={initial.kaitenColumnTitle}
             />
           )}
         </div>

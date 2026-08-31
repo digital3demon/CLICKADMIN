@@ -17,6 +17,10 @@ import {
   kaitenColumnTitleFromBoard,
 } from "@/lib/kaiten-column-title";
 import {
+  isKanbanStopColumnTitle,
+  KANBAN_STOP_COLUMN_TITLE,
+} from "@/lib/kanban/kanban-stop-column";
+import {
   getKaitenRestAuth,
   kaitenGetCard,
   kaitenListBoardColumns,
@@ -1623,7 +1627,14 @@ export async function PATCH(
         : undefined;
 
   let titleUpdate: { kaitenColumnTitle: string | null } | undefined;
-  if (boardId != null) {
+  if (body.moveToStop === true) {
+    titleUpdate = { kaitenColumnTitle: KANBAN_STOP_COLUMN_TITLE };
+  } else if (
+    isKanbanStopColumnTitle(order.kaitenColumnTitle) &&
+    body.columnId == null
+  ) {
+    titleUpdate = { kaitenColumnTitle: KANBAN_STOP_COLUMN_TITLE };
+  } else if (boardId != null) {
     const colsAfter = await kaitenListBoardColumns(auth, boardId);
     if (colsAfter.ok) {
       titleUpdate = {

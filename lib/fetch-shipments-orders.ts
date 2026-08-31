@@ -12,6 +12,8 @@ import { hydrateListPendingChatCorrectionsFromInbox } from "@/lib/order-chat-cor
 import { hydrateListPendingProstheticsFromInbox } from "@/lib/order-prosthetics-requests-read";
 import { orderInvoiceCompositionMismatch } from "@/lib/order-invoice-composition-mismatch";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
+import { overlayCrmStopColumnTitle } from "@/lib/kanban/crm-stop-column-overlay";
+import { loadStoppedLinkedOrderIdSet } from "@/lib/kanban/load-stopped-linked-order-ids.server";
 
 const pendingCorrectionsWhere = {
   chatCorrections: {
@@ -363,11 +365,20 @@ export async function fetchShipmentOrdersInDueRange(
         )
       : mapped;
 
-  return hydrateListPendingProstheticsFromInbox(
+  const hydrated = await hydrateListPendingProstheticsFromInbox(
     db,
     await hydrateListPendingChatCorrectionsFromInbox(
       db,
       await hydrateOrderKaitenLabMentionHighlight(db, opts?.userId, filtered),
     ),
   );
+  const stopped = await loadStoppedLinkedOrderIdSet(tenantId);
+  return hydrated.map((r) => ({
+    ...r,
+    kaitenColumnTitle: overlayCrmStopColumnTitle(
+      r.id,
+      r.kaitenColumnTitle,
+      stopped,
+    ),
+  }));
 }

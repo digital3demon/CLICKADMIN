@@ -32,6 +32,8 @@ import {
 import { waitPaymentListTagWhere } from "@/lib/wait-payment-list-tag";
 import { clinicDocChannel } from "@/lib/clinic-doc-channel";
 import { orderInvoiceCompositionMismatch, uniqueAttentionOrderCount } from "@/lib/order-invoice-composition-mismatch";
+import { overlayCrmStopColumnTitle } from "@/lib/kanban/crm-stop-column-overlay";
+import { loadStoppedLinkedOrderIdSet } from "@/lib/kanban/load-stopped-linked-order-ids.server";
 
 const financeOfficeOrderSelect = {
   id: true,
@@ -719,9 +721,19 @@ export async function fetchFinanceOfficeOrders(
         ? withInbox.filter((r) => r.listKaitenLabMentionHighlight)
         : withInbox;
 
-  return filtered.sort((a, b) => {
-    const pr = financePriority(a) - financePriority(b);
-    if (pr !== 0) return pr;
-    return compareOrdersByEffectiveFinanceRecord(a, b);
-  });
+  const stopped = await loadStoppedLinkedOrderIdSet(tenantId);
+  return filtered
+    .map((r) => ({
+      ...r,
+      kaitenColumnTitle: overlayCrmStopColumnTitle(
+        r.id,
+        r.kaitenColumnTitle,
+        stopped,
+      ),
+    }))
+    .sort((a, b) => {
+      const pr = financePriority(a) - financePriority(b);
+      if (pr !== 0) return pr;
+      return compareOrdersByEffectiveFinanceRecord(a, b);
+    });
 }

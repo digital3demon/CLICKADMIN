@@ -5,6 +5,21 @@ import {
 } from "@/lib/kanban/model";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
+/** Наряды, чья карточка в разделе СТОП (не колонка Kaiten «Очередь»). */
+export function stoppedLinkedOrderIdsFromKanbanState(
+  state: KanbanAppState | null | undefined,
+): string[] {
+  if (!state) return [];
+  const ids = new Set<string>();
+  for (const board of state.boards ?? []) {
+    for (const row of board.stoppedCards ?? []) {
+      const oid = String(row.card?.linkedOrderId || "").trim();
+      if (oid) ids.add(oid);
+    }
+  }
+  return [...ids];
+}
+
 /** Наряды с карточкой в колонках доски (не архив и не СТОП). */
 export function linkedOrderIdsOnKanbanBoard(
   state: KanbanAppState | null | undefined,
