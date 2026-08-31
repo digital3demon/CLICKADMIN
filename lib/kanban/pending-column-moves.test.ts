@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { KanbanAppState } from "@/lib/kanban/types";
-import { applyPendingKanbanColumnMoves } from "./pending-column-moves";
+import {
+  applyPendingKanbanColumnMoves,
+  clearPendingKanbanColumnMovesForTests,
+  listPendingKanbanColumnMoves,
+  pendingColumnTitleForOrder,
+  rememberPendingKanbanColumnMove,
+} from "./pending-column-moves";
 
 function boardState(): KanbanAppState {
   return {
@@ -35,6 +41,10 @@ function boardState(): KanbanAppState {
   } as unknown as KanbanAppState;
 }
 
+afterEach(() => {
+  clearPendingKanbanColumnMovesForTests();
+});
+
 describe("applyPendingKanbanColumnMoves", () => {
   it("переносит карточку в колонку по кириллическому названию", () => {
     const next = applyPendingKanbanColumnMoves(boardState(), [
@@ -61,5 +71,35 @@ describe("applyPendingKanbanColumnMoves", () => {
       },
     ]);
     expect(next.boards[0]!.columns[0]!.cards[0]!.id).toBe("card-191");
+  });
+});
+
+describe("rememberPendingKanbanColumnMove (Node)", () => {
+  it("держит перенос в памяти без sessionStorage", () => {
+    clearPendingKanbanColumnMovesForTests();
+    rememberPendingKanbanColumnMove({
+      cardId: "ord-крупышева",
+      orderId: "ord-крупышева",
+      toColumnTitle: "Согласование Жеребцов",
+    });
+    expect(pendingColumnTitleForOrder("ord-крупышева", listPendingKanbanColumnMoves())).toBe(
+      "Согласование Жеребцов",
+    );
+    clearPendingKanbanColumnMovesForTests();
+  });
+});
+
+describe("pendingColumnTitleForOrder", () => {
+  it("находит колонку по наряду с кириллицей", () => {
+    expect(
+      pendingColumnTitleForOrder("ord-191", [
+        {
+          cardId: "card-191",
+          orderId: "ord-191",
+          toColumnTitle: "Согласование Жеребцов",
+          at: Date.now(),
+        },
+      ]),
+    ).toBe("Согласование Жеребцов");
   });
 });

@@ -4,6 +4,19 @@
  */
 import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
 import type { KanbanLinkedAppointmentSnap } from "@/lib/kanban/kanban-actual-appointment";
+import {
+  listPendingKanbanColumnMoves,
+  pendingColumnTitleForOrder,
+} from "@/lib/kanban/pending-column-moves";
+
+function overlayPendingColumnOnTiles(tiles: readonly CrmBoardTile[]): CrmBoardTile[] {
+  const pending = listPendingKanbanColumnMoves();
+  if (!pending.length) return [...tiles];
+  return tiles.map((t) => {
+    const title = pendingColumnTitleForOrder(t.orderId, pending);
+    return title ? { ...t, columnTitle: title } : t;
+  });
+}
 
 export const CRM_BOARD_TILES_CACHE_KEY = "kanban-board-tiles-v1";
 const CACHE_VERSION = 1;
@@ -89,7 +102,38 @@ export function mergeCrmBoardTilesCache(
   }
   const byId = new Map(prev.map((t) => [t.orderId, t]));
   for (const t of incoming) byId.set(t.orderId, t);
-  saveCrmBoardTilesCache(id, [...byId.values()]);
+  saveCrmBoardTilesCache(id, overlayPendingColumnOnTiles([...byId.values()]));
+}
+
+/** Сразу после переноса в CRM — F5 не читает старую колонку из кэша плиток. */
+export function patchCrmBoardTilesCacheColumn(
+  orderId: string,
+  columnTitle: string,
+): void {
+  const oid = String(orderId || "").trim();
+  const title = columnTitle.trim();
+  if (!oid || !title) return;
+  const store = readStore();
+  let dirty = false;
+  for (const [boardId, tiles] of Object.entries(store.byBoard)) {
+    let changed = false;
+    const next = tiles.map((t) => {
+      if (t.orderId !== oid) return t;
+      if ((t.columnTitle || "").trim() === title) return t;
+      changed = true;
+      return { ...t, columnTitle: title };
+    });
+    if (changed) {
+      store.byBoard[boardId] = next;
+      dirty = true;
+    }
+  }
+  if (!dirty) return;
+  try {
+    storageSet(JSON.stringify(store));
+  } catch {
+    /* квота */
+  }
 }
 
 export function saveCrmBoardTilesCache(
@@ -98,7 +142,7 @@ export function saveCrmBoardTilesCache(
 ): void {
   const id = String(boardId || "").trim();
   if (!id) return;
-  const clean = tiles.filter(isTile);
+  const clean = overlayPendingColumnOnTiles(tiles.filter(isTile));
   const store = readStore();
   store.byBoard[id] = clean;
   store.order = [id, ...store.order.filter((x) => x !== id)].slice(

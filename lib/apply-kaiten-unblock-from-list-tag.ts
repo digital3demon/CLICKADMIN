@@ -12,6 +12,7 @@ import {
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 import { recordOrderRevision } from "@/lib/record-order-revision";
 import type { KaitenUnblockFromListTagResult } from "@/lib/custom-list-tag-kaiten-unblock-label";
+import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 
 function kaitenSortOrderPatchFromCard(card: Record<string, unknown>): {
   kaitenCardSortOrder?: number | null;
@@ -32,6 +33,7 @@ export async function applyKaitenUnblockForOrderIfBlocked(
     where: { id: orderId.trim() },
     select: {
       id: true,
+      tenantId: true,
       kaitenCardId: true,
       kaitenTrackLane: true,
       kaitenBlocked: true,
@@ -43,7 +45,8 @@ export async function applyKaitenUnblockForOrderIfBlocked(
   if (!order.kaitenBlocked) {
     return { kind: "skipped", reason: "not_blocked" };
   }
-  if (order.kaitenCardId == null) {
+
+  const persistCrmUnblock = async (): Promise<KaitenUnblockFromListTagResult> => {
     try {
       await prisma.order.update({
         where: { id: order.id },
@@ -61,12 +64,13 @@ export async function applyKaitenUnblockForOrderIfBlocked(
       console.error("[list-tag crm unblock] prisma", e);
       return { kind: "error", message: "Не удалось снять блокировку" };
     }
-  }
+  };
 
+  const integrationGate = await gateKaitenSyncForTenant(prisma, order.tenantId);
   const auth = getKaitenRestAuth();
   const cfg0 = getKaitenEnvConfig();
-  if (!auth || !cfg0) {
-    return { kind: "skipped", reason: "kaiten_not_configured" };
+  if (order.kaitenCardId == null || integrationGate.skip || !auth || !cfg0) {
+    return persistCrmUnblock();
   }
   const cfg = await withResolvedKaitenBoards(cfg0);
 

@@ -5,6 +5,7 @@ import {
   formatCrmUploadMaxShortRu,
 } from "@/lib/crm-upload-limits";
 import { postOrderAttachmentWithRetries } from "@/lib/order-attachment-upload-client";
+import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-disabled";
 
 /** Совпадает с POST `/api/orders/[id]/attachments`. */
 export const ORDER_ATTACHMENT_MAX_BYTES = CRM_UPLOAD_MAX_BYTES;
@@ -255,8 +256,15 @@ export async function patchOrderKaitenCard(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+      kaitenIntegrationEnabled?: boolean;
+    };
     if (!res.ok) {
+      if (isKaitenIntegrationDisabledResponse(res.status, data)) {
+        return { ok: true };
+      }
       return { ok: false, error: data.error ?? "Kaiten не принял изменения" };
     }
     return { ok: true };

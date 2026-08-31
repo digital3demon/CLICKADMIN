@@ -43,9 +43,9 @@ const CARD_FETCH_CONCURRENCY_WITH_COMMENTS = 1;
 type BoardColumn = { id: number; title: string; name?: string };
 
 /**
- * Обновляет в БД `kaitenColumnTitle` и `kaitenTrackLane` по актуальной карточке Kaiten
- * (для списков заказов / отгрузок и зеркала канбана).
- * Карточки запрашиваются пачками; колонки доски кэшируются по `board_id`.
+ * Зеркало карточки Kaiten в наряд: чат, блок, описание.
+ * Колонку / дорожку / sort с Kaiten пишем только если `applyColumnFromKaiten`
+ * (кнопка «Обновить» на канбане). Иначе канбан → Kaiten, не наоборот.
  *
  * `includeComments: false` — только карточка (быстро): без чата, без метки «упомянули лабораторию», без синка корректировок из комментариев.
  */
@@ -53,7 +53,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   db: PrismaClient,
   auth: KaitenAuth,
   orderIds: string[],
-  opts?: { includeComments?: boolean },
+  opts?: { includeComments?: boolean; applyColumnFromKaiten?: boolean },
 ): Promise<{
   titles: Record<string, string | null>;
   /** YYYY-MM-DD или null, только если в ответе Kaiten было поле due_date. */
@@ -69,6 +69,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
   /** Kaiten вернул 429 — дальнейшие карточки в пакете не опрашиваем. */
   rateLimited: boolean;
 }> {
+  const applyColumnFromKaiten = opts?.applyColumnFromKaiten === true;
   const uniq = [...new Set(orderIds.map((x) => x.trim()).filter(Boolean))].slice(
     0,
     MAX_IDS,
@@ -341,14 +342,17 @@ export async function syncKaitenColumnTitlesForOrderIds(
           (reasonDb ?? "") === (row.kaitenBlockReason ?? "") &&
           sameBlockedAt);
       const sameSort =
-        sortDb === undefined || sortDb === row.kaitenCardSortOrder;
+        !applyColumnFromKaiten ||
+        sortDb === undefined ||
+        sortDb === row.kaitenCardSortOrder;
       const urgentPatch = kaitenUrgentPatchFromCard(cardObj, row.isUrgent);
       const sameUrgent = urgentPatch.isUrgent === undefined;
       const nextLane =
         cfg != null
           ? trackLaneForBoardId(boardId, cfg.boardByLane, row.kaitenTrackLane)
           : null;
-      const sameLane = nextLane == null || nextLane === row.kaitenTrackLane;
+      const sameLane =
+        !applyColumnFromKaiten || nextLane == null || nextLane === row.kaitenTrackLane;
       if (
         sameTitle &&
         sameDescription &&
@@ -377,7 +381,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
           data: {
             kaitenSyncedAt: new Date(),
             kaitenSyncError: null,
-            kaitenColumnTitle: columnTitle,
+            ...(applyColumnFromKaiten ? { kaitenColumnTitle: columnTitle } : {}),
             ...(descMirror != null ? { kaitenCardDescriptionMirror: descMirror } : {}),
             ...(keepCrmBlock
               ? {}
@@ -386,9 +390,13 @@ export async function syncKaitenColumnTitlesForOrderIds(
                   kaitenBlockReason: reasonDb,
                 }),
             ...blockedAtData,
-            ...(sortDb !== undefined ? { kaitenCardSortOrder: sortDb } : {}),
+            ...(applyColumnFromKaiten && sortDb !== undefined
+              ? { kaitenCardSortOrder: sortDb }
+              : {}),
             ...urgentPatch,
-            ...(nextLane != null && nextLane !== row.kaitenTrackLane
+            ...(applyColumnFromKaiten &&
+            nextLane != null &&
+            nextLane !== row.kaitenTrackLane
               ? { kaitenTrackLane: nextLane }
               : {}),
           },

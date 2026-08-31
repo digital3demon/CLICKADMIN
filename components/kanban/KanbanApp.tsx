@@ -55,7 +55,6 @@ import {
   applyPendingKanbanColumnMoves,
   clearPendingKanbanColumnMove,
   listPendingKanbanColumnMoves,
-  rememberPendingKanbanColumnMove,
 } from "@/lib/kanban/pending-column-moves";
 import {
   applyKanbanLegacyStageDueClearMigration,
@@ -76,6 +75,7 @@ import {
   fetchOrderKaitenCardHeadForKanban,
   patchOrderKaitenCard,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
+import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-disabled";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import {
   applyKanbanCardMembersOnBoard,
@@ -86,8 +86,13 @@ import {
 import {
   persistCrmBoardFieldsClient,
   persistCrmBoardFieldsFromKaitenRefreshPatches,
+  persistKanbanLinkedCardTimer,
+  commitKanbanColumnFromKaitenRefresh,
+  rememberCrmKanbanColumnLocal,
   persistMissingCrmPeopleFromState,
   persistMissingCrmStageDuesFromState,
+  persistMissingCrmTimersFromState,
+  persistMissingCrmChecklistsFromState,
 } from "@/lib/kanban/persist-crm-board-fields-client";
 import { applyCrmBoardTilesToAppState } from "@/lib/kanban/apply-crm-board-tiles";
 import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
@@ -631,6 +636,8 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
           persistMissingCrmStageDuesFromState(next, tiles);
           persistMissingCrmPeopleFromState(next, tiles);
+          persistMissingCrmTimersFromState(next, tiles);
+          persistMissingCrmChecklistsFromState(next, tiles);
           saveKanbanState(next, false);
           return next;
         });
@@ -952,6 +959,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           ? null
           : next.activeBoardId;
         next = applyCrmBoardTilesToAppState(next, cachedTiles, { replaceBoardId });
+        applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
         const snaps = appointmentSnapsFromCrmTiles(cachedTiles);
         if (snaps.size > 0) {
           setLinkedAppointmentByOrderId(snaps);
@@ -1322,7 +1330,9 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
         setAppState((prev) => {
           if (!prev) return prev;
           const replaceBoardId = isKanbanAggregateBoardId(bid) ? null : bid;
-          return applyCrmBoardTilesToAppState(prev, cachedTiles, { replaceBoardId });
+          const next = applyCrmBoardTilesToAppState(prev, cachedTiles, { replaceBoardId });
+          applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+          return next;
         });
       }
       void syncCrmBoardTiles({ full: true });
@@ -1914,10 +1924,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
       });
       /* UI уже обновлён локально — Kaiten в фоне; защищаем merge от отката. */
       if (args.columnTitle?.trim()) {
-        rememberPendingKanbanColumnMove({
+        rememberCrmKanbanColumnLocal({
           cardId: args.orderId,
           orderId: args.orderId,
-          toColumnTitle: args.columnTitle.trim(),
+          columnTitle: args.columnTitle.trim(),
         });
       }
       optimisticKaitenColumnMovesRef.current.set(args.orderId, {
@@ -1941,20 +1951,23 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           credentials: "include",
           body: JSON.stringify(body),
         });
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+          kaitenIntegrationEnabled?: boolean;
+        };
         if (!res.ok) {
-          optimisticKaitenColumnMovesRef.current.delete(args.orderId);
-          clearPendingKanbanColumnMove(args.orderId);
+          if (isKaitenIntegrationDisabledResponse(res.status, data)) {
+            return;
+          }
           showToast(
             data.error ??
               "Не удалось перенести карточку в Kaiten (проверьте название колонки на доске).",
             true,
           );
-          void syncKanbanMirrorFromApi();
           return;
         }
-        clearPendingKanbanColumnMove(args.orderId);
-        /* Успех: не дёргаем полный mirror-sync — доска уже в нужном состоянии. */
+        /* UI уже в новой колонке; pending держим, пока плитка CRM не подтвердит. */
         optimisticKaitenColumnMovesRef.current.set(args.orderId, {
           columnTitle: args.columnTitle,
           sortOrder: args.sortOrder,
@@ -1964,10 +1977,7 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
           until: Date.now() + 12_000,
         });
       } catch {
-        optimisticKaitenColumnMovesRef.current.delete(args.orderId);
-        clearPendingKanbanColumnMove(args.orderId);
         showToast("Сеть: колонка в Kaiten могла не обновиться", true);
-        void syncKanbanMirrorFromApi();
       }
     },
     [showToast, syncKanbanMirrorFromApi],
@@ -2304,8 +2314,15 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             credentials: "include",
             body: JSON.stringify({ moveToStop: true }),
           });
-          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            code?: string;
+            kaitenIntegrationEnabled?: boolean;
+          };
           if (!res.ok) {
+            if (isKaitenIntegrationDisabledResponse(res.status, data)) {
+              return;
+            }
             showToast(
               data.error ??
                 "В CRM карточка в СТОП, но в Kaiten дорожку «СТОП» обновить не удалось.",
@@ -2346,10 +2363,10 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
     });
     showToast("Карточка возвращена из СТОП");
     if (linkedOrderId && sourceColumnTitle) {
-      rememberPendingKanbanColumnMove({
+      rememberCrmKanbanColumnLocal({
         cardId: linkedOrderId,
         orderId: linkedOrderId,
-        toColumnTitle: sourceColumnTitle,
+        columnTitle: sourceColumnTitle,
       });
     }
     if (
@@ -2370,8 +2387,15 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
               columnTitle: sourceColumnTitle,
             }),
           });
-          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          const data = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            code?: string;
+            kaitenIntegrationEnabled?: boolean;
+          };
           if (!res.ok) {
+            if (isKaitenIntegrationDisabledResponse(res.status, data)) {
+              return;
+            }
             clearPendingKanbanColumnMove(linkedOrderId);
             showToast(
               data.error ??
@@ -3242,6 +3266,17 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                 }}
                 onComplete={async (patches) => {
                   persistCrmBoardFieldsFromKaitenRefreshPatches(patches);
+                  for (const p of patches) {
+                    const oid = String(p.linkedOrderId || "").trim();
+                    const title = (p.columnTitle || "").trim();
+                    if (oid && title) {
+                      commitKanbanColumnFromKaitenRefresh({
+                        cardId: p.cardId,
+                        orderId: oid,
+                        columnTitle: title,
+                      });
+                    }
+                  }
                   if (patches.length > 0) {
                     setAppState((prev) => {
                       if (!prev) return prev;
@@ -3455,12 +3490,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
                   if (!toCol) return s;
                   const card = findCard(b, cardId)?.card;
                   if (!card) return s;
-                  rememberPendingKanbanColumnMove({
+                  rememberCrmKanbanColumnLocal({
                     cardId,
                     orderId: card.linkedOrderId ?? undefined,
                     toColumnId,
-                    toColumnTitle: toCol.title,
+                    columnTitle: toCol.title,
                   });
+                  if (card.linkedOrderId) persistKanbanLinkedCardTimer(card);
                   if (card.parentCardId) {
                     const doneRaw = settings.childDoneColumnTitle.trim().toLowerCase();
                     const toRaw = toCol.title.trim().toLowerCase();
@@ -3626,6 +3662,13 @@ export function KanbanApp({ isDemo = false }: { isDemo?: boolean }) {
             ? (id, targetColumnId) => {
                 moveCardToColumn(id, targetColumnId);
                 setCardModalId(id);
+              }
+            : undefined
+        }
+        onRequestStopCard={
+          kanbanCardPerms.stop
+            ? (id) => {
+                stopCard(id);
               }
             : undefined
         }

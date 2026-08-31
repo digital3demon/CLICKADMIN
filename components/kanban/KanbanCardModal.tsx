@@ -76,7 +76,14 @@ import {
   notifyKanbanCardDueChange,
   notifyKanbanCardMemberChange,
 } from "@/lib/kanban/kanban-card-members-client";
-import { persistCrmBoardFieldsClient } from "@/lib/kanban/persist-crm-board-fields-client";
+import {
+  persistCrmBoardFieldsClient,
+  persistKanbanLinkedCardChecklist,
+} from "@/lib/kanban/persist-crm-board-fields-client";
+import {
+  KANBAN_CARD_MODAL_STOP_COLUMN_ID,
+  interpretKanbanPlacementColumnPick,
+} from "@/lib/kanban/kanban-placement-column-pick";
 import { readClientState } from "@/lib/client-state-client";
 import {
   kanbanOrderActivityStateKey,
@@ -263,6 +270,8 @@ type KanbanCardModalProps = {
   onMovePrevStage: (id: string) => void;
   onMoveNextStage: (id: string) => void;
   onMoveToColumn?: (cardId: string, targetColumnId: string) => void;
+  /** СТОП из списка столбцов — только после confirm в модалке. */
+  onRequestStopCard?: (cardId: string) => void;
   /** Боевой режим: перенос на доску ортопедия/ортодонтия + PATCH Kaiten. */
   onChangeTrackLane?: (cardId: string, lane: string) => void;
   /** Копирует в буфер ссылку на карточку (как в меню на доске). */
@@ -577,6 +586,7 @@ export function KanbanCardModal({
   onMovePrevStage,
   onMoveNextStage,
   onMoveToColumn,
+  onRequestStopCard,
   onChangeTrackLane,
   onCopyCardLink,
   trackLaneOptions,
@@ -628,8 +638,7 @@ export function KanbanCardModal({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const found = cardId ? findCard(board, cardId) : null;
   const card = found?.card;
-  const showOrderMailButton =
-    Boolean(card?.linkedOrderId) && (card?.sourceEmailCount ?? 0) > 0;
+  const showOrderMailButton = Boolean(card?.linkedOrderId);
   const act = (activityActorLabel ?? "").trim() || undefined;
 
   const closeFileViewer = useCallback(() => setFileViewer(null), []);
@@ -771,7 +780,7 @@ export function KanbanCardModal({
     ],
   );
   const columnTransfer = useMemo(() => {
-    if (!cardId || !found || !onMoveToColumn) return null;
+    if (!cardId || !found || (!onMoveToColumn && !onRequestStopCard)) return null;
     const columns: Array<{ id: string; title: string }> = [];
     for (const col of board.columns) {
       columns.push({
@@ -779,12 +788,12 @@ export function KanbanCardModal({
         title: col.title,
       });
     }
-    if (columns.length < 2) return null;
+    if (columns.length < 2 && !onRequestStopCard) return null;
     return {
       currentColumnId: found.col.id,
       columns,
     };
-  }, [cardId, found, onMoveToColumn, board.columns]);
+  }, [cardId, found, onMoveToColumn, onRequestStopCard, board.columns]);
   const chatActorUserId =
     (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
 
@@ -945,12 +954,20 @@ export function KanbanCardModal({
     orderId: string,
     body: { blocked: boolean; blockReason?: string },
     blockedAt?: string | null,
+    syncKaiten = true,
   ) => {
+    persistCrmBoardFieldsClient({
+      orderId,
+      blocked: body.blocked,
+      blockReason: body.blockReason ?? "",
+      blockedAt: blockedAt ?? null,
+    });
     rememberOptimisticKaitenBlock(orderId, {
       blocked: body.blocked,
       blockReason: body.blockReason ?? "",
       blockedAt: blockedAt ?? null,
     });
+    if (!syncKaiten) return;
     void patchOrderKaitenCard(orderId, body).then((r) => {
       if (!r.ok) {
         forgetOptimisticKaitenBlock(orderId);
@@ -1021,10 +1038,12 @@ export function KanbanCardModal({
         });
       }
     });
-    if (blockedOk && oid && hasKaiten) {
+    if (blockedOk && oid) {
       persistLinkedOrderBlock(
         oid,
         { blocked: true, blockReason: reasonForTg },
+        undefined,
+        hasKaiten,
       );
     }
   };
@@ -1068,11 +1087,12 @@ export function KanbanCardModal({
     const oid = card?.linkedOrderId?.trim() || "";
     const hasKaiten =
       card?.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
-    if (oid && hasKaiten) {
+    if (oid) {
       persistLinkedOrderBlock(
         oid,
         { blocked: true, blockReason: next },
         card?.blockedAt ?? null,
+        hasKaiten,
       );
     }
   };
@@ -1133,6 +1153,7 @@ export function KanbanCardModal({
         completedAt: null,
         assigneeId: "",
       });
+      persistKanbanLinkedCardChecklist(fc.card);
     });
   };
 
@@ -2026,8 +2047,8 @@ export function KanbanCardModal({
                   if (!fc) return;
                   performUnblock(fc.card, b, act);
                 });
-                if (oid && hasKaiten) {
-                  persistLinkedOrderBlock(oid, { blocked: false });
+                if (oid) {
+                  persistLinkedOrderBlock(oid, { blocked: false }, undefined, hasKaiten);
                 }
               }}
             >
@@ -2209,8 +2230,8 @@ export function KanbanCardModal({
                       });
                     }
                   });
-                  if (oid && hasKaiten) {
-                    persistLinkedOrderBlock(oid, { blocked: false });
+                  if (oid) {
+                    persistLinkedOrderBlock(oid, { blocked: false }, undefined, hasKaiten);
                   }
                 } else openBlockPopup();
               }}
@@ -2279,7 +2300,11 @@ export function KanbanCardModal({
               {showOrderMailButton && card?.linkedOrderId ? (
                 <button
                   type="button"
-                  title={`Письма наряда (${card.sourceEmailCount})`}
+                  title={
+                    (card.sourceEmailCount ?? 0) > 0
+                      ? `Письма наряда (${card.sourceEmailCount})`
+                      : "Письма наряда"
+                  }
                   aria-label="Письма наряда"
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
                   onClick={() => setOrderMailOpen(true)}
@@ -2411,15 +2436,30 @@ export function KanbanCardModal({
                   <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                     Столбец
                   </div>
-                  {columnTransfer && canMoveColumns ? (
+                  {columnTransfer && (canMoveColumns || onRequestStopCard) ? (
                     <select
                       className={baseInput}
                       value={columnTransfer.currentColumnId}
                       onChange={(e) => {
-                        const targetColumnId = e.target.value;
-                        if (targetColumnId === columnTransfer.currentColumnId) return;
-                        if (!cardId || !onMoveToColumn) return;
-                        onMoveToColumn(cardId, targetColumnId);
+                        const pick = interpretKanbanPlacementColumnPick(
+                          e.target.value,
+                          columnTransfer.currentColumnId,
+                        );
+                        if (pick.kind === "noop") return;
+                        if (pick.kind === "stop") {
+                          if (!cardId || !onRequestStopCard) return;
+                          if (
+                            !window.confirm(
+                              "Перенести карточку в СТОП? Она исчезнет с дорожки, пока её не вернут.",
+                            )
+                          ) {
+                            return;
+                          }
+                          onRequestStopCard(cardId);
+                          return;
+                        }
+                        if (!cardId || !onMoveToColumn || !canMoveColumns) return;
+                        onMoveToColumn(cardId, pick.columnId);
                       }}
                     >
                       {columnTransfer.columns.map((col) => (
@@ -2427,6 +2467,9 @@ export function KanbanCardModal({
                           {col.title}
                         </option>
                       ))}
+                      {onRequestStopCard ? (
+                        <option value={KANBAN_CARD_MODAL_STOP_COLUMN_ID}>СТОП</option>
+                      ) : null}
                     </select>
                   ) : (
                     <div className={`${baseInput} min-h-[2.25rem] truncate`}>
@@ -4137,6 +4180,8 @@ function ChecklistEditor({
                 it.completedAt = it.completed ? new Date().toISOString() : null;
                 if (fc.card.parentCardId) {
                   syncParentProductionChecklistSnapshot(b, fc.card.id);
+                } else {
+                  persistKanbanLinkedCardChecklist(fc.card);
                 }
                 pushActivity(fc.card, `Чеклист: ${it.text}`, b.users[0]?.id, b, activityActorLabel);
               })
@@ -4161,6 +4206,8 @@ function ChecklistEditor({
                 if (it) it.text = v;
                 if (fc.card.parentCardId) {
                   syncParentProductionChecklistSnapshot(b, fc.card.id);
+                } else {
+                  persistKanbanLinkedCardChecklist(fc.card);
                 }
               });
             }}
@@ -4184,6 +4231,8 @@ function ChecklistEditor({
                 it.assigneeId = nextId;
                 if (fc.card.parentCardId) {
                   syncParentProductionChecklistSnapshot(b, fc.card.id);
+                } else {
+                  persistKanbanLinkedCardChecklist(fc.card);
                 }
                 pushActivity(
                   fc.card,
@@ -4291,6 +4340,7 @@ function ChecklistEditor({
                   return;
                 }
                 fc.card.checklist = (fc.card.checklist || []).filter((x) => x.id !== item.id);
+                persistKanbanLinkedCardChecklist(fc.card);
               })
             }
           >

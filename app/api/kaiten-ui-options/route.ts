@@ -20,19 +20,19 @@ export async function GET() {
     const tenantId = await requireSessionTenantId(s);
     const prisma = await getPrisma();
     const integration = await loadKaitenIntegrationTenantState(prisma, tenantId);
-    if (!integration.active) {
-      return NextResponse.json({
-        enabled: false,
-        cardTypes: [],
-        trackLanes: [],
-      });
-    }
     await ensureKaitenDirectory(prisma, tenantId);
     const types = await prisma.kaitenCardType.findMany({
       where: { tenantId, isActive: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, externalTypeId: true },
     });
+    if (!integration.active) {
+      return NextResponse.json({
+        enabled: false,
+        cardTypes: types,
+        trackLanes: ["ORTHOPEDICS", "ORTHODONTICS"],
+      });
+    }
     const kcfg0 = getKaitenEnvConfig();
     const kcfg = kcfg0 ? await withResolvedKaitenBoards(kcfg0) : null;
     /** Достаточно board_id или space_id + колонка; board_id может быть null, пока не подставился из space (или API временно недоступен). */

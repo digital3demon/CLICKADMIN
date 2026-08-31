@@ -21,6 +21,10 @@ import {
   isKanbanAggregateBoardId,
   KANBAN_BOARD_PRODUCTION_ID,
 } from "@/lib/kanban/model";
+import {
+  parseKanbanChecklistJson,
+  slimKanbanChecklist,
+} from "@/lib/kanban/kanban-linked-checklist";
 import { hasKanbanCardMembers } from "@/lib/kanban/preserve-kanban-card-head";
 import type { KanbanCard } from "@/lib/kanban/types";
 import type { UserRole } from "@prisma/client";
@@ -36,6 +40,10 @@ const TILE_SELECT = {
   kanbanAssigneeIds: true,
   kanbanParticipantIds: true,
   kanbanStageDueYmd: true,
+  kanbanTimerStartedAt: true,
+  kanbanTimerDurationMs: true,
+  kanbanTimerFrozenAt: true,
+  kanbanChecklist: true,
   isUrgent: true,
   kaitenBlocked: true,
   kaitenBlockReason: true,
@@ -48,6 +56,7 @@ const TILE_SELECT = {
   kanbanBoardUpdatedAt: true,
   updatedAt: true,
   createdAt: true,
+  _count: { select: { sourceEmailLinks: true } },
 } as const;
 
 function hydrateWhere(
@@ -195,6 +204,13 @@ export async function persistCrmBoardFieldsOnOrder(input: {
   columnTitle?: string | null;
   sortOrder?: number | null;
   trackLane?: string | null;
+  timerStartedAt?: string | null;
+  timerDurationMs?: number | null;
+  timerFrozenAt?: string | null;
+  blocked?: boolean;
+  blockReason?: string | null;
+  blockedAt?: string | null;
+  checklist?: unknown;
 }): Promise<boolean> {
   const prisma = await getOrdersPrisma();
   const oid = input.orderId.trim();
@@ -219,6 +235,42 @@ export async function persistCrmBoardFieldsOnOrder(input: {
       input.sortOrder != null && Number.isFinite(input.sortOrder)
         ? input.sortOrder
         : null;
+  }
+  if (input.timerStartedAt !== undefined) {
+    const raw = (input.timerStartedAt || "").trim();
+    const d = raw ? new Date(raw) : null;
+    data.kanbanTimerStartedAt = d && !Number.isNaN(d.getTime()) ? d : null;
+  }
+  if (input.timerDurationMs !== undefined) {
+    data.kanbanTimerDurationMs =
+      input.timerDurationMs != null && Number.isFinite(input.timerDurationMs)
+        ? Math.max(0, Math.floor(input.timerDurationMs))
+        : null;
+  }
+  if (input.timerFrozenAt !== undefined) {
+    const raw = (input.timerFrozenAt || "").trim();
+    const d = raw ? new Date(raw) : null;
+    data.kanbanTimerFrozenAt = d && !Number.isNaN(d.getTime()) ? d : null;
+  }
+  if (input.blocked !== undefined) {
+    const blocked = input.blocked === true;
+    data.kaitenBlocked = blocked;
+    data.kaitenBlockReason = blocked
+      ? (input.blockReason || "").trim().slice(0, 2000) || null
+      : null;
+    if (!blocked) {
+      data.kaitenBlockedAt = null;
+    } else if (input.blockedAt !== undefined) {
+      const raw = (input.blockedAt || "").trim();
+      const d = raw ? new Date(raw) : null;
+      data.kaitenBlockedAt = d && !Number.isNaN(d.getTime()) ? d : new Date();
+    } else {
+      data.kaitenBlockedAt = new Date();
+    }
+  }
+  if (input.checklist !== undefined) {
+    const parsed = parseKanbanChecklistJson(input.checklist);
+    data.kanbanChecklist = parsed == null ? [] : slimKanbanChecklist(parsed);
   }
   if (input.trackLane !== undefined) {
     const u = String(input.trackLane || "").trim().toUpperCase();

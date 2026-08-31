@@ -46,6 +46,43 @@ describe("kanban card heads cache", () => {
     setKanbanStageDue(card, "2026-09-08");
   });
 
+  it("возвращает таймер и чеклист на пустую карточку того же наряда", () => {
+    const state = defaultAppState();
+    state.boards[0]!.columns[0]!.cards.push({
+      id: "kaiten-order-oid-таймер",
+      title: "2608-191 Жеребцов",
+      assignees: [],
+      participants: [],
+      stageDueDate: "",
+      dueDate: "",
+      linkedOrderId: "oid-таймер",
+      timerStartedAt: "2026-08-30T10:00:00.000Z",
+      timerDurationMs: 600_000,
+      timerFrozenAt: null,
+      checklist: [{ id: "c1", text: "примерка Тындик", completed: false }],
+    } as never);
+    const heads = collectKanbanCardHeadsCache(state);
+    expect(heads["oid:oid-таймер"]?.timerStartedAt).toBe("2026-08-30T10:00:00.000Z");
+    expect(heads["oid:oid-таймер"]?.checklist?.[0]?.text).toBe("примерка Тындик");
+
+    const empty = defaultAppState();
+    empty.boards[0]!.columns[0]!.cards.push({
+      id: "kaiten-order-oid-таймер",
+      title: "2608-191 Жеребцов",
+      assignees: [],
+      participants: [],
+      stageDueDate: "",
+      dueDate: "",
+      linkedOrderId: "oid-таймер",
+      checklist: [],
+    } as never);
+    expect(applyKanbanCardHeadsCache(empty, heads)).toBe(true);
+    const card = empty.boards[0]!.columns[0]!.cards[0]!;
+    expect(card.timerStartedAt).toBe("2026-08-30T10:00:00.000Z");
+    expect(card.timerDurationMs).toBe(600_000);
+    expect(card.checklist?.[0]?.text).toBe("примерка Тындик");
+  });
+
   it("не выкидывает людей с других карточек, если входящий снимок почти пустой", () => {
     const existing = {
       "oid:наряд-юля": {

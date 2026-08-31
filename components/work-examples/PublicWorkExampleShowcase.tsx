@@ -164,6 +164,7 @@ export function PublicWorkExampleShowcase({
               <WorkExampleHtmlViewer
                 key={f.id}
                 url={fileHref(f.id)}
+                convertUrl={`${fileHref(f.id)}/d3d`}
                 fileName={f.fileName}
               />
             ))}

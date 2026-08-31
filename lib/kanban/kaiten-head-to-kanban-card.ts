@@ -13,6 +13,8 @@ import {
 } from "@/lib/kanban/kanban-stage-due";
 import { shouldSkipInboundKanbanStageDue } from "@/lib/kanban/optimistic-kaiten-stage-due";
 import { shouldKeepLocalKanbanStageDue } from "@/lib/kanban/preserve-kanban-card-head";
+import { kaitenBlockedMetaFromCard } from "@/lib/kaiten-card-block";
+import { listPendingKanbanBlocks, pendingBlockForOrder } from "@/lib/kanban/pending-kanban-blocks";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -28,7 +30,9 @@ export function unwrapKaitenCardPayload(
       "board_id" in raw ||
       "due_date" in raw ||
       "asap" in raw ||
-      "column_id" in raw;
+      "column_id" in raw ||
+      "blocked" in raw ||
+      "block_reason" in raw;
     if (!rawLooksLikeCard) return nested;
   }
   return raw;
@@ -124,6 +128,34 @@ export function applyKaitenHeadFieldsToKanbanCard(
         /* пустой due_date Kaiten не снимает срок в CRM */
       } else if (prev !== next) {
         setKanbanStageDue(card as never, next);
+        changed = true;
+      }
+    }
+  }
+  const hasBlockKeys =
+    "blocked" in src ||
+    "is_blocked" in src ||
+    "block_reason" in src ||
+    "blockers" in src;
+  if (hasBlockKeys) {
+    const oid = String(card.linkedOrderId || "").trim();
+    const pending = oid
+      ? pendingBlockForOrder(oid, listPendingKanbanBlocks())
+      : null;
+    if (!pending) {
+      const meta = kaitenBlockedMetaFromCard(src);
+      const nextReason = meta.blocked ? (meta.reason || "").trim() : "";
+      const prevBlocked = Boolean(card.blocked);
+      const prevReason = String(card.blockReason || "").trim();
+      if (prevBlocked !== meta.blocked || prevReason !== nextReason) {
+        card.blocked = meta.blocked;
+        card.blockReason = nextReason;
+        if (meta.blocked) {
+          card.blockedAt = meta.blockedAtIso || card.blockedAt || new Date().toISOString();
+        } else {
+          card.blockedAt = "";
+          card.blockedByUserId = "";
+        }
         changed = true;
       }
     }

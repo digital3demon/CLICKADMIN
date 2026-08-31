@@ -46,6 +46,10 @@ import { kaitenSortOrderFromCard } from "@/lib/kaiten-card-sort-order";
 import { pushKaitenCardTitleForOrderIfLinked } from "@/lib/kaiten-push-order-title";
 import { syncNewOrderToKaiten } from "@/lib/kaiten-order-sync";
 import { kaitenUrgentPatchFromCard, kaitenMirrorFieldsFromCard } from "@/lib/kaiten-inbound-order-fields";
+import {
+  gateKaitenIntegration,
+  kaitenIntegrationDisabledResponse,
+} from "@/lib/kaiten-integration/guard";
 import { kaitenDueDatePatchFromYmd } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { normalizeKanbanStageDueDate } from "@/lib/kanban/kanban-stage-due";
 import { syncUnpushedOrderAttachmentsToKaiten } from "@/lib/kaiten-sync";
@@ -438,6 +442,8 @@ export async function GET(
   if (!tenantId) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+  const gateGet = await gateKaitenIntegration(ordersPrisma, tenantId);
+  if (!gateGet.ok) return kaitenIntegrationDisabledResponse(gateGet);
 
   const auth = getKaitenRestAuth();
   const cfg0 = getKaitenEnvConfig();
@@ -671,7 +677,6 @@ export async function GET(
     ...kaitenImagesFromRecord(cardObj, orderIdTrim, null),
     ...comments.flatMap((c) => c.images || []),
   ]);
-  const columnTitle = kaitenColumnTitleFromBoard(cardObj, cols.columns);
   const blockMeta = kaitenBlockedMetaFromCard(cardObj);
   const kBlocked = blockMeta.blocked;
   const kBlockReason = blockMeta.reason;
@@ -723,31 +728,10 @@ export async function GET(
           : blockMeta.blockedAtIso
             ? { kaitenBlockedAt: new Date(blockMeta.blockedAtIso) }
             : {};
-      const sortPatch =
-        "sort_order" in cardObj
-          ? { kaitenCardSortOrder: kaitenSortOrderFromCard(cardObj) }
-          : {};
       const mirrorFields = kaitenMirrorFieldsFromCard(cardObj);
-      const fresh = await ordersPrisma.order.findFirst({
-        where: { id: orderIdTrim },
-        select: { kaitenSyncedAt: true, kaitenTrackLane: true },
-      });
-      const recentlyPatched =
-        fresh?.kaitenSyncedAt != null &&
-        Date.now() - fresh.kaitenSyncedAt.getTime() < 45_000;
       await ordersPrisma.order.update({
         where: { id: orderIdTrim },
         data: {
-          ...(recentlyPatched
-            ? {}
-            : {
-                kaitenColumnTitle: columnTitle,
-                ...(trackFromCard != null &&
-                trackFromCard !== (fresh?.kaitenTrackLane ?? order.kaitenTrackLane)
-                  ? { kaitenTrackLane: trackFromCard }
-                  : {}),
-                ...sortPatch,
-              }),
           ...(mirrorFields.kaitenCardDescriptionMirror !== undefined
             ? { kaitenCardDescriptionMirror: mirrorFields.kaitenCardDescriptionMirror }
             : {}),
@@ -797,6 +781,8 @@ export async function POST(
   if (!tenantId) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+  const gatePost = await gateKaitenIntegration(ordersPrisma, tenantId);
+  if (!gatePost.ok) return kaitenIntegrationDisabledResponse(gatePost);
 
   let body: KaitenPostBody;
   try {
@@ -1142,6 +1128,8 @@ export async function PATCH(
   if (!tenantId) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   }
+  const gatePatch = await gateKaitenIntegration(ordersPrisma, tenantId);
+  if (!gatePatch.ok) return kaitenIntegrationDisabledResponse(gatePatch);
 
   const auth = getKaitenRestAuth();
   const cfg0 = getKaitenEnvConfig();

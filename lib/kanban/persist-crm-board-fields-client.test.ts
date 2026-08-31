@@ -170,5 +170,37 @@ describe("crmBoardFieldsFromKaitenRefreshPatch", () => {
         kaitenHead: { due_date: null },
       }),
     ).toBeNull();
+    expect(
+      crmBoardFieldsFromKaitenRefreshPatch({
+        cardId: "c-col",
+        linkedOrderId: "ord-жеребцов",
+        kaitenCardId: 13,
+        assignees: [],
+        participants: [],
+        fingerprint: "fp",
+        unmappedLabels: [],
+        kaitenHead: null,
+        columnTitle: "Согласование Жеребцов",
+      }),
+    ).toEqual({
+      orderId: "ord-жеребцов",
+      columnTitle: "Согласование Жеребцов",
+    });
+    expect(
+      crmBoardFieldsFromKaitenRefreshPatch({
+        cardId: "c-block",
+        linkedOrderId: "ord-тындик",
+        kaitenCardId: 14,
+        assignees: [],
+        participants: [],
+        fingerprint: "fp",
+        unmappedLabels: [],
+        kaitenHead: { blocked: true, block_reason: "ждём КТ Тындик" },
+      }),
+    ).toMatchObject({
+      orderId: "ord-тындик",
+      blocked: true,
+      blockReason: "ждём КТ Тындик",
+    });
   });
 });

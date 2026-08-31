@@ -12,8 +12,10 @@ export type PendingKanbanColumnMove = {
   at: number;
 };
 
+let memoryStore: PendingKanbanColumnMove[] = [];
+
 function readStore(): PendingKanbanColumnMove[] {
-  if (typeof sessionStorage === "undefined") return [];
+  if (typeof sessionStorage === "undefined") return memoryStore;
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
@@ -28,11 +30,23 @@ function readStore(): PendingKanbanColumnMove[] {
 }
 
 function writeStore(rows: PendingKanbanColumnMove[]): void {
+  memoryStore = rows;
   if (typeof sessionStorage === "undefined") return;
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
   } catch {
     /* quota / private mode */
+  }
+}
+
+export function clearPendingKanbanColumnMovesForTests(): void {
+  memoryStore = [];
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* */
+    }
   }
 }
 
@@ -52,7 +66,45 @@ export function listPendingKanbanColumnMoves(now = Date.now()): PendingKanbanCol
 }
 
 export function clearPendingKanbanColumnMove(cardId: string): void {
-  writeStore(readStore().filter((r) => r.cardId !== cardId));
+  writeStore(readStore().filter((r) => r.cardId !== cardId && r.orderId !== cardId));
+}
+
+export function pendingColumnTitleForOrder(
+  orderId: string,
+  moves: readonly PendingKanbanColumnMove[],
+): string | null {
+  const oid = String(orderId || "").trim();
+  if (!oid) return null;
+  const move = moves.find(
+    (m) => m.orderId === oid || m.cardId === oid,
+  );
+  const title = (move?.toColumnTitle || "").trim();
+  return title || null;
+}
+
+/** Когда плитка уже в целевой колонке — pending больше не нужен. */
+export function clearPendingMovesConfirmedByTiles(
+  tiles: readonly { orderId: string; columnTitle: string | null }[],
+): void {
+  const live = listPendingKanbanColumnMoves();
+  if (!live.length) return;
+  const confirmed = new Set<string>();
+  for (const tile of tiles) {
+    const want = pendingColumnTitleForOrder(tile.orderId, live);
+    if (!want) continue;
+    const have = normalizeKanbanColumnTitle(tile.columnTitle || "");
+    if (have && have === normalizeKanbanColumnTitle(want)) {
+      confirmed.add(tile.orderId);
+    }
+  }
+  if (!confirmed.size) return;
+  writeStore(
+    live.filter(
+      (m) =>
+        !confirmed.has(m.orderId || "") &&
+        !confirmed.has(m.cardId),
+    ),
+  );
 }
 
 /** Карточка остаётся в новой колонке после refresh, пока tenant-state/Kaiten догоняют. */

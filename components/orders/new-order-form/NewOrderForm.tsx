@@ -1501,6 +1501,9 @@ export function NewOrderForm({
                 }
               : {
                   kaitenDecideLater: false,
+                  ...(kaiten.createKanbanWithoutKaiten
+                    ? { createKanbanWithoutKaiten: true }
+                    : {}),
                   kaitenCardTypeId: kaiten.kaitenCardTypeId,
                   kaitenTrackLane: kaiten.kaitenTrackLane,
                   kaitenCardTitleLabel: kaiten.kaitenCardTitleLabel,

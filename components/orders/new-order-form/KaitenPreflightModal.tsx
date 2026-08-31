@@ -29,6 +29,7 @@ export type KaitenSavePayload =
     }
   | {
       kaitenDecideLater: false;
+      createKanbanWithoutKaiten?: boolean;
       kaitenCardTypeId: string;
       kaitenTrackLane: KaitenTrackLane;
       kaitenCardTitleLabel: string;
@@ -327,10 +328,12 @@ export function KaitenPreflightModal({
   const [cardTypeColorByName, setCardTypeColorByName] = useState<Record<string, string>>({});
   const [boardLaneName, setBoardLaneName] = useState("");
   const [workLabel, setWorkLabel] = useState("");
+  const [kaitenIntegrationEnabled, setKaitenIntegrationEnabled] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     setDecideLater(false);
+    setKaitenIntegrationEnabled(true);
     setCardTypeId("");
     setSpace("");
     setSelectionHint(null);
@@ -356,6 +359,7 @@ export function KaitenPreflightModal({
         );
         const res = await fetch("/api/kaiten-ui-options");
         const data = (await res.json()) as {
+          enabled?: boolean;
           cardTypes?: UiCardType[];
           trackLanes?: KaitenTrackLane[];
           error?: string;
@@ -365,6 +369,7 @@ export function KaitenPreflightModal({
         }
         if (cancelled) return;
         setCardTypes(data.cardTypes ?? []);
+        setKaitenIntegrationEnabled(data.enabled !== false);
         setLaneAllowlist(
           Array.isArray(data.trackLanes) ? data.trackLanes : [],
         );
@@ -500,6 +505,7 @@ export function KaitenPreflightModal({
       onConfirm(
         {
           kaitenDecideLater: false,
+          ...(kaitenIntegrationEnabled ? {} : { createKanbanWithoutKaiten: true }),
           kaitenCardTypeId: cardTypeId,
           kaitenTrackLane: space,
           kaitenCardTitleLabel: workLabel.trim(),
@@ -510,6 +516,7 @@ export function KaitenPreflightModal({
     [
       canSubmit,
       decideLater,
+      kaitenIntegrationEnabled,
       onConfirm,
       cardTypeId,
       space,
@@ -699,10 +706,9 @@ export function KaitenPreflightModal({
               </legend>
                 {laneAllowlist !== null && laneAllowlist.length === 0 ? (
                   <p className="text-xs text-amber-800 dark:text-amber-200">
-                    В .env не задано ни одного пространства канбана (нужны
-                    KAITEN_ORTHOPEDICS_* и/или KAITEN_ORTHODONTICS_* и при
-                    необходимости KAITEN_TEST_* — board id и id колонки «в
-                    работу»).
+                    Нет доступных пространств канбана. В CRM нужны доски
+                    ортопедии и/или ортодонтии; для выгрузки в Kaiten — ещё
+                    KAITEN_ORTHOPEDICS_* / KAITEN_ORTHODONTICS_* в .env.
                   </p>
                 ) : null}
                 {distributionLaneAllowlist !== null &&

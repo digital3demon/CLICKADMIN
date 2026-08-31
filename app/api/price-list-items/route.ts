@@ -5,15 +5,19 @@ import {
   getActivePriceListId,
 } from "@/lib/price-list-workspace";
 import { resolvePriceOverrideMap } from "@/lib/price-overrides";
+import {
+  parsePriceListItemsQuery,
+  priceListItemSelect,
+  priceListItemWhere,
+} from "@/lib/pricing/price-list-items-query";
 
 /** Прайс для форм заказа и раздела «Конфигурация». ?listId= — иначе активный каталог. */
 export async function GET(req: Request) {
   try {
     const prisma = await getPricingPrismaClient();
     const url = new URL(req.url);
-    const qList = url.searchParams.get("listId")?.trim() ?? "";
-    const clinicId = url.searchParams.get("clinicId")?.trim() ?? "";
-    const doctorId = url.searchParams.get("doctorId")?.trim() ?? "";
+    const { listId: qList, clinicId, doctorId, slim, code } =
+      parsePriceListItemsQuery(url);
     let priceListId: string;
     if (qList) {
       const exists = await prisma.priceList.findUnique({
@@ -28,22 +32,15 @@ export async function GET(req: Request) {
       priceListId = await getActivePriceListId(prisma);
     }
     const items = await prisma.priceListItem.findMany({
-      where: { isActive: true, priceListId },
+      where: priceListItemWhere({ priceListId, code }),
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        sectionTitle: true,
-        subsectionTitle: true,
-        priceRub: true,
-        leadWorkingDays: true,
-        description: true,
-        variablePrice: true,
-      },
+      select: priceListItemSelect(slim),
     });
+    const headers = slim
+      ? { "Cache-Control": "private, max-age=60" }
+      : undefined;
     if (!clinicId && !doctorId) {
-      return NextResponse.json(items);
+      return NextResponse.json(items, { headers });
     }
 
     const overrideByItemId = await resolvePriceOverrideMap(prisma, {
@@ -62,7 +59,7 @@ export async function GET(req: Request) {
         priceRub: isIndividualPrice ? individualPriceRub : it.priceRub,
       };
     });
-    return NextResponse.json(enriched);
+    return NextResponse.json(enriched, { headers });
   } catch (e) {
     console.error(e);
     return NextResponse.json(

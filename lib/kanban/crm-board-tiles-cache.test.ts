@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  clearPendingKanbanColumnMovesForTests,
+  rememberPendingKanbanColumnMove,
+} from "@/lib/kanban/pending-column-moves";
 import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
 import {
   appointmentSnapsFromCrmTiles,
   clearCrmBoardTilesCacheForTests,
   loadCrmBoardTilesCache,
   mergeCrmBoardTilesCache,
+  patchCrmBoardTilesCacheColumn,
   saveCrmBoardTilesCache,
 } from "@/lib/kanban/crm-board-tiles-cache";
 
@@ -29,10 +34,16 @@ const tile: CrmBoardTile = {
   dueToAdminsHasTime: true,
   updatedAt: "2026-08-28T12:00:00.000Z",
   createdAt: "2026-07-29T10:00:00.000Z",
+  timerStartedAt: null,
+  timerDurationMs: null,
+  timerFrozenAt: null,
+  checklist: null,
+  sourceEmailCount: 2,
 };
 
 afterEach(() => {
   clearCrmBoardTilesCacheForTests();
+  clearPendingKanbanColumnMovesForTests();
 });
 
 describe("crm-board-tiles-cache", () => {
@@ -51,6 +62,27 @@ describe("crm-board-tiles-cache", () => {
     expect(cached).toHaveLength(2);
     expect(cached.map((t) => t.orderId).sort()).toEqual(["ord-другая", "ord-крупышева"]);
     expect(cached.find((t) => t.orderId === "ord-крупышева")?.cardTypeName).toBe("Сплинт");
+  });
+
+  it("pending-перенос не даёт дельте вернуть старую колонку", () => {
+    saveCrmBoardTilesCache("kanban_board_orthodontics", [tile]);
+    rememberPendingKanbanColumnMove({
+      cardId: "ord-крупышева",
+      orderId: "ord-крупышева",
+      toColumnTitle: "Согласование Жеребцов",
+    });
+    mergeCrmBoardTilesCache("kanban_board_orthodontics", [
+      { ...tile, columnTitle: "К исполнению" },
+    ]);
+    expect(
+      loadCrmBoardTilesCache("kanban_board_orthodontics").find(
+        (t) => t.orderId === "ord-крупышева",
+      )?.columnTitle,
+    ).toBe("Согласование Жеребцов");
+    patchCrmBoardTilesCacheColumn("ord-крупышева", "Согласование Жеребцов");
+    expect(
+      loadCrmBoardTilesCache("kanban_board_orthodontics")[0]?.columnTitle,
+    ).toBe("Согласование Жеребцов");
   });
 
   it("appointment snaps для Актуального с первого кадра", () => {

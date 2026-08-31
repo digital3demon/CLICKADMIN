@@ -73,6 +73,32 @@ describe("crm-board-tile", () => {
     expect(tile.stageDueYmd).toBe("2026-09-01");
     expect(tile).not.toHaveProperty("description");
     expect(tile).not.toHaveProperty("files");
+    expect(tile.checklist).toBeNull();
+    expect(tile.sourceEmailCount).toBe(0);
+  });
+
+  it("считает письма наряда для иконки почты, кириллица в id", () => {
+    const tile = crmBoardTileFromOrderRow({
+      id: "наряд-юля",
+      orderNumber: "2608-002",
+      patientName: "Тындик",
+      doctorFullName: "Жевлаков",
+      kaitenCardTypeId: null,
+      kaitenCardTitleLabel: null,
+      kaitenCardTitleMirror: null,
+      isUrgent: false,
+      kaitenBlocked: false,
+      kaitenBlockReason: null,
+      kaitenColumnTitle: "К исполнению",
+      kaitenCardSortOrder: null,
+      kaitenTrackLane: "ORTHOPEDICS",
+      appointmentDate: null,
+      dueToAdminsAt: null,
+      kaitenAdminDueHasTime: true,
+      updatedAt: "2026-08-28T10:00:00.000Z",
+      _count: { sourceEmailLinks: 3 },
+    });
+    expect(tile.sourceEmailCount).toBe(3);
   });
 
   it("Мои / Ответственный — SQL по людям, не скан всех досок", () => {

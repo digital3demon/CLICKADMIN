@@ -1,6 +1,6 @@
 /**
  * Вьювер витрины: STL / PLY / OBJ и HTML.
- * D3D-реэкспорт — iframe standalone; exocad HTML — меши в том же D3D-свете.
+ * D3D HTML — iframe; Exocad конвертится на сервере (d3d-html-export), не в браузере.
  * Расширение из имени файла — URL API без суффикса.
  */
 

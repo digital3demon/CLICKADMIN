@@ -3,6 +3,8 @@
  * Источник: Order (колонка/дорожка/люди), не Kaiten API.
  */
 import { kanbanBoardIdForTrackLane } from "@/lib/kanban/apply-card-track-lane";
+import { parseKanbanChecklistJson } from "@/lib/kanban/kanban-linked-checklist";
+import type { ChecklistItem } from "@/lib/kanban/types";
 import { legacyKaitenTypeName } from "@/lib/kanban/kaiten-card-type-names";
 import {
   isKanbanAggregateBoardId,
@@ -36,6 +38,13 @@ export type CrmBoardTile = {
   dueToAdminsHasTime: boolean | null;
   updatedAt: string;
   createdAt: string | null;
+  timerStartedAt: string | null;
+  timerDurationMs: number | null;
+  timerFrozenAt: string | null;
+  /** null — в БД ещё не писали; [] — очистили. */
+  checklist: ChecklistItem[] | null;
+  /** Письма наряда — иконка почты в карточке. */
+  sourceEmailCount: number;
 };
 
 export function normalizeCrmUserIds(raw: readonly unknown[] | null | undefined): string[] {
@@ -120,6 +129,12 @@ export function crmBoardTileFromOrderRow(row: {
   kanbanBoardUpdatedAt?: Date | string | null;
   updatedAt: Date | string;
   createdAt?: Date | string | null;
+  kanbanTimerStartedAt?: Date | string | null;
+  kanbanTimerDurationMs?: number | null;
+  kanbanTimerFrozenAt?: Date | string | null;
+  kanbanChecklist?: unknown;
+  sourceEmailCount?: number;
+  _count?: { sourceEmailLinks?: number };
 }): CrmBoardTile {
   const toIso = (v: Date | string | null | undefined) => {
     if (!v) return null;
@@ -162,5 +177,18 @@ export function crmBoardTileFromOrderRow(row: {
     dueToAdminsHasTime: row.kaitenAdminDueHasTime,
     updatedAt: updated,
     createdAt: toIso(row.createdAt),
+    timerStartedAt: toIso(row.kanbanTimerStartedAt),
+    timerDurationMs:
+      row.kanbanTimerDurationMs != null && Number.isFinite(row.kanbanTimerDurationMs)
+        ? row.kanbanTimerDurationMs
+        : null,
+    timerFrozenAt: toIso(row.kanbanTimerFrozenAt),
+    checklist: parseKanbanChecklistJson(row.kanbanChecklist),
+    sourceEmailCount: Math.max(
+      0,
+      Math.trunc(
+        row.sourceEmailCount ?? row._count?.sourceEmailLinks ?? 0,
+      ),
+    ),
   };
 }

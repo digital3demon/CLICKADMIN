@@ -44,6 +44,11 @@ function tile(partial: Partial<CrmBoardTile> & Pick<CrmBoardTile, "orderId">): C
     dueToAdminsHasTime: true,
     updatedAt: "2026-08-28T12:00:00.000Z",
     createdAt: "2026-07-29T10:00:00.000Z",
+    timerStartedAt: null,
+    timerDurationMs: null,
+    timerFrozenAt: null,
+    checklist: null,
+    sourceEmailCount: 0,
     ...partial,
   };
 }
@@ -62,6 +67,16 @@ describe("applyCrmBoardTilesToAppState", () => {
     expect(card.assignees).toEqual(["u-я"]);
     expect(card.createdAt).toBe("2026-07-29T10:00:00.000Z");
     expect(card.activity.some((a) => a.text === "Карточка создана")).toBe(true);
+  });
+
+  it("кладёт число писем на карточку для иконки почты", () => {
+    const next = applyCrmBoardTilesToAppState(defaultAppState(), [
+      tile({ orderId: "ord-почта-юля", sourceEmailCount: 2 }),
+    ]);
+    const loc = findCardByLinkedOrderId(next, "ord-почта-юля");
+    const card =
+      next.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.sourceEmailCount).toBe(2);
   });
 
   it("тип с наряда по имени «Сплинт», не сырой cuid", () => {
@@ -320,5 +335,125 @@ describe("applyCrmBoardTilesToAppState", () => {
       state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!.stoppedCards?.[0]
         ?.card.linkedOrderId,
     ).toBe("ord-stop");
+  });
+
+  it("pending-перенос не откатывает карточку, пока плитка ещё в старой колонке", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    const fromCol = odon.columns[0]!;
+    const toCol = odon.columns[1]!;
+    fromCol.cards.push(
+      createCard({
+        id: "keep-move",
+        title: "2608-191 Жеребцов",
+        linkedOrderId: "ord-прыжок",
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "ord-прыжок",
+          columnTitle: fromCol.title,
+        }),
+      ],
+      {
+        pendingMoves: [
+          {
+            cardId: "keep-move",
+            orderId: "ord-прыжок",
+            toColumnId: toCol.id,
+            toColumnTitle: toCol.title,
+            at: Date.now(),
+          },
+        ],
+      },
+    );
+    const loc = findCardByLinkedOrderId(state, "ord-прыжок");
+    expect(loc).not.toBeNull();
+    expect(state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.id).toBe(toCol.id);
+  });
+
+  it("таймер с плитки остаётся, локальный не затирается пустой плиткой", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    odon.columns[0]!.cards.push(
+      createCard({
+        id: "keep-timer",
+        title: "таймер Тындик",
+        linkedOrderId: "ord-таймер",
+        timerStartedAt: "2026-08-30T10:00:00.000Z",
+        timerDurationMs: 1_800_000,
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({ orderId: "ord-таймер", timerStartedAt: null, timerDurationMs: null }),
+    ]);
+    const loc = findCardByLinkedOrderId(state, "ord-таймер");
+    const card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.timerStartedAt).toBe("2026-08-30T10:00:00.000Z");
+    expect(card.timerDurationMs).toBe(1_800_000);
+  });
+
+  it("чеклист с плитки общий, пустая плитка не затирает локальный", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    odon.columns[0]!.cards.push(
+      createCard({
+        id: "keep-cl",
+        title: "чеклист Тындик",
+        linkedOrderId: "ord-чеклист",
+        checklist: [{ id: "c1", text: "примерка Тындик", completed: false }],
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({ orderId: "ord-чеклист", checklist: null }),
+    ]);
+    let loc = findCardByLinkedOrderId(state, "ord-чеклист");
+    let card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.checklist?.[0]?.text).toBe("примерка Тындик");
+
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "ord-чеклист",
+        checklist: [{ id: "c2", text: "сканы Жеребцов", completed: true }],
+      }),
+    ]);
+    loc = findCardByLinkedOrderId(state, "ord-чеклист");
+    card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.checklist).toEqual([
+      {
+        id: "c2",
+        text: "сканы Жеребцов",
+        completed: true,
+        completedAt: null,
+        assigneeId: null,
+      },
+    ]);
+  });
+
+  it("локальная блокировка не слетает с пустой плитки", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    odon.columns[0]!.cards.push(
+      createCard({
+        id: "keep-block",
+        title: "стоп Анискина",
+        linkedOrderId: "ord-блок",
+        blocked: true,
+        blockReason: "Не те данные от Анискиной",
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({ orderId: "ord-блок", blocked: false, blockReason: "" }),
+    ]);
+    const loc = findCardByLinkedOrderId(state, "ord-блок");
+    const card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.blocked).toBe(true);
+    expect(card.blockReason).toBe("Не те данные от Анискиной");
   });
 });

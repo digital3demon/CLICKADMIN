@@ -224,7 +224,12 @@ export async function runKanbanMembersBackfillBatch(
   const pendingLaneByOrderId = new Map<string, KaitenTrackLane>();
   const pendingCrmByOrderId = new Map<
     string,
-    { assignees?: string[]; participants?: string[]; stageDueYmd?: string }
+    {
+      assignees?: string[];
+      participants?: string[];
+      stageDueYmd?: string;
+      columnTitle?: string;
+    }
   >();
   const patches: KaitenRefreshCardPatch[] = [];
   type FetchedKaiten = {
@@ -444,6 +449,17 @@ export async function runKanbanMembersBackfillBatch(
               },
             );
           }
+          const lastPatch = patches[patches.length - 1];
+          const title = (columnTitle || "").trim();
+          if (lastPatch && title) {
+            lastPatch.columnTitle = title;
+            lastPatch.sortOrder = sortOrder;
+            const oid = String(target.linkedOrderId || lastPatch.linkedOrderId || "").trim();
+            if (oid) {
+              const prev = pendingCrmByOrderId.get(oid) ?? {};
+              pendingCrmByOrderId.set(oid, { ...prev, columnTitle: title });
+            }
+          }
           if (
             order &&
             inboundLane != null &&
@@ -506,6 +522,7 @@ export async function runKanbanMembersBackfillBatch(
         assignees: row.assignees,
         participants: row.participants,
         stageDueYmd: row.stageDueYmd,
+        columnTitle: row.columnTitle,
       });
     } catch {
       /* клиент допишет PATCH /board-fields */

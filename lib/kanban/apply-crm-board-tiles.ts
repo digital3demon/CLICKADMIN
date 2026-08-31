@@ -15,8 +15,48 @@ import {
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
+import {
+  applyPendingKanbanColumnMoves,
+  clearPendingMovesConfirmedByTiles,
+  listPendingKanbanColumnMoves,
+  pendingColumnTitleForOrder,
+  type PendingKanbanColumnMove,
+} from "@/lib/kanban/pending-column-moves";
+import { slimKanbanChecklist } from "@/lib/kanban/kanban-linked-checklist";
 import { ensureKanbanBoardCardType } from "@/lib/kanban/resolve-kanban-card-type";
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
+
+function applyTileTimer(card: KanbanCard, tile: CrmBoardTile): void {
+  const hasTileTimer =
+    Boolean(tile.timerStartedAt) ||
+    (tile.timerDurationMs != null && Number(tile.timerDurationMs) > 0);
+  const hasLocalTimer =
+    Boolean(card.timerStartedAt) ||
+    (card.timerDurationMs != null && card.timerDurationMs > 0);
+  if (!hasTileTimer && hasLocalTimer) return;
+  card.timerStartedAt = tile.timerStartedAt;
+  card.timerDurationMs = tile.timerDurationMs;
+  card.timerFrozenAt = tile.timerFrozenAt;
+}
+
+function applyTileChecklist(card: KanbanCard, tile: CrmBoardTile): void {
+  if (tile.checklist != null) {
+    card.checklist = slimKanbanChecklist(tile.checklist);
+    return;
+  }
+  if ((card.checklist || []).length > 0) return;
+  card.checklist = [];
+}
+
+function applyTileBlock(card: KanbanCard, tile: CrmBoardTile): void {
+  if (card.blocked && !tile.blocked) return;
+  card.blocked = tile.blocked;
+  card.blockReason = tile.blockReason;
+  if (!tile.blocked) {
+    card.blockedByUserId = "";
+    card.blockedAt = "";
+  }
+}
 
 function findLinkedOnBoard(
   state: KanbanAppState,
@@ -70,14 +110,16 @@ function applyTileToCard(
     if (tile.stageDueYmd) setKanbanStageDue(card, tile.stageDueYmd);
   }
   card.urgent = tile.urgent;
-  card.blocked = tile.blocked;
-  card.blockReason = tile.blockReason;
+  applyTileBlock(card, tile);
   card.kaitenCardSortOrder = tile.sortOrder;
   card.trackLane = tile.trackLane || card.trackLane || "";
   if (tile.createdAt && (!card.createdAt || tile.createdAt < card.createdAt)) {
     card.createdAt = tile.createdAt;
   }
   card.updatedAt = tile.updatedAt;
+  applyTileTimer(card, tile);
+  applyTileChecklist(card, tile);
+  card.sourceEmailCount = tile.sourceEmailCount;
   card.activity = seedKanbanCreatedActivity(card);
 }
 
@@ -95,9 +137,14 @@ function sortColumnByCrmOrder(cards: KanbanCard[]): void {
 export function applyCrmBoardTilesToAppState(
   state: KanbanAppState,
   tiles: readonly CrmBoardTile[],
-  opts?: { replaceBoardId?: string | null; pruneMemberUserId?: string | null },
+  opts?: {
+    replaceBoardId?: string | null;
+    pruneMemberUserId?: string | null;
+    pendingMoves?: PendingKanbanColumnMove[];
+  },
 ): KanbanAppState {
   const next = structuredClone(state);
+  const pending = opts?.pendingMoves ?? listPendingKanbanColumnMoves();
   const seenOnBoard = new Map<string, Set<string>>();
   const parkedByBoard = new Map(
     (next.boards || []).map((b) => [b.id, parkedLinkedOrderIds(b)] as const),
@@ -106,9 +153,11 @@ export function applyCrmBoardTilesToAppState(
     const board = next.boards.find((b) => b.id === tile.boardId);
     if (!board?.columns.length) continue;
     if (parkedByBoard.get(board.id)?.has(tile.orderId)) continue;
+    const columnTitle =
+      pendingColumnTitleForOrder(tile.orderId, pending) || tile.columnTitle;
     const targetCol = resolveOrderKanbanColumnFromKaitenMirrorTitle(
       board,
-      tile.columnTitle,
+      columnTitle,
     );
     const found = findLinkedOnBoard(next, board.id, tile.orderId);
     if (found) {
@@ -134,11 +183,15 @@ export function applyCrmBoardTilesToAppState(
         urgent: tile.urgent,
         blocked: tile.blocked,
         blockReason: tile.blockReason,
+        checklist: tile.checklist ?? [],
         kaitenCardSortOrder: tile.sortOrder,
         trackLane: tile.trackLane || "",
         createdAt: tile.createdAt || undefined,
+        sourceEmailCount: tile.sourceEmailCount,
       });
       if (tile.stageDueYmd) setKanbanStageDue(card, tile.stageDueYmd);
+      applyTileTimer(card, tile);
+      applyTileChecklist(card, tile);
       card.activity = seedKanbanCreatedActivity(card);
       targetCol.cards.push(card);
     }
@@ -194,5 +247,7 @@ export function applyCrmBoardTilesToAppState(
       sortColumnByCrmOrder(col.cards);
     }
   }
-  return next;
+  const placed = applyPendingKanbanColumnMoves(next, pending);
+  clearPendingMovesConfirmedByTiles(tiles);
+  return placed;
 }

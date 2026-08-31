@@ -1634,6 +1634,12 @@ model Order {
   kanbanParticipantIds               String[]                   @default([])
   /// CRM-канбан: этапный срок YYYY-MM-DD.
   kanbanStageDueYmd                  String?
+  /// CRM-канбан: таймер на карточке (не Kaiten).
+  kanbanTimerStartedAt               DateTime?
+  kanbanTimerDurationMs              Int?
+  kanbanTimerFrozenAt                DateTime?
+  /// CRM-канбан: чеклист linked-карточки (общее для всех сотрудников).
+  kanbanChecklist                    Json?
   /// CRM-канбан: когда плитка менялась (дельта доски).
   kanbanBoardUpdatedAt               DateTime?
   /// Колонка до отметки «Работа отправлена» — снятие галочки возвращает карточку сюда.

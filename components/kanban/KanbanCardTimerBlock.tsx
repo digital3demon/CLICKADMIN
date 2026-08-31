@@ -9,6 +9,7 @@ import {
   kanbanCardTimerRemainingMs,
   kanbanCardTimerTrackFillColor,
 } from "@/lib/kanban/kanban-card-timer";
+import { persistKanbanLinkedCardTimer } from "@/lib/kanban/persist-crm-board-fields-client";
 import { findCard, pushActivity } from "@/lib/kanban/model";
 
 function durationPartsFromMs(ms: number | null | undefined): {
@@ -130,6 +131,7 @@ export function KanbanCardTimerBlock({
         );
       }
       fc.card.updatedAt = new Date().toISOString();
+      persistKanbanLinkedCardTimer(fc.card);
     });
     setSettingsOpen(false);
   };
@@ -143,6 +145,7 @@ export function KanbanCardTimerBlock({
       fc.card.timerFrozenAt = null;
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер сброшен", b.users[0]?.id, b, act);
+      persistKanbanLinkedCardTimer(fc.card);
     });
     setSettingsOpen(false);
   };
@@ -159,6 +162,7 @@ export function KanbanCardTimerBlock({
       fc.card.timerFrozenAt = null;
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер запущен", b.users[0]?.id, b, act);
+      persistKanbanLinkedCardTimer(fc.card);
     });
   };
 
@@ -169,6 +173,7 @@ export function KanbanCardTimerBlock({
       fc.card.timerFrozenAt = new Date().toISOString();
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер оставлен (заморозка отображения)", b.users[0]?.id, b, act);
+      persistKanbanLinkedCardTimer(fc.card);
     });
   };
 
@@ -179,6 +184,7 @@ export function KanbanCardTimerBlock({
       fc.card.timerFrozenAt = null;
       fc.card.updatedAt = new Date().toISOString();
       pushActivity(fc.card, "Таймер снова в отсчёте", b.users[0]?.id, b, act);
+      persistKanbanLinkedCardTimer(fc.card);
     });
   };
 

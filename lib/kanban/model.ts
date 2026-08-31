@@ -1065,6 +1065,9 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
       partial.timerDurationMs === undefined ? null : partial.timerDurationMs ?? null,
     timerFrozenAt:
       partial.timerFrozenAt === undefined ? null : partial.timerFrozenAt ?? null,
+    ...(partial.sourceEmailCount != null && Number.isFinite(partial.sourceEmailCount)
+      ? { sourceEmailCount: Math.max(0, Math.trunc(partial.sourceEmailCount)) }
+      : {}),
   };
 }
 

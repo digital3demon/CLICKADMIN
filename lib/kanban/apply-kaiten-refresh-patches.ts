@@ -14,7 +14,9 @@ import {
   inboundKanbanMembersEmpty,
   shouldKeepLocalKanbanMembers,
 } from "@/lib/kanban/preserve-kanban-card-head";
+import { applyKaitenPositionToKanbanState } from "@/lib/kanban/kaiten-position-to-kanban";
 import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+import { kaitenBlockedMetaFromCard } from "@/lib/kaiten-card-block";
 
 export type KaitenRefreshCardPatch = {
   cardId: string;
@@ -25,6 +27,9 @@ export type KaitenRefreshCardPatch = {
   fingerprint: string;
   unmappedLabels: string[];
   kaitenHead: Record<string, unknown> | null;
+  /** Только кнопка «Обновить»: колонка с Kaiten. */
+  columnTitle?: string | null;
+  sortOrder?: number | null;
 };
 
 /** В ответ API — только asap и due_date как YYYY-MM-DD. Полная карточка Kaiten ломает JSON. */
@@ -39,6 +44,10 @@ export function slimKaitenHeadForPatch(
     const raw = "due_date" in src ? src.due_date : src.dueDate;
     out.due_date = ymdFromKaitenDueDate(raw);
   }
+  const block = kaitenBlockedMetaFromCard(src);
+  out.blocked = block.blocked;
+  if (block.reason) out.block_reason = block.reason;
+  if (block.blockedAtIso) out.blocked_at = block.blockedAtIso;
   return Object.keys(out).length > 0 ? out : null;
 }
 
@@ -91,6 +100,17 @@ export function applyKaitenRefreshPatchesToState(
         cardChanged = true;
       }
       if (cardChanged) changed += 1;
+    }
+    const col = (patch.columnTitle || "").trim();
+    if (col && patch.linkedOrderId) {
+      if (
+        applyKaitenPositionToKanbanState(next, patch.linkedOrderId, {
+          columnTitle: col,
+          sortOrder: patch.sortOrder,
+        })
+      ) {
+        changed += 1;
+      }
     }
   }
   return { state: next, changed };

@@ -605,6 +605,7 @@ export function WorkExampleEditorModal({
                   <WorkExampleHtmlViewer
                     key={f.id}
                     url={`/api/work-examples/${encodeURIComponent(savedId)}/files/${encodeURIComponent(f.id)}`}
+                    convertUrl={`/api/work-examples/${encodeURIComponent(savedId)}/files/${encodeURIComponent(f.id)}/d3d`}
                     fileName={f.fileName}
                   />
                 ))

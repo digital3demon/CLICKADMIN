@@ -91,6 +91,25 @@ describe("applyKaitenHeadFieldsToKanbanCard", () => {
     );
     expect(card.stageDueDate).toBe("2026-08-01");
   });
+
+  it("ставит блок с Kaiten, кириллица в причине", () => {
+    const card = {
+      urgent: false,
+      stageDueDate: "",
+      dueDate: "",
+      blocked: false,
+      blockReason: "",
+      blockedAt: "",
+    };
+    expect(
+      applyKaitenHeadFieldsToKanbanCard(card, {
+        blocked: true,
+        block_reason: "ждём скан из клиники Тындик",
+      }),
+    ).toBe(true);
+    expect(card.blocked).toBe(true);
+    expect(card.blockReason).toBe("ждём скан из клиники Тындик");
+  });
 });
 
 describe("applyKaitenStageDueByOrderId", () => {

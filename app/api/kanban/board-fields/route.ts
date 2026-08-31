@@ -16,6 +16,13 @@ type Body = {
   columnTitle?: unknown;
   sortOrder?: unknown;
   trackLane?: unknown;
+  timerStartedAt?: unknown;
+  timerDurationMs?: unknown;
+  timerFrozenAt?: unknown;
+  blocked?: unknown;
+  blockReason?: unknown;
+  blockedAt?: unknown;
+  checklist?: unknown;
 };
 
 function asIds(raw: unknown): string[] | undefined {
@@ -66,6 +73,38 @@ export async function PATCH(request: Request) {
         : undefined,
     sortOrder: sortOrder !== undefined && Number.isFinite(sortOrder) ? sortOrder : undefined,
     trackLane: typeof body.trackLane === "string" ? body.trackLane : undefined,
+    timerStartedAt:
+      body.timerStartedAt === null
+        ? null
+        : typeof body.timerStartedAt === "string"
+          ? body.timerStartedAt
+          : undefined,
+    timerDurationMs:
+      body.timerDurationMs === null
+        ? null
+        : typeof body.timerDurationMs === "number"
+          ? body.timerDurationMs
+          : undefined,
+    timerFrozenAt:
+      body.timerFrozenAt === null
+        ? null
+        : typeof body.timerFrozenAt === "string"
+          ? body.timerFrozenAt
+          : undefined,
+    blocked: typeof body.blocked === "boolean" ? body.blocked : undefined,
+    blockReason:
+      body.blockReason === null
+        ? null
+        : typeof body.blockReason === "string"
+          ? body.blockReason
+          : undefined,
+    blockedAt:
+      body.blockedAt === null
+        ? null
+        : typeof body.blockedAt === "string"
+          ? body.blockedAt
+          : undefined,
+    checklist: body.checklist !== undefined ? body.checklist : undefined,
   });
   if (!ok) {
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });

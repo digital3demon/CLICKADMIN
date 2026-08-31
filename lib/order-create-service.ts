@@ -20,6 +20,11 @@ import {
 import { ensureKaitenDirectory } from "@/lib/kaiten-directory-bootstrap";
 import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
+import { resolveOrderCreateKaitenMode } from "@/lib/order-create-kaiten-mode";
+import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
+
+/** Совпадает с KAITEN_MIRROR_DEFAULT_QUEUE_TITLE — без импорта тяжёлого model. */
+const CRM_DEFAULT_KANBAN_COLUMN_TITLE = "К исполнению";
 import {
   normalizeProstheticsInput,
   prostheticsToJson,
@@ -149,14 +154,13 @@ export type CreateOrderResult =
 export function shouldScheduleKaitenSyncAfterOrderCreate(
   body: CreateOrderBody,
 ): boolean {
-  const isTestOrder = body.isTestOrder === true;
-  const kaitenDecideLater = isTestOrder ? true : Boolean(body.kaitenDecideLater);
-  return (
-    !isTestOrder &&
-    !kaitenDecideLater &&
-    Boolean(String(body.kaitenCardTypeId ?? "").trim()) &&
-    Boolean(String(body.kaitenTrackLane ?? "").trim())
-  );
+  return resolveOrderCreateKaitenMode({
+    isTestOrder: body.isTestOrder === true,
+    kaitenDecideLater: body.kaitenDecideLater,
+    createKanbanWithoutKaiten: body.createKanbanWithoutKaiten,
+    kaitenCardTypeId: body.kaitenCardTypeId,
+    kaitenTrackLane: body.kaitenTrackLane,
+  }).scheduleKaitenSync;
 }
 
 function fail(status: number, error: string): CreateOrderResult {
@@ -297,14 +301,18 @@ export async function createOrderFromBody(
     continuesFromOrderId = rawContinuation;
   }
 
-  const kaitenDecideLater = isTestOrder ? true : Boolean(body.kaitenDecideLater);
-  /** Канбан first: «решу позже» всегда создаёт CRM-карточку; Kaiten не планируется. */
-  const createKanbanWithoutKaiten = isTestOrder
-    ? true
-    : Boolean(kaitenDecideLater);
-  /** Тип/пространство для Kaiten-синка или для CRM-канбана. */
-  const needKaitenPlacementFields =
-    !isTestOrder && (!kaitenDecideLater || createKanbanWithoutKaiten);
+  const kaitenSyncGate = await gateKaitenSyncForTenant(ordersPrisma, tenantId);
+  const kaitenMode = resolveOrderCreateKaitenMode({
+    isTestOrder,
+    kaitenDecideLater: body.kaitenDecideLater,
+    createKanbanWithoutKaiten: body.createKanbanWithoutKaiten,
+    kaitenIntegrationOff: kaitenSyncGate.skip,
+    kaitenCardTypeId: body.kaitenCardTypeId,
+    kaitenTrackLane: body.kaitenTrackLane,
+  });
+  const kaitenDecideLater = kaitenMode.kaitenDecideLater;
+  const createKanbanWithoutKaiten = kaitenMode.createKanbanWithoutKaiten;
+  const needKaitenPlacementFields = kaitenMode.needPlacementFields;
   let kaitenCardTypeId: string | null = null;
   let kaitenTrackLane: KaitenTrackLane | null = null;
   let dueToAdminsAt: Date | null = null;
@@ -329,15 +337,14 @@ export async function createOrderFromBody(
 
     kaitenCardTypeId = cardType.id;
     kaitenTrackLane = kt as KaitenTrackLane;
-    const kaitenCfg0 = getKaitenEnvConfig();
-    if (!kaitenCfg0?.boardByLane[kaitenTrackLane]) {
-      return fail(
-        400,
-        "Выбранное пространство Кайтен не настроено: в .env задайте KAITEN_*_BOARD_ID или KAITEN_*_SPACE_ID (число из URL …/space/ЧИСЛО/…) и KAITEN_*_COLUMN_TO_EXECUTION_ID.",
-      );
-    }
-
-    if (!createKanbanWithoutKaiten) {
+    if (kaitenMode.needKaitenEnvBoards) {
+      const kaitenCfg0 = getKaitenEnvConfig();
+      if (!kaitenCfg0?.boardByLane[kaitenTrackLane]) {
+        return fail(
+          400,
+          "Выбранное пространство Кайтен не настроено: в .env задайте KAITEN_*_BOARD_ID или KAITEN_*_SPACE_ID (число из URL …/space/ЧИСЛО/…) и KAITEN_*_COLUMN_TO_EXECUTION_ID.",
+        );
+      }
       const kaitenCfg = await withResolvedKaitenBoards(kaitenCfg0);
       const laneTarget = kaitenCfg.boardByLane[kaitenTrackLane];
       if (laneTarget?.boardId == null) {
@@ -491,6 +498,9 @@ export async function createOrderFromBody(
     createKanbanWithoutKaiten,
     kaitenCardTypeId: needKaitenPlacementFields ? kaitenCardTypeId : null,
     kaitenTrackLane: needKaitenPlacementFields ? kaitenTrackLane : null,
+    kaitenColumnTitle: needKaitenPlacementFields
+      ? CRM_DEFAULT_KANBAN_COLUMN_TITLE
+      : null,
     kaitenAdminDueHasTime,
     dueToAdminsHasTime,
     kaitenCardTitleLabel: needKaitenPlacementFields

@@ -12,7 +12,7 @@ import {
   shouldKeepLocalKanbanMembers,
   shouldKeepLocalKanbanStageDue,
 } from "@/lib/kanban/preserve-kanban-card-head";
-import type { KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+import type { ChecklistItem, KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 
 export const KANBAN_CARD_HEADS_CACHE_KEY = "kanban-card-heads-v1";
 
@@ -21,11 +21,34 @@ export type KanbanCardHeadCacheRow = {
   participants: string[];
   fingerprint: string | null;
   stageDue: string;
+  timerStartedAt?: string | null;
+  timerDurationMs?: number | null;
+  timerFrozenAt?: string | null;
+  checklist?: ChecklistItem[];
+  /** Колонка CRM после переноса — F5 не откатывает, пока плитка/Kaiten догоняют. */
+  columnTitle?: string;
 };
+
+function slimChecklist(items: readonly ChecklistItem[] | undefined): ChecklistItem[] {
+  return (items || []).slice(0, 60).map((row) => ({
+    id: String(row.id || ""),
+    text: String(row.text || "").slice(0, 400),
+    completed: Boolean(row.completed),
+    completedAt: row.completedAt ?? null,
+    assigneeId: row.assigneeId ?? null,
+  }));
+}
+
+function headHasTimer(row: Pick<KanbanCardHeadCacheRow, "timerStartedAt" | "timerDurationMs">): boolean {
+  return (
+    Boolean(row.timerStartedAt) ||
+    (row.timerDurationMs != null && row.timerDurationMs > 0)
+  );
+}
 
 export type KanbanCardHeadsCache = Record<string, KanbanCardHeadCacheRow>;
 
-function cacheKeyForCard(card: KanbanCard): string | null {
+function cacheKeyForCard(card: Pick<KanbanCard, "id" | "linkedOrderId">): string | null {
   const oid = String(card.linkedOrderId || "").trim();
   if (oid) return `oid:${oid}`;
   const id = String(card.id || "").trim();
@@ -36,18 +59,37 @@ export function collectKanbanCardHeadsCache(
   state: KanbanAppState,
 ): KanbanCardHeadsCache {
   const out: KanbanCardHeadsCache = {};
-  forEachKanbanCardInState(state, (card) => {
-    const key = cacheKeyForCard(card);
-    if (!key) return;
-    const stageDue = getKanbanStageDue(card);
-    if (!hasKanbanCardMembers(card) && !stageDue) return;
-    out[key] = {
-      assignees: [...(card.assignees || [])],
-      participants: [...(card.participants || [])],
-      fingerprint: card.kaitenMembersFingerprint ?? null,
-      stageDue,
-    };
-  });
+  for (const board of state.boards ?? []) {
+    for (const col of board.columns ?? []) {
+      for (const card of col.cards ?? []) {
+        const key = cacheKeyForCard(card);
+        if (!key) continue;
+        const stageDue = getKanbanStageDue(card);
+        const checklist = slimChecklist(card.checklist);
+        const columnTitle = (col.title || "").trim();
+        if (
+          !hasKanbanCardMembers(card) &&
+          !stageDue &&
+          !headHasTimer(card) &&
+          checklist.length === 0 &&
+          !columnTitle
+        ) {
+          continue;
+        }
+        out[key] = {
+          assignees: [...(card.assignees || [])],
+          participants: [...(card.participants || [])],
+          fingerprint: card.kaitenMembersFingerprint ?? null,
+          stageDue,
+          timerStartedAt: card.timerStartedAt ?? null,
+          timerDurationMs: card.timerDurationMs ?? null,
+          timerFrozenAt: card.timerFrozenAt ?? null,
+          checklist,
+          columnTitle,
+        };
+      }
+    }
+  }
   return out;
 }
 
@@ -72,6 +114,11 @@ export function mergeKanbanCardHeadsCache(
         participants: [...(row.participants || [])],
         fingerprint: row.fingerprint ?? null,
         stageDue: incomingDue,
+        timerStartedAt: row.timerStartedAt ?? null,
+        timerDurationMs: row.timerDurationMs ?? null,
+        timerFrozenAt: row.timerFrozenAt ?? null,
+        checklist: slimChecklist(row.checklist),
+        columnTitle: (row.columnTitle || "").trim(),
       };
       continue;
     }
@@ -86,6 +133,12 @@ export function mergeKanbanCardHeadsCache(
         ? (row.fingerprint ?? null)
         : (prev.fingerprint ?? row.fingerprint ?? null),
       stageDue: incomingDue || prev.stageDue || "",
+      timerStartedAt: headHasTimer(row) ? row.timerStartedAt ?? null : prev.timerStartedAt ?? null,
+      timerDurationMs: headHasTimer(row) ? row.timerDurationMs ?? null : prev.timerDurationMs ?? null,
+      timerFrozenAt: headHasTimer(row) ? row.timerFrozenAt ?? null : prev.timerFrozenAt ?? null,
+      checklist:
+        (row.checklist?.length ?? 0) > 0 ? slimChecklist(row.checklist) : slimChecklist(prev.checklist),
+      columnTitle: (row.columnTitle || "").trim() || prev.columnTitle || "",
     };
   }
   return out;
@@ -120,6 +173,40 @@ export function upsertKanbanCardHeadCache(card: KanbanCard): void {
       participants: [...(card.participants || [])],
       fingerprint: card.kaitenMembersFingerprint ?? null,
       stageDue: getKanbanStageDue(card),
+      timerStartedAt: card.timerStartedAt ?? null,
+      timerDurationMs: card.timerDurationMs ?? null,
+      timerFrozenAt: card.timerFrozenAt ?? null,
+      checklist: slimChecklist(card.checklist),
+      columnTitle: existing[key]?.columnTitle || "",
+    };
+    writeHeadsCache(existing);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+export function upsertKanbanCardColumnCache(
+  card: Pick<KanbanCard, "id" | "linkedOrderId">,
+  columnTitle: string,
+): void {
+  if (typeof window === "undefined") return;
+  const title = columnTitle.trim();
+  if (!title) return;
+  try {
+    const key = cacheKeyForCard(card);
+    if (!key) return;
+    const existing = loadKanbanCardHeadsCache() ?? {};
+    const prev = existing[key];
+    existing[key] = {
+      assignees: [...(prev?.assignees || [])],
+      participants: [...(prev?.participants || [])],
+      fingerprint: prev?.fingerprint ?? null,
+      stageDue: prev?.stageDue || "",
+      timerStartedAt: prev?.timerStartedAt ?? null,
+      timerDurationMs: prev?.timerDurationMs ?? null,
+      timerFrozenAt: prev?.timerFrozenAt ?? null,
+      checklist: slimChecklist(prev?.checklist),
+      columnTitle: title,
     };
     writeHeadsCache(existing);
   } catch {
@@ -303,6 +390,16 @@ export function applyKanbanCardHeadsCache(
     }
     if (shouldKeepLocalKanbanStageDue(row.stageDue, getKanbanStageDue(card))) {
       setKanbanStageDue(card, row.stageDue);
+      changed = true;
+    }
+    if (headHasTimer(row) && !headHasTimer(card)) {
+      card.timerStartedAt = row.timerStartedAt ?? null;
+      card.timerDurationMs = row.timerDurationMs ?? null;
+      card.timerFrozenAt = row.timerFrozenAt ?? null;
+      changed = true;
+    }
+    if ((row.checklist?.length ?? 0) > 0 && (card.checklist?.length ?? 0) === 0) {
+      card.checklist = slimChecklist(row.checklist);
       changed = true;
     }
   });

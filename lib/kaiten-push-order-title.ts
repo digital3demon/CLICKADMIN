@@ -6,9 +6,11 @@ import {
 } from "@/lib/order-continuation-display";
 import { getKaitenRestAuth, kaitenPatchCard } from "@/lib/kaiten-rest";
 import { getClientsPrisma, getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 import { invalidateKaitenSnapshotCache } from "@/lib/kaiten-snapshot-cache";
 
 type HeadSelect = {
+  tenantId: string;
   kaitenCardId: number | null;
   doctorId: string;
   kaitenCardTypeId: string | null;
@@ -41,6 +43,7 @@ async function loadOrderForKaitenHead(
   return prisma.order.findUnique({
     where: { id: orderId },
     select: {
+      tenantId: true,
       kaitenCardId: true,
       doctorId: true,
       kaitenCardTypeId: true,
@@ -75,6 +78,7 @@ async function loadOrderForKaitenHead(
 }
 
 async function computeKaitenHeadForOrder(orderId: string): Promise<{
+  tenantId: string;
   kaitenCardId: number | null;
   title: string;
   titleManual: boolean;
@@ -129,6 +133,7 @@ async function computeKaitenHeadForOrder(orderId: string): Promise<{
   );
 
   return {
+    tenantId: order.tenantId,
     kaitenCardId: order.kaitenCardId,
     title,
     titleManual: order.kaitenCardTitleManual,
@@ -203,7 +208,9 @@ export async function pushKaitenCardTitleForOrderIfLinked(
     autoDescription: true,
   };
 
-  if (!auth || !head.kaitenCardId) {
+  const prisma = await getOrdersPrisma();
+  const integrationGate = await gateKaitenSyncForTenant(prisma, head.tenantId);
+  if (integrationGate.skip || !auth || !head.kaitenCardId) {
     await persistOrderKaitenHeadMirrors(orderId, head, persistOpts);
     return {
       ok: true,

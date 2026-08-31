@@ -3,6 +3,8 @@
 export const WORK_EXAMPLE_TRASH_DAYS = 5;
 export const WORK_EXAMPLE_TRASH_MS = WORK_EXAMPLE_TRASH_DAYS * 24 * 60 * 60 * 1000;
 export const WORK_EXAMPLE_MAX_FILE_BYTES = 25 * 1024 * 1024;
+/** CLI d3d-html-export: AGENTS.md рекомендует 120–300 с. */
+export const D3D_HTML_EXPORT_TIMEOUT_MS = 300_000;
 export const WORK_EXAMPLE_MAX_FILES_PER_UPLOAD = 40;
 
 export const WORK_EXAMPLE_FILE_KINDS = ["PHOTO", "CAD", "FILE"] as const;

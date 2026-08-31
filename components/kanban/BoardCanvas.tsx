@@ -62,6 +62,7 @@ import {
   IconBrick,
   IconDots,
   IconGrip,
+  IconMail,
   IconPen,
   IconPlus,
   IconTrash,
@@ -458,6 +459,15 @@ function KanbanCardView({
                       </span>
                     ) : null}
                   </>
+                ) : null}
+                {(card.sourceEmailCount ?? 0) > 0 ? (
+                  <span
+                    className="mb-0.5 inline-flex h-[1.125rem] w-[1.125rem] shrink-0 items-center justify-center text-[var(--kanban-text-muted)]"
+                    title={`Письма наряда (${card.sourceEmailCount})`}
+                    aria-label="Письма наряда"
+                  >
+                    <IconMail className="h-[1.125rem] w-[1.125rem]" />
+                  </span>
                 ) : null}
                 <KanbanTimerIcon
                   card={card}

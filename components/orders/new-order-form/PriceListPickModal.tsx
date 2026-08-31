@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { PriceListTabbedBody } from "@/components/price-list/PriceListTabbedBody";
+import {
+  fetchPriceListItemsCached,
+  invalidatePriceListItemsClientCache,
+  priceListItemsCacheKey,
+} from "@/lib/pricing/price-list-items-client-cache";
 
 export type PriceListPickRow = {
   id: string;
@@ -66,6 +71,7 @@ export function PriceListPickModal({
   const [creating, setCreating] = useState(false);
   const [pickedCount, setPickedCount] = useState(0);
   const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -78,24 +84,31 @@ export function PriceListPickModal({
     setNewPriceRub("");
     setPickedCount(0);
     setPickedIds(new Set());
+    const cid = clinicId?.trim() || "";
+    const did = doctorId?.trim() || "";
+    const key = priceListItemsCacheKey({
+      slim: true,
+      clinicId: cid,
+      doctorId: did,
+    });
     let cancelled = false;
-    (async () => {
+    setLoading(true);
+    void (async () => {
       try {
-        const hasClinic = Boolean(clinicId && clinicId.trim());
-        const hasDoctor = Boolean(doctorId && doctorId.trim());
-        const qs =
-          hasClinic || hasDoctor
-            ? `?${new URLSearchParams({
-                ...(hasClinic ? { clinicId: clinicId!.trim() } : {}),
-                ...(hasDoctor ? { doctorId: doctorId!.trim() } : {}),
-              }).toString()}`
-            : "";
-        const res = await fetch(`/api/price-list-items${qs}`);
-        if (!res.ok) throw new Error("fail");
-        const data = (await res.json()) as PriceListPickRow[];
-        if (!cancelled) setItems(Array.isArray(data) ? data : []);
+        const data = await fetchPriceListItemsCached(key, async () => {
+          const qs = new URLSearchParams({ slim: "1" });
+          if (cid) qs.set("clinicId", cid);
+          if (did) qs.set("doctorId", did);
+          const res = await fetch(`/api/price-list-items?${qs.toString()}`);
+          if (!res.ok) throw new Error("fail");
+          const json = (await res.json()) as PriceListPickRow[];
+          return Array.isArray(json) ? json : [];
+        });
+        if (!cancelled) setItems(data);
       } catch {
         if (!cancelled) setLoadError("Не удалось загрузить прайс");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -165,6 +178,7 @@ export function PriceListPickModal({
         setCreateError("error" in data && data.error ? data.error : "Не удалось создать позицию");
         return;
       }
+      invalidatePriceListItemsClientCache();
       const row = data as CreatedPriceListItemResponse;
       const pickRow: PriceListPickRow = {
         id: row.id,
@@ -276,6 +290,8 @@ export function PriceListPickModal({
         <div className="mt-3 flex min-h-0 min-h-[40dvh] flex-1 flex-col overflow-hidden">
           {loadError ? (
             <p className="text-sm text-red-600">{loadError}</p>
+          ) : loading && items.length === 0 ? (
+            <p className="text-sm text-[var(--text-muted)]">Загрузка прайса…</p>
           ) : filtered.length === 0 ? (
             <p className="text-sm text-[var(--text-muted)]">
               {items.length === 0

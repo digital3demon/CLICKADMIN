@@ -2,31 +2,34 @@
 
 import { useEffect, useRef, useState } from "react";
 import { injectD3dEmbedLiteIntoDocument } from "@/lib/work-examples/d3d-embed-lite";
-import {
-  D3D_SCENE_TEMPLATE_PATH,
-  renderExocadHtmlAsD3dDocument,
-} from "@/lib/work-examples/d3d-html-reexport";
+import { D3D_HTML_EXPORT_TIMEOUT_MS } from "@/lib/work-examples/constants";
 import { workExampleHtmlSceneKind } from "@/lib/work-examples/html-scene-kind";
 
-/** Хост по 3d viever/embed/AGENTS.md: iframe D3D HTML + lite-hide.css. */
+/**
+ * Хост по 3d viever/embed/AGENTS.md: детект → CLI convert на сервере → iframe только D3D HTML.
+ * Браузер Exocad не парсит.
+ */
 export function WorkExampleHtmlViewer({
   url,
+  convertUrl,
   fileName,
   className,
 }: {
   url: string;
+  convertUrl?: string;
   fileName: string;
   className?: string;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [phase, setPhase] = useState("Загрузка сцены D3Dviewer…");
 
   useEffect(() => {
     let cancelled = false;
-    const blobRef = { current: null as string | null };
     setSrc(null);
     setErr(null);
+    setPhase("Загрузка сцены D3Dviewer…");
 
     void (async () => {
       try {
@@ -43,40 +46,45 @@ export function WorkExampleHtmlViewer({
           setSrc(url);
           return;
         }
-        const full =
-          r.status === 206 || peek.length < 60_000
-            ? await (
-                await fetch(url, {
-                  credentials: "include",
-                  signal: AbortSignal.timeout(120_000),
-                })
-              ).text()
-            : peek;
-        if (cancelled) return;
-        if (workExampleHtmlSceneKind(full) !== "exocad") {
-          throw new Error("не D3D и не exocad HTML");
+        if (kind !== "exocad") {
+          throw new Error("файл не D3D и не Exocad HTML");
         }
-        const tplRes = await fetch(D3D_SCENE_TEMPLATE_PATH, {
-          signal: AbortSignal.timeout(30_000),
+        if (!convertUrl) {
+          throw new Error("Exocad HTML нужно сконвертировать на сервере");
+        }
+        setPhase("Конвертация Exocad → D3D…");
+        const conv = await fetch(convertUrl, {
+          method: "POST",
+          credentials: "include",
+          signal: AbortSignal.timeout(D3D_HTML_EXPORT_TIMEOUT_MS),
         });
-        if (!tplRes.ok) throw new Error("нет шаблона D3Dviewer");
-        const doc = await renderExocadHtmlAsD3dDocument(full, fileName, await tplRes.text());
+        const body = (await conv.json().catch(() => ({}))) as {
+          error?: string;
+          url?: string;
+        };
         if (cancelled) return;
-        blobRef.current = URL.createObjectURL(
-          new Blob([doc], { type: "text/html;charset=utf-8" }),
-        );
-        setSrc(blobRef.current);
+        if (!conv.ok) {
+          throw new Error(body.error || `конвертация HTTP ${conv.status}`);
+        }
+        const next = body.url || url;
+        setSrc(`${next}${next.includes("?") ? "&" : "?"}v=${Date.now()}`);
       } catch (e) {
         if (cancelled) return;
-        setErr(e instanceof Error ? e.message : "не удалось открыть сцену");
+        const name = e instanceof Error ? e.name : "";
+        const message =
+          name === "TimeoutError" || name === "AbortError"
+            ? "конвертация заняла слишком много времени"
+            : e instanceof Error
+              ? e.message
+              : "не удалось открыть сцену";
+        setErr(message);
       }
     })();
 
     return () => {
       cancelled = true;
-      if (blobRef.current) URL.revokeObjectURL(blobRef.current);
     };
-  }, [url, fileName]);
+  }, [url, convertUrl, fileName]);
 
   const injectLite = () => {
     const doc = iframeRef.current?.contentDocument;
@@ -84,7 +92,7 @@ export function WorkExampleHtmlViewer({
     try {
       injectD3dEmbedLiteIntoDocument(doc);
     } catch {
-      /* cross-origin — lite уже в HTML при реэкспорте */
+      /* cross-origin — lite уже в HTML после convert */
     }
   };
 
@@ -112,9 +120,7 @@ export function WorkExampleHtmlViewer({
     <div
       className={`${shell} ${frameH} flex items-center justify-center px-4 text-center text-sm text-white/70`}
     >
-      {err
-        ? `Не удалось открыть «${fileName}»: ${err}`
-        : "Загрузка сцены D3Dviewer…"}
+      {err ? `Не удалось открыть «${fileName}»: ${err}` : phase}
     </div>
   );
 }
