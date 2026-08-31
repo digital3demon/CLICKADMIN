@@ -1,13 +1,9 @@
 "use client";
 
-import { CrmModuleTitleLoading } from "@/components/layout/CrmModuleTitleLoading";
+import { CrmModuleListLoading } from "@/components/layout/CrmModuleListLoading";
 
-/** Маркер loading.tsx: keep-alive показывает прошлую живую страницу, иначе только заголовок. */
+/** Совместимость: тот же клиентский маркер, что loading.tsx. */
 export function CrmModuleListSnapshot({ title }: { title: string }) {
-  return (
-    <div data-crm-module-list-loading={title}>
-      <CrmModuleTitleLoading title={title} />
-    </div>
-  );
+  return <CrmModuleListLoading title={title} />;
 }
 CrmModuleListSnapshot.isCrmListLoading = true;

@@ -1,8 +1,7 @@
-import { CrmModuleListSnapshot } from "@/components/layout/CrmModuleListSnapshot";
+"use client";
 
-function Loading() {
-  return <CrmModuleListSnapshot title="Заказы" />;
+import { CrmModuleListLoading } from "@/components/layout/CrmModuleListLoading";
+
+export default function Loading() {
+  return <CrmModuleListLoading title="Заказы" />;
 }
-Loading.isCrmListLoading = true;
-
-export default Loading;
