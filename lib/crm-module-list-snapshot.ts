@@ -4,9 +4,11 @@
  * TTL отсекает протухший JSON внутри той же вкладки.
  */
 
-export const CRM_MODULE_LIST_SNAPSHOT_PREFIX = "dental-crm:list-snap:v1:";
+export const CRM_MODULE_LIST_SNAPSHOT_PREFIX = "dental-crm:list-snap:v2:";
 export const CRM_MODULE_LIST_SNAPSHOT_TTL_MS = 2 * 60 * 60 * 1000;
 export const CRM_MODULE_LIST_SNAPSHOT_MAX_ROWS = 150;
+/** Сколько рядов tbody оставляем в HTML-кадре (шапка и фильтры целиком). */
+export const CRM_MODULE_LIST_SNAPSHOT_MAX_BODY_ROWS = 80;
 export const CRM_MODULE_LIST_PREFETCH_KEY = "dental-crm:list-prefetch:v1";
 export const CRM_MODULE_LIST_PREFETCH_MAX = 2;
 
@@ -23,7 +25,13 @@ export type CrmModuleListSnapshotRow = {
 export type CrmModuleListSnapshot = {
   savedAt: number;
   rows: CrmModuleListSnapshotRow[];
+  /** outerHTML живой страницы (фильтры + таблица), не компактные 6 колонок. */
+  html?: string;
 };
+
+/** Рамка ФинОтдела в loading — как ModuleFrame на живой странице. */
+export const CRM_FINANCE_OFFICE_SNAPSHOT_FRAME =
+  "[&_.module-frame-header]:hidden !px-2 !pb-6 !pt-4 sm:!px-3 sm:!pb-7 sm:!pt-5 md:!px-4 md:!pb-8 md:!pt-6 lg:!px-4 lg:!pb-9 lg:!pt-7";
 
 /** Путь без хвоста `/`; query сортируется, кириллица канонизируется через URLSearchParams. */
 export function crmModuleListSnapshotKey(pathname: string, search: string): string {
@@ -46,18 +54,24 @@ export function parseCrmModuleListSnapshot(
   if (raw == null || raw.trim() === "") return null;
   try {
     const parsed = JSON.parse(raw) as CrmModuleListSnapshot;
+    const html =
+      typeof parsed.html === "string" && parsed.html.trim() !== ""
+        ? parsed.html
+        : undefined;
+    const rowsOk = Array.isArray(parsed.rows);
     if (
       !parsed ||
       typeof parsed.savedAt !== "number" ||
       !Number.isFinite(parsed.savedAt) ||
-      !Array.isArray(parsed.rows)
+      (!rowsOk && !html)
     ) {
       return null;
     }
     if (now - parsed.savedAt > CRM_MODULE_LIST_SNAPSHOT_TTL_MS) return null;
     return {
       savedAt: parsed.savedAt,
-      rows: compactCrmModuleListRows(parsed.rows),
+      rows: rowsOk ? compactCrmModuleListRows(parsed.rows) : [],
+      html,
     };
   } catch {
     return null;
@@ -145,6 +159,14 @@ export function readCrmModuleListPrefetchHrefs(): string[] {
   } catch {
     return [];
   }
+}
+
+/** Список модуля для keep-alive: без карточки наряда и без истории. Query не входит — возвращаем последний визит модуля. */
+export function crmModuleListKeepAlivePath(pathname: string): string | null {
+  const p = (pathname.split("?")[0] || "/").replace(/\/+$/, "") || "/";
+  if (p === "/finance-office") return p;
+  if (p === "/orders" || p === "/shipments") return p;
+  return null;
 }
 
 export function crmModuleTitleForPath(pathname: string): string {

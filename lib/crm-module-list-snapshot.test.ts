@@ -3,6 +3,7 @@ import {
   CRM_MODULE_LIST_SNAPSHOT_MAX_ROWS,
   CRM_MODULE_LIST_SNAPSHOT_TTL_MS,
   compactCrmModuleListRows,
+  crmModuleListKeepAlivePath,
   crmModuleListSnapshotKey,
   crmModuleTitleForPath,
   parseCrmModuleListSnapshot,
@@ -67,6 +68,16 @@ describe("compactCrmModuleListRows", () => {
     expect(compactCrmModuleListRows(rows)).toHaveLength(
       CRM_MODULE_LIST_SNAPSHOT_MAX_ROWS,
     );
+  });
+});
+
+describe("crmModuleListKeepAlivePath", () => {
+  it("списки да, карточка наряда нет; кириллица в query не меняет путь", () => {
+    expect(crmModuleListKeepAlivePath("/finance-office")).toBe("/finance-office");
+    expect(crmModuleListKeepAlivePath("/orders")).toBe("/orders");
+    expect(crmModuleListKeepAlivePath("/orders/abc")).toBeNull();
+    expect(crmModuleListKeepAlivePath("/orders/history")).toBeNull();
+    expect(crmModuleListKeepAlivePath("/kanban")).toBeNull();
   });
 });
 

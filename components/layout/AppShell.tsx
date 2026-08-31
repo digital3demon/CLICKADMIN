@@ -17,6 +17,7 @@ import {
 import { APP_SIDEBAR_W_COLLAPSED } from "@/lib/app-sidebar-collapse";
 import { APP_SIDEBAR_W_EXPANDED } from "@/lib/crm-layout-tiers";
 import { CrmMaintenanceOverlay } from "@/components/layout/CrmMaintenanceOverlay";
+import { CrmModuleKeepAlive } from "@/components/layout/CrmModuleKeepAlive";
 import { Sidebar } from "./Sidebar";
 
 /** Слева от липких полос на mobile: кнопка меню (0.75rem + 2.75rem) + небольшой зазор. */
@@ -146,7 +147,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         ].join(" ")}
         aria-hidden={mobileNavOpen ? true : undefined}
       >
-        {children}
+        <CrmModuleKeepAlive>{children}</CrmModuleKeepAlive>
       </main>
 
       {!permanentRail ? (
