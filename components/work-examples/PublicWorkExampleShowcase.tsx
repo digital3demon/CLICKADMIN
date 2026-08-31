@@ -8,6 +8,7 @@ import {
 import { WorkExampleHtmlViewer } from "@/components/work-examples/WorkExampleHtmlViewer";
 import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import type { WorkExampleCompositionLine } from "@/components/work-examples/types";
+import { withWorkExampleCardPreview } from "@/lib/work-examples/card-preview";
 import { workExamplePhotoCaption } from "@/lib/work-examples/cloud-folder-photo";
 import {
   isWorkExampleViewableHtml,
@@ -126,8 +127,10 @@ export function PublicWorkExampleShowcase({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={fileHref(p.id)}
+                  src={withWorkExampleCardPreview(fileHref(p.id))}
                   alt={caption}
+                  loading="lazy"
+                  decoding="async"
                   className="aspect-square w-full object-cover"
                 />
                 {caption ? (
@@ -177,7 +180,6 @@ export function PublicWorkExampleShowcase({
               <WorkExampleHtmlViewer
                 key={f.id}
                 url={fileHref(f.id)}
-                convertUrl={`${fileHref(f.id)}/d3d`}
                 fileName={f.fileName}
               />
             ))}

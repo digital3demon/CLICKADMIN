@@ -2,8 +2,10 @@ import { workExampleCardPhotoGridCols } from "@/lib/work-examples/card-photo-gri
 
 export function WorkExampleCardPhotoGrid({
   urls,
+  eagerCount = 0,
 }: {
   urls: string[];
+  eagerCount?: number;
 }) {
   if (!urls.length) {
     return (
@@ -21,9 +23,16 @@ export function WorkExampleCardPhotoGrid({
         gridAutoRows: "1fr",
       }}
     >
-      {urls.map((src) => (
+      {urls.map((src, i) => (
         // eslint-disable-next-line @next/next/no-img-element
-        <img key={src} src={src} alt="" className="h-full min-h-0 w-full object-cover" />
+        <img
+          key={src}
+          src={src}
+          alt=""
+          loading={i < eagerCount ? "eager" : "lazy"}
+          decoding="async"
+          className="h-full min-h-0 w-full object-cover"
+        />
       ))}
     </div>
   );

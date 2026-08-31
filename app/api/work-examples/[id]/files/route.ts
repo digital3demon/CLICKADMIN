@@ -14,6 +14,7 @@ import {
   isWorkExampleFormFile,
 } from "@/lib/work-examples/guess-attach-kind";
 import { serializeWorkExample } from "@/lib/work-examples/serialize";
+import { ensureWorkExampleCardPreview } from "@/lib/work-examples/card-preview.server";
 import { newWorkExampleFileId, writeWorkExampleFile } from "@/lib/work-examples/storage";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +113,7 @@ async function postFiles(req: Request, ctxP: Ctx) {
         sortOrder: sort,
       },
     });
+    if (kind === "PHOTO") await ensureWorkExampleCardPreview(diskRelPath);
     sort += 1;
   }
   const row = await ctx.prisma.workExample.findFirstOrThrow({

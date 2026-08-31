@@ -11,10 +11,7 @@ import {
   workExampleDisplayTitle,
   type WorkExampleItem,
 } from "@/components/work-examples/types";
-
-function fileUrl(exampleId: string, fileId: string) {
-  return `/api/work-examples/${encodeURIComponent(exampleId)}/files/${encodeURIComponent(fileId)}`;
-}
+import { workExampleFileHref } from "@/lib/work-examples/card-preview";
 
 export function WorkExamplesApp() {
   const [items, setItems] = useState<WorkExampleItem[]>([]);
@@ -113,7 +110,7 @@ export function WorkExamplesApp() {
     >
       {err ? <p className="mb-3 text-sm text-red-600">{err}</p> : null}
       <ul className="flex flex-wrap gap-4">
-        {items.map((it) => {
+        {items.map((it, cardIndex) => {
           const photos = it.files
             .filter((f) => f.kind === "PHOTO")
             .slice()
@@ -131,7 +128,10 @@ export function WorkExamplesApp() {
                 >
                   <div className="absolute inset-0 overflow-hidden bg-[var(--surface-subtle)]">
                     <WorkExampleCardPhotoGrid
-                      urls={photos.map((p) => fileUrl(it.id, p.id))}
+                      urls={photos.map((p) =>
+                        workExampleFileHref(it.id, p.id, { preview: true }),
+                      )}
+                      eagerCount={cardIndex < 2 ? 4 : 0}
                     />
                   </div>
                 </button>

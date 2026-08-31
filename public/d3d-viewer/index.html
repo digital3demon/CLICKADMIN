@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>D3D Viewer</title>
+  <script type="module" crossorigin src="./assets/index-BiE0o5EN.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DsmQKT2P.css">
+</head>
+<body>
+  <div id="embed-bar">
+    <input id="embed-file" type="file" accept=".html,.htm" />
+    <div id="embed-status">Выберите HTML (Exocad или D3D)</div>
+  </div>
+  <div id="password-gate" class="hidden">
+    <div id="password-card">
+      <div style="font-weight:600;margin-bottom:8px">D3D Viewer</div>
+      <div id="password-hint" style="font-size:12px;color:#aaa">Введите пароль для просмотра</div>
+      <input type="password" id="password-input" autocomplete="current-password" />
+      <button type="button" id="password-submit">Открыть</button>
+      <div id="password-error" style="color:#f88;font-size:11px;margin-top:8px;display:none"></div>
+    </div>
+  </div>
+  <div id="empty-hint">Загрузите HTML — сцена откроется здесь</div>
+  <div id="app" hidden>
+    <div id="viewport-wrap">
+      <canvas id="viewport"></canvas>
+      <aside id="mesh-overlay" class="mesh-overlay mesh-overlay--collapsed">
+        <button type="button" id="mesh-overlay-toggle" class="mesh-overlay__toggle" aria-expanded="false">
+          <span class="mesh-overlay__toggle-label">Объекты</span>
+          <span class="mesh-overlay__toggle-chevron" aria-hidden="true"></span>
+        </button>
+      </aside>
+      <aside id="mesh-panel" class="mesh-panel">
+        <div class="mesh-panel__header">
+          <div class="mesh-panel__header-left">
+            <span id="mesh-panel-title" class="mesh-panel__title">Объекты</span>
+            <button type="button" id="mesh-panel-visibility-all" class="mesh-panel__visibility-all" title="Показать/скрыть все"></button>
+            <button type="button" id="mesh-panel-collapse-all" class="mesh-panel__collapse-all" title="Свернуть/развернуть все"></button>
+          </div>
+        </div>
+        <ul id="mesh-list" class="mesh-panel__list"></ul>
+      </aside>
+      <aside id="articulator-panel" class="articulator-panel articulator-panel--hidden">
+        <div class="articulator-panel__header" id="articulator-header">
+          <button type="button" id="articulator-collapse" class="articulator-panel__collapse" title="Свернуть"></button>
+          <span id="articulator-name" class="articulator-panel__title">Движения в артикуляторе</span>
+        </div>
+        <div class="articulator-panel__body">
+          <div id="articulator-movements" class="articulator-panel__radios"></div>
+          <div class="articulator-panel__jaw">
+            <span class="articulator-panel__label">Движущаяся челюсть</span>
+            <div class="articulator-panel__seg" id="articulator-jaw">
+              <button type="button" data-jaw="lower">нижняя</button>
+              <button type="button" data-jaw="upper">верхняя</button>
+            </div>
+          </div>
+          <button type="button" id="articulator-bite" class="articulator-panel__bite" hidden>Открыть прикус</button>
+          <div class="articulator-panel__slider-head"><span>Для движения переместите слайдер</span></div>
+          <input type="range" id="articulator-frame" class="articulator-panel__slider" min="0" max="0" value="0" />
+        </div>
+      </aside>
+      <aside id="exocad-views-panel" class="exocad-views-panel exocad-views-panel--hidden">
+        <div class="exocad-views-panel__header">
+          <button type="button" id="exocad-views-collapse" class="exocad-views-panel__collapse" title="Свернуть"></button>
+          <span class="exocad-views-panel__title">Виды</span>
+        </div>
+        <div class="exocad-views-panel__body">
+          <ul id="exocad-views-list" class="exocad-views-panel__list"></ul>
+        </div>
+      </aside>
+      <nav id="layers-dock" class="layers-dock" aria-label="Слои">
+        <button type="button" class="layers-dock__btn" data-layer="comments" hidden title="Комментарии">Комментарии</button>
+        <button type="button" class="layers-dock__btn" data-layer="ruler" hidden title="Линейки">Линейки</button>
+        <button type="button" class="layers-dock__btn" data-layer="thickness" hidden title="Толщины">Толщины</button>
+        <button type="button" class="layers-dock__btn" data-layer="marker" hidden title="Маркер">Маркер</button>
+        <span class="layers-dock__sep" data-layers-sep hidden></span>
+        <button type="button" id="vertex-colors" class="layers-dock__btn" hidden title="Цвет">Цвет</button>
+        <button type="button" id="flat-shading" class="layers-dock__btn" title="Плоское">Плоское</button>
+        <button type="button" id="html-contacts" class="layers-dock__btn" hidden title="Контакты">Контакты</button>
+        <button type="button" id="html-contacts-dynamic" class="layers-dock__btn" hidden title="Динамические контакты">Динамич.</button>
+        <button type="button" id="html-contacts-jaws" class="layers-dock__btn" hidden title="Показать на челюсти">На челюсти</button>
+      </nav>
+      <div id="view-orientation-mount" class="view-orientation-widget">
+        <svg class="view-orientation-widget__logo" viewBox="0 0 100 100" aria-hidden="true">
+          <path fill="currentColor" transform="rotate(0 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+          <path fill="currentColor" transform="rotate(45 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+          <path fill="currentColor" transform="rotate(90 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+          <path fill="currentColor" transform="rotate(135 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+          <path fill="currentColor" transform="rotate(180 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+          <path fill="currentColor" transform="rotate(225 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+          <path fill="currentColor" transform="rotate(270 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+          <path fill="currentColor" transform="rotate(315 50 50)" d="M50 7.2 L56.6 19 H43.4 Z"/>
+        </svg>
+      </div>
+      <div id="comment-bubbles"></div>
+      <div id="measure-labels"></div>
+      <div id="watermark"></div>
+      <div id="mobile-sheet-backdrop" hidden></div>
+      <div id="mobile-sheet-meshes" class="mobile-sheet" aria-hidden="true">
+        <div class="mobile-sheet__handle"></div>
+        <div class="mobile-sheet__header">
+          <span id="mobile-mesh-title" class="mobile-sheet__title">Объекты</span>
+          <div class="mobile-sheet__header-actions">
+            <button type="button" id="mobile-mesh-visibility-all" class="mesh-panel__visibility-all" title="Показать/скрыть все"></button>
+            <button type="button" id="mobile-mesh-collapse-all" class="mesh-panel__collapse-all" title="Свернуть/развернуть все"></button>
+          </div>
+        </div>
+        <div class="mobile-sheet__body">
+          <ul id="mobile-mesh-list" class="mesh-panel__list"></ul>
+        </div>
+      </div>
+      <div id="mobile-sheet-layers" class="mobile-sheet" aria-hidden="true">
+        <div class="mobile-sheet__handle"></div>
+        <div class="mobile-sheet__header"><span class="mobile-sheet__title">Слои</span></div>
+        <div class="mobile-sheet__body mobile-sheet__section">
+          <label data-layer-row="comments" hidden><input type="checkbox" id="layer-comments-mobile" checked /> Комментарии</label>
+          <label data-layer-row="ruler" hidden><input type="checkbox" id="layer-ruler-mobile" checked /> Линейки</label>
+          <label data-layer-row="thickness" hidden><input type="checkbox" id="layer-thickness-mobile" checked /> Толщины</label>
+          <label data-layer-row="marker" hidden><input type="checkbox" id="layer-marker-mobile" /> Маркер</label>
+        </div>
+      </div>
+      <div id="mobile-sheet-views" class="mobile-sheet" aria-hidden="true">
+        <div class="mobile-sheet__handle"></div>
+        <div class="mobile-sheet__header"><span class="mobile-sheet__title">Виды камеры</span></div>
+        <div class="mobile-sheet__body"><div id="mobile-views-grid" class="mobile-views-grid"></div></div>
+      </div>
+      <div id="mobile-sheet-articulator" class="mobile-sheet" aria-hidden="true">
+        <div class="mobile-sheet__handle"></div>
+        <div class="mobile-sheet__header"><span class="mobile-sheet__title">Движения в артикуляторе</span></div>
+        <div class="mobile-sheet__body mobile-sheet__section">
+          <div id="articulator-movements-mobile" class="articulator-panel__radios"></div>
+          <div class="articulator-panel__jaw">
+            <span class="articulator-panel__label">Движущаяся челюсть</span>
+            <div class="articulator-panel__seg" id="articulator-jaw-mobile">
+              <button type="button" data-jaw="lower">нижняя</button>
+              <button type="button" data-jaw="upper">верхняя</button>
+            </div>
+          </div>
+          <button type="button" id="articulator-bite-mobile" class="articulator-panel__bite" hidden>Открыть прикус</button>
+          <div class="articulator-panel__slider-head"><span>Для движения переместите слайдер</span></div>
+          <input type="range" id="articulator-frame-mobile" class="articulator-panel__slider" min="0" max="0" value="0" />
+        </div>
+      </div>
+      <div id="mobile-sheet-display" class="mobile-sheet" aria-hidden="true">
+        <div class="mobile-sheet__handle"></div>
+        <div class="mobile-sheet__header"><span class="mobile-sheet__title">Отображение</span></div>
+        <div class="mobile-sheet__body mobile-sheet__section">
+          <div class="mobile-display-row">
+            <span>Отображение</span>
+            <div class="mobile-display-actions">
+              <button type="button" id="vertex-colors-mobile" class="layers-dock__btn" hidden>Цвет</button>
+              <button type="button" id="flat-shading-mobile" class="layers-dock__btn">Плоское</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="mobile-contacts-bar" class="mobile-contacts-bar" hidden>
+        <button type="button" id="html-contacts-mobile" class="mobile-contacts-bar__btn" hidden title="Контакты">Контакты</button>
+        <button type="button" id="html-contacts-dynamic-mobile" class="mobile-contacts-bar__btn" hidden title="Динамические контакты">Динамич.</button>
+        <button type="button" id="html-contacts-jaws-mobile" class="mobile-contacts-bar__btn" hidden title="Показать на челюсти">На челюсти</button>
+      </div>
+      <nav id="mobile-dock" class="mobile-dock" aria-label="Панель инструментов">
+        <div class="mobile-dock__inner">
+          <button type="button" class="mobile-dock__btn" data-mobile-sheet="meshes" title="Объекты" hidden>
+            <span class="mobile-dock__label">Объекты</span>
+          </button>
+          <button type="button" class="mobile-dock__btn" data-mobile-sheet="layers" title="Слои">
+            <span class="mobile-dock__label">Слои</span>
+          </button>
+          <button type="button" class="mobile-dock__btn" data-mobile-sheet="views" title="Виды">
+            <span class="mobile-dock__label">Виды</span>
+          </button>
+          <button type="button" class="mobile-dock__btn" data-mobile-sheet="articulator" title="Артикулятор" hidden>
+            <span class="mobile-dock__label">Артикулятор</span>
+          </button>
+          <button type="button" class="mobile-dock__btn" data-mobile-sheet="display" title="Отображение">
+            <span class="mobile-dock__label">Цвет</span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </div>
+</body>
+</html>

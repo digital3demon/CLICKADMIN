@@ -163,6 +163,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/p/t/")) return true;
   /** Короткая витрина примера работы: /w/{token}. */
   if (pathname.startsWith("/w/")) return true;
+  /** Статика D3D embed (витрина QR без сессии). */
+  if (pathname.startsWith("/d3d-viewer")) return true;
   /** Фото наряда на витрине QR (auth = slug + sticker token внутри роута). */
   if (pathname.startsWith("/api/public/sticker/")) return true;
   if (pathname.startsWith("/api/public/work-examples/")) return true;
@@ -821,6 +823,6 @@ export const config = {
   runtime: "nodejs",
   /** POST вложений не гоняем через middleware: Next клонирует тело и зависает / режет ~10MB. */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/orders/[^/]+/attachments(?:/|$)|api/work-examples/[^/]+/files(?:/|$)|api/work-examples/showcase/logo(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|d3d-viewer(?:/|$)|api/orders/[^/]+/attachments(?:/|$)|api/work-examples/[^/]+/files(?:/|$)|api/public/work-examples/.*/files(?:/|$)|api/work-examples/showcase/logo(?:/|$)|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

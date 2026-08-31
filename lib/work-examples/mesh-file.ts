@@ -1,6 +1,6 @@
 /**
  * Вьювер витрины: STL / PLY / OBJ и HTML.
- * D3D HTML — iframe; Exocad конвертится на сервере (d3d-html-export), не в браузере.
+ * HTML сцены — iframe /d3d-viewer?src=… (браузерный парсер, embed/AGENTS.md).
  * Расширение из имени файла — URL API без суффикса.
  */
 

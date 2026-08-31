@@ -6,7 +6,7 @@ export const WORK_EXAMPLE_TRASH_DAYS = 5;
 export const WORK_EXAMPLE_TRASH_MS = WORK_EXAMPLE_TRASH_DAYS * 24 * 60 * 60 * 1000;
 /** Как вложения наряда: Exocad zip/html часто больше 25 МБ. */
 export const WORK_EXAMPLE_MAX_FILE_BYTES = CRM_UPLOAD_MAX_BYTES;
-/** CLI d3d-html-export: AGENTS.md рекомендует 120–300 с. */
+/** Опциональный CLI. Витрина смотрит HTML в браузере (embed/AGENTS.md). */
 export const D3D_HTML_EXPORT_TIMEOUT_MS = 300_000;
 export const WORK_EXAMPLE_MAX_FILES_PER_UPLOAD = 40;
 

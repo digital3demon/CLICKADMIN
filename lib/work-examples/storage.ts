@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { deleteS3Object, getS3ObjectBytes, isS3StorageEnabled, putS3ObjectBytes } from "@/lib/s3-client";
 import { resolvePathUnderRoot } from "@/lib/storage-path-safe";
+import { workExampleCardPreviewRelPath } from "@/lib/work-examples/card-preview";
 
 /**
  * Upload: лимит как у наряда, таймаут тела у роута, SQLITE_BUSY — повтор на уровне Prisma.
@@ -58,6 +59,23 @@ export async function writeWorkExampleFile(
   return rel;
 }
 
+export async function writeWorkExampleBytesAtRel(
+  diskRelPath: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
+  const rel = String(diskRelPath || "").trim();
+  if (!rel) throw new Error("empty work-example rel");
+  const s3Key = s3KeyFromRelPath(rel);
+  if (s3Key) {
+    await putS3ObjectBytes(s3Key, body, contentType);
+    return;
+  }
+  const abs = absolutePathFromRel(rel);
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await fs.writeFile(abs, body);
+}
+
 export async function readWorkExampleFileBytes(
   diskRelPath: string,
 ): Promise<Buffer | null> {
@@ -78,9 +96,7 @@ export async function readWorkExampleFileBytes(
   }
 }
 
-export async function deleteWorkExampleFileBytes(diskRelPath: string | null): Promise<void> {
-  const rel = String(diskRelPath || "").trim();
-  if (!rel) return;
+async function deleteOneWorkExampleRel(rel: string): Promise<void> {
   const s3Key = s3KeyFromRelPath(rel);
   if (s3Key) {
     await deleteS3Object(s3Key);
@@ -91,4 +107,12 @@ export async function deleteWorkExampleFileBytes(diskRelPath: string | null): Pr
   } catch {
     /* already gone */
   }
+}
+
+export async function deleteWorkExampleFileBytes(diskRelPath: string | null): Promise<void> {
+  const rel = String(diskRelPath || "").trim();
+  if (!rel) return;
+  await deleteOneWorkExampleRel(rel);
+  const previewRel = workExampleCardPreviewRelPath(rel);
+  if (previewRel !== rel) await deleteOneWorkExampleRel(previewRel);
 }

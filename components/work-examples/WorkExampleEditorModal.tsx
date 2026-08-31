@@ -96,12 +96,13 @@ export function WorkExampleEditorModal({
   const [savedId, setSavedId] = useState(item?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [cloudBusy, setCloudBusy] = useState(false);
-  const [cloudNote, setCloudNote] = useState<string | null>(null);
   const [cloudLive, setCloudLive] = useState<Record<string, CloudLinkLive>>({});
   const initialSavedFileCountRef = useRef(item?.files?.length ?? 0);
   const [err, setErr] = useState<string | null>(null);
   const importedCloudRef = useRef<Set<string>>(new Set());
   const cloudInflightRef = useRef<Set<string>>(new Set());
+  const createdAsDraftRef = useRef(false);
+  const [published, setPublished] = useState(Boolean(item));
   const mountCloudSigRef = useRef(serializeWorkExampleCloudUrls(cloudUrls));
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cadInputRef = useRef<HTMLInputElement>(null);
@@ -253,7 +254,7 @@ export function WorkExampleEditorModal({
     }
   };
 
-  const persistMeta = async (): Promise<WorkExampleItem | null> => {
+  const persistMeta = async (opts?: { silentDraft?: boolean }): Promise<WorkExampleItem | null> => {
     const body = {
       title,
       orderId: orderId || null,
@@ -263,6 +264,7 @@ export function WorkExampleEditorModal({
       doctorComments: doc,
     };
     const id = savedId || item?.id || "";
+    const creating = !id;
     const r = await fetch(id ? `/api/work-examples/${id}` : "/api/work-examples", {
       method: id ? "PATCH" : "POST",
       credentials: "include",
@@ -275,6 +277,8 @@ export function WorkExampleEditorModal({
       return null;
     }
     setSavedId(j.item.id);
+    if (creating && opts?.silentDraft) createdAsDraftRef.current = true;
+    if (!opts?.silentDraft) createdAsDraftRef.current = false;
     return j.item;
   };
 
@@ -283,7 +287,6 @@ export function WorkExampleEditorModal({
     urls: string[],
   ): Promise<WorkExampleItem | null> => {
     let latest: WorkExampleItem | null = null;
-    const notes: string[] = [];
     for (const url of urls) {
       const target = parseCloudFolderImportUrl(url);
       if (!target) continue;
@@ -297,7 +300,6 @@ export function WorkExampleEditorModal({
           },
         }));
       }
-      setCloudNote(`Забираю фото с ${cloudFolderProviderLabel(target.provider)}…`);
       try {
         const r = await fetch(`/api/work-examples/${exampleId}/cloud-import`, {
           method: "POST",
@@ -318,13 +320,9 @@ export function WorkExampleEditorModal({
           latest = j.item;
           setSavedFiles(j.item.files);
           setSavedId(j.item.id);
-          if (j.item.title) {
-            setTitle((prev) => prev.trim() || j.item!.title);
-          }
         }
         if (!r.ok) {
           const fail = j.error || "Не удалось забрать фото";
-          notes.push(fail);
           if (liveKey) {
             cloudInflightRef.current.delete(liveKey);
             setCloudLive((prev) => ({
@@ -343,20 +341,13 @@ export function WorkExampleEditorModal({
         if (j.skipped) parts.push(`уже были ${j.skipped}`);
         if (j.truncated) parts.push("лимит 40 за раз");
         const okLabel = parts.length ? parts.join(", ") : "фото загружены";
-        notes.push(
-          parts.length
-            ? `${cloudFolderProviderLabel(target.provider)}: ${parts.join(", ")}`
-            : `${cloudFolderProviderLabel(target.provider)}: готово`,
-        );
         if (liveKey) {
           setCloudLive((prev) => ({
             ...prev,
             [liveKey]: { status: "ok", label: okLabel },
           }));
         }
-        if (j.errors?.length) notes.push(j.errors.slice(0, 3).join(" · "));
       } catch {
-        notes.push("Сеть недоступна при загрузке из облака");
         if (liveKey) {
           cloudInflightRef.current.delete(liveKey);
           setCloudLive((prev) => ({
@@ -366,20 +357,25 @@ export function WorkExampleEditorModal({
         }
       }
     }
-    setCloudNote(notes.filter(Boolean).join(" · ") || null);
     return latest;
   };
 
   const pullCloudNow = async (urls?: string[]) => {
     const list = (urls ?? cloudUrls).map((u) => u.trim()).filter(isImportableCloudFolderUrl);
-    if (!list.length) {
-      setCloudNote("Вставьте ссылку на папку Google Drive или Яндекс Диска");
-      return;
+    if (!list.length) return;
+    for (const url of list) {
+      const key = cloudImportKey(url);
+      if (!key) continue;
+      cloudInflightRef.current.add(key);
+      setCloudLive((prev) => ({
+        ...prev,
+        [key]: { status: "detecting", label: "Определяю папку…" },
+      }));
     }
     setCloudBusy(true);
     setErr(null);
     try {
-      const next = await persistMeta();
+      const next = await persistMeta({ silentDraft: true });
       if (!next) {
         for (const url of list) {
           const key = cloudImportKey(url);
@@ -387,13 +383,12 @@ export function WorkExampleEditorModal({
           cloudInflightRef.current.delete(key);
           setCloudLive((prev) => ({
             ...prev,
-            [key]: { status: "err", label: "Не удалось сохранить карточку" },
+            [key]: { status: "err", label: "Не удалось начать загрузку" },
           }));
         }
         return;
       }
-      const imported = await importCloudFolders(next.id, list);
-      if (imported) onSaved(imported);
+      await importCloudFolders(next.id, list);
     } catch {
       setErr("Не удалось забрать фото из облака");
     } finally {
@@ -493,6 +488,8 @@ export function WorkExampleEditorModal({
       }
       setPending([]);
       setSavedFiles(saved.files);
+      createdAsDraftRef.current = false;
+      setPublished(true);
       onSaved(saved);
       onClose();
     } finally {
@@ -518,7 +515,7 @@ export function WorkExampleEditorModal({
       const j = (await g.json()) as { item?: WorkExampleItem };
       if (j.item) {
         setSavedFiles(j.item.files);
-        onSaved(j.item);
+        if (published) onSaved(j.item);
       }
     } finally {
       setBusy(false);
@@ -555,9 +552,22 @@ export function WorkExampleEditorModal({
   );
   const shouldConfirmClose = isEdit ? changedFromSaved : hasFormContent;
 
+  const discardUnpublishedDraft = async () => {
+    const id = savedId;
+    if (!createdAsDraftRef.current || !id || isEdit) return;
+    createdAsDraftRef.current = false;
+    await fetch(`/api/work-examples/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    }).catch(() => undefined);
+  };
+
   const requestClose = () => {
+    const leave = () => {
+      void discardUnpublishedDraft().finally(onClose);
+    };
     if (!shouldConfirmClose) {
-      onClose();
+      leave();
       return;
     }
     if (
@@ -565,7 +575,7 @@ export function WorkExampleEditorModal({
         "Закрыть окно? Несохранённые название, ссылки и файлы пропадут.",
       )
     ) {
-      onClose();
+      leave();
     }
   };
 
@@ -574,6 +584,7 @@ export function WorkExampleEditorModal({
       className="fixed inset-0 isolate z-[400] flex items-center justify-center bg-black/55 p-3 sm:p-6"
       role="dialog"
       aria-modal
+      aria-labelledby="work-example-title-label"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) requestClose();
       }}
@@ -613,32 +624,33 @@ export function WorkExampleEditorModal({
           }
         }}
       >
-        <header className="flex items-center justify-between gap-3 border-b border-[var(--card-border)] px-4 py-3">
-          <h2 className="text-sm font-medium text-[var(--text-muted)]">
-            {isEdit ? "Пример работы" : "Новый пример в портфолио"}
-          </h2>
+        <header className="flex items-start gap-3 border-b border-[var(--card-border)] px-4 py-3">
+          <label className="min-w-0 flex-1">
+            <span
+              id="work-example-title-label"
+              className="mb-1.5 block text-sm font-semibold text-[var(--text-strong)]"
+            >
+              Введите название для портфолио
+            </span>
+            <input
+              className="min-h-12 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2.5 text-base text-[var(--text-strong)] outline-none placeholder:text-[var(--text-placeholder)]"
+              placeholder="Как назовут работу на витрине"
+              value={title}
+              maxLength={WORK_EXAMPLE_TITLE_MAX}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus={!isEdit}
+              aria-labelledby="work-example-title-label"
+            />
+          </label>
           <button
             type="button"
-            className="shrink-0 text-sm text-[var(--text-muted)] hover:text-[var(--text-strong)]"
+            className="mt-7 shrink-0 text-sm text-[var(--text-muted)] hover:text-[var(--text-strong)]"
             onClick={requestClose}
           >
             Закрыть
           </button>
         </header>
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3">
-          <label className="block shrink-0">
-            <span className="mb-1 block text-sm font-semibold text-[var(--text-strong)]">
-              Введите название для портфолио
-            </span>
-            <input
-              className="min-h-11 w-full rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-base font-medium text-[var(--text-strong)] outline-none placeholder:font-normal placeholder:text-[var(--text-placeholder)]"
-              placeholder="Например: коронка 26, цирконий"
-              value={title}
-              maxLength={WORK_EXAMPLE_TITLE_MAX}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus={!isEdit}
-            />
-          </label>
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1">
               <div className="flex min-h-10 items-center rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] px-3">
@@ -750,9 +762,22 @@ export function WorkExampleEditorModal({
                       onChange={(e) => setCloudUrlAt(i, e.target.value)}
                       aria-label={i === 0 ? "Ссылка на облако" : `Ссылка на облако ${i + 1}`}
                     />
-                    {isImportableCloudFolderUrl(href) &&
-                    live?.status !== "detecting" &&
-                    live?.status !== "importing" ? (
+                    {live?.status === "detecting" || live?.status === "importing" ? (
+                      <span className="ml-2 flex shrink-0 items-center gap-1.5 text-xs font-medium text-[var(--sidebar-blue)]">
+                        <CloudLinkLiveDot status={live.status} />
+                        {live.status === "detecting" ? "определяю…" : "загружаю фото…"}
+                      </span>
+                    ) : live?.status === "ok" ? (
+                      <span className="ml-2 flex shrink-0 items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        <CloudLinkLiveDot status="ok" />
+                        {live.label}
+                      </span>
+                    ) : live?.status === "err" ? (
+                      <span className="ml-2 flex shrink-0 items-center gap-1.5 text-xs font-medium text-red-600">
+                        <CloudLinkLiveDot status="err" />
+                        ошибка
+                      </span>
+                    ) : isImportableCloudFolderUrl(href) ? (
                       <button
                         type="button"
                         className="ml-2 shrink-0 text-xs text-[var(--sidebar-blue)] disabled:opacity-50"
@@ -781,18 +806,8 @@ export function WorkExampleEditorModal({
                       </span>
                     ) : null}
                   </div>
-                  {live ? (
-                    <p
-                      className={`flex items-center gap-2 px-1 text-xs ${
-                        live.status === "err"
-                          ? "text-red-600"
-                          : live.status === "ok"
-                            ? "text-emerald-700 dark:text-emerald-400"
-                            : "text-[var(--sidebar-blue)]"
-                      }`}
-                      aria-live="polite"
-                    >
-                      <CloudLinkLiveDot status={live.status} />
+                  {live?.status === "err" ? (
+                    <p className="px-1 text-xs text-red-600" aria-live="polite">
                       {live.label}
                     </p>
                   ) : looksLikeUrl && !isImportableCloudFolderUrl(href) ? (
@@ -812,9 +827,9 @@ export function WorkExampleEditorModal({
                 + ещё ссылка
               </button>
             ) : null}
-            {cloudNote ? (
-              <p className="text-xs text-[var(--text-muted)]">{cloudNote}</p>
-            ) : (
+            {Object.values(cloudLive).some(
+              (l) => l.status === "detecting" || l.status === "importing",
+            ) ? null : (
               <p className="text-xs text-[var(--text-muted)]">
                 Из папки заберу только фото с именами; архивы, КТ и прочее останутся по ссылке
               </p>
@@ -935,7 +950,6 @@ export function WorkExampleEditorModal({
                   <WorkExampleHtmlViewer
                     key={f.id}
                     url={`/api/work-examples/${encodeURIComponent(savedId)}/files/${encodeURIComponent(f.id)}`}
-                    convertUrl={`/api/work-examples/${encodeURIComponent(savedId)}/files/${encodeURIComponent(f.id)}/d3d`}
                     fileName={f.fileName}
                   />
                 ))
@@ -967,7 +981,7 @@ export function WorkExampleEditorModal({
         </div>
         <footer className="flex items-center justify-between gap-2 border-t border-[var(--card-border)] px-4 py-3">
           <div className="flex gap-2">
-            {savedId ? (
+            {published && savedId ? (
               <button
                 type="button"
                 className="rounded-lg border border-[var(--card-border)] px-3 py-1.5 text-sm"
@@ -976,7 +990,7 @@ export function WorkExampleEditorModal({
                 QR
               </button>
             ) : null}
-            {savedId && canDeleteWhole ? (
+            {published && savedId && canDeleteWhole ? (
               <button
                 type="button"
                 className="rounded-lg px-3 py-1.5 text-sm text-red-600"
@@ -996,7 +1010,7 @@ export function WorkExampleEditorModal({
               className="rounded-lg bg-[var(--sidebar-blue)] px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               onClick={() => void save()}
             >
-              {cloudBusy ? "Забираю фото…" : busy ? "Сохранение…" : "Сохранить"}
+              {busy ? "Сохранение…" : "Сохранить"}
             </button>
           </div>
         </footer>

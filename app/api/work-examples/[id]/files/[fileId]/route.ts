@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireWorkExamplesCtx } from "@/lib/work-examples/access.server";
-import { workExampleFileContentType } from "@/lib/work-examples/mesh-file";
-import { readWorkExampleFileBytes } from "@/lib/work-examples/storage";
+import { workExampleFileHttpResponse } from "@/lib/work-examples/file-http-response";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string; fileId: string }> };
 
-export async function GET(_req: Request, ctxP: Ctx) {
+export async function GET(req: Request, ctxP: Ctx) {
   const ctx = await requireWorkExamplesCtx();
   if (!ctx.ok) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   const { id, fileId } = await ctxP.params;
@@ -15,14 +14,13 @@ export async function GET(_req: Request, ctxP: Ctx) {
     where: { id: fileId, example: { id, tenantId: ctx.tenantId } },
   });
   if (!file) return NextResponse.json({ error: "Не найдено" }, { status: 404 });
-  const bytes = await readWorkExampleFileBytes(file.diskRelPath);
-  if (!bytes) return NextResponse.json({ error: "Файл недоступен" }, { status: 404 });
-  return new NextResponse(new Uint8Array(bytes), {
-    headers: {
-      "Content-Type": workExampleFileContentType(file.fileName, file.mime),
-      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
-      "Cache-Control": "private, max-age=120",
-    },
+  return workExampleFileHttpResponse({
+    reqUrl: req.url,
+    diskRelPath: file.diskRelPath,
+    fileName: file.fileName,
+    mime: file.mime,
+    cacheControl: "private, max-age=120",
+    previewCacheControl: "private, max-age=86400",
   });
 }
 

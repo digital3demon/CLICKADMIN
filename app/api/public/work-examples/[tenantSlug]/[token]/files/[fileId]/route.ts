@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
-import { workExampleFileContentType } from "@/lib/work-examples/mesh-file";
-import { readWorkExampleFileBytes } from "@/lib/work-examples/storage";
+import { workExampleFileHttpResponse } from "@/lib/work-examples/file-http-response";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +9,7 @@ type Ctx = {
   params: Promise<{ tenantSlug: string; token: string; fileId: string }>;
 };
 
-export async function GET(_req: Request, ctxP: Ctx) {
+export async function GET(req: Request, ctxP: Ctx) {
   const { tenantSlug, token, fileId } = await ctxP.params;
   const tenant = await prisma.tenant.findUnique({
     where: { slug: String(tenantSlug || "").trim() },
@@ -30,13 +29,14 @@ export async function GET(_req: Request, ctxP: Ctx) {
     },
   });
   if (!file) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const bytes = await readWorkExampleFileBytes(file.diskRelPath);
-  if (!bytes) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return new NextResponse(new Uint8Array(bytes), {
-    headers: {
-      "Content-Type": workExampleFileContentType(file.fileName, file.mime),
-      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
-      "Cache-Control": "public, max-age=300",
-    },
+  const res = await workExampleFileHttpResponse({
+    reqUrl: req.url,
+    diskRelPath: file.diskRelPath,
+    fileName: file.fileName,
+    mime: file.mime,
+    cacheControl: "public, max-age=300",
+    previewCacheControl: "public, max-age=86400",
   });
+  if (res.status === 404) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return res;
 }

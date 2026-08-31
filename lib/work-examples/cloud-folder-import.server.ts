@@ -11,9 +11,10 @@ import {
   shouldImportCloudFolderPhoto,
   uniqueCloudFolderFileName,
 } from "@/lib/work-examples/cloud-folder-photo";
-import { parseWorkExampleTitle, WORK_EXAMPLE_MAX_FILES_PER_UPLOAD, WORK_EXAMPLE_MAX_FILE_BYTES } from "@/lib/work-examples/constants";
+import { WORK_EXAMPLE_MAX_FILES_PER_UPLOAD, WORK_EXAMPLE_MAX_FILE_BYTES } from "@/lib/work-examples/constants";
 import { listGoogleDrivePhotos } from "@/lib/work-examples/google-drive-folder.server";
 import { listYandexDiskPhotos } from "@/lib/work-examples/yandex-disk-folder.server";
+import { ensureWorkExampleCardPreview } from "@/lib/work-examples/card-preview.server";
 import { newWorkExampleFileId, writeWorkExampleFile } from "@/lib/work-examples/storage";
 import { exampleSelect } from "@/lib/work-examples/access.server";
 import { serializeWorkExample } from "@/lib/work-examples/serialize";
@@ -23,6 +24,7 @@ export { CloudFolderImportError };
 /**
  * Карта: ссылка папки → список фото → копии на диск/S3 как PHOTO.
  * Не живой sync. Дубли по fileName пропускаем. Пачка как обычная загрузка (40).
+ * Название примера не берём из папки — его пишет пользователь.
  */
 
 async function listPhotos(target: CloudFolderImportTarget) {
@@ -121,14 +123,7 @@ export async function importWorkExampleCloudFolder(input: {
     });
     sort += 1;
     imported += 1;
-  }
-
-  const folderTitle = parseWorkExampleTitle(listed.folderName);
-  if (!String(example.title || "").trim() && folderTitle) {
-    await input.prisma.workExample.update({
-      where: { id: example.id },
-      data: { title: folderTitle },
-    });
+    await ensureWorkExampleCardPreview(diskRelPath);
   }
 
   const row = await input.prisma.workExample.findFirstOrThrow({
