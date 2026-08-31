@@ -25,6 +25,17 @@ export function kaitenListTitlesPollIntervalMs(raw?: string | null): number {
 
 const LIST_PATHS = new Set(["/orders", "/finance-office", "/shipments"]);
 
+/** После клика в меню не гонять второй SSR списка, пока модуль ещё рисуется. */
+export const TOAST_LIST_REFRESH_QUIET_AFTER_NAV_MS = 8_000;
+
+export function toastListRefreshAllowedAfterNav(
+  lastNavAt: number,
+  now = Date.now(),
+): boolean {
+  if (!Number.isFinite(lastNavAt) || lastNavAt <= 0) return true;
+  return now - lastNavAt >= TOAST_LIST_REFRESH_QUIET_AFTER_NAV_MS;
+}
+
 /** Чипы корр/протетики/упоминаний живут на этих экранах — не refresh формы наряда. */
 export function toastFingerprintShouldRefreshListPath(pathname: string): boolean {
   const p = pathname.split("?")[0]?.replace(/\/$/, "") || "/";

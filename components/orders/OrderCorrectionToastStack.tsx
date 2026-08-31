@@ -26,6 +26,7 @@ import {
   orderCorrectionToastPollMs,
   shouldRefreshListFromToastFingerprint,
   toastFingerprintShouldRefreshListPath,
+  toastListRefreshAllowedAfterNav,
 } from "@/lib/order-list-live-refresh";
 
 type OrderToastRow = {
@@ -227,6 +228,10 @@ export function OrderCorrectionToastStack() {
   isPublicStickerRef.current = isPublicSticker;
   dismissedRef.current = dismissed;
 
+  useEffect(() => {
+    lastPathChangeAtRef.current = Date.now();
+  }, [pathname]);
+
   const mergeDismissed = useCallback((update: (prev: Set<string>) => Set<string>) => {
     setDismissed((prev) => {
       const next = update(prev);
@@ -346,7 +351,8 @@ export function OrderCorrectionToastStack() {
           /* Канбан→CRM: чипы списка только при новом fingerprint, не каждый poll. */
           if (
             shouldRefreshListFromToastFingerprint(prevFp, fp) &&
-            toastFingerprintShouldRefreshListPath(pathnameRef.current)
+            toastFingerprintShouldRefreshListPath(pathnameRef.current) &&
+            toastListRefreshAllowedAfterNav(lastPathChangeAtRef.current)
           ) {
             router.refresh();
           }

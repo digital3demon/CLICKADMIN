@@ -4,14 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>D3D Viewer</title>
-  <script type="module" crossorigin src="./assets/index-BiE0o5EN.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DsmQKT2P.css">
+  <script type="module" crossorigin src="./assets/index-BqTaS5CH.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-IK5s4Lgf.css">
 </head>
 <body>
-  <div id="embed-bar">
-    <input id="embed-file" type="file" accept=".html,.htm" />
-    <div id="embed-status">Выберите HTML (Exocad или D3D)</div>
-  </div>
   <div id="password-gate" class="hidden">
     <div id="password-card">
       <div style="font-weight:600;margin-bottom:8px">D3D Viewer</div>
@@ -21,7 +17,7 @@
       <div id="password-error" style="color:#f88;font-size:11px;margin-top:8px;display:none"></div>
     </div>
   </div>
-  <div id="empty-hint">Загрузите HTML — сцена откроется здесь</div>
+  <div id="empty-hint" hidden></div>
   <div id="app" hidden>
     <div id="viewport-wrap">
       <canvas id="viewport"></canvas>

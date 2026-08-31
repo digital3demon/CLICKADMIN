@@ -2,7 +2,6 @@
 
 import { startTransition, useMemo, type ReactNode } from "react";
 import { StickyListChrome } from "@/components/layout/StickyListChrome";
-import { OrderListKaitenPoller } from "@/components/orders/OrderListKaitenPoller";
 import { useSessionUser } from "@/components/providers/SessionUserProvider";
 import { canSeeOrderNotificationKind } from "@/lib/auth/permissions";
 import { FinanceOfficeDateFilterHeaders } from "@/components/finance-office/FinanceOfficeDateFilterHeaders";
@@ -109,11 +108,6 @@ export function FinanceOfficeOrdersTable({
     () => orders.filter((o) => o.updAttachmentId).map((o) => o.id),
     [orders],
   );
-  const kaitenOrderIds = useMemo(
-    () => orders.filter((o) => o.kaitenCardId != null).map((o) => o.id),
-    [orders],
-  );
-
   const toggleAllVisible = () => {
     const on = !allVisibleSelected;
     startTransition(() => {
@@ -188,7 +182,6 @@ export function FinanceOfficeOrdersTable({
         </div>
       }
     >
-      <OrderListKaitenPoller orderIds={kaitenOrderIds} />
       <div className="relative">
       <div className="w-full min-w-0">
         <table className="finance-office-orders-table w-full min-w-0 table-fixed border-separate border-spacing-0 text-center text-sm">

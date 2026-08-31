@@ -192,7 +192,7 @@ export function OrderListKaitenPoller({
     const pollMs = kaitenListTitlesPollIntervalMs(
       process.env.NEXT_PUBLIC_KAITEN_LIST_TITLES_POLL_MS,
     );
-    const t0 = window.setTimeout(() => void tick(), 2_500);
+    const t0 = window.setTimeout(() => void tick(), 12_000);
     const id = window.setInterval(() => void tick(), pollMs);
     return () => {
       window.clearTimeout(t0);

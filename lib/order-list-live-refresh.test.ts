@@ -7,6 +7,7 @@ import {
   shouldRefreshListFromKaitenPoll,
   shouldRefreshListFromToastFingerprint,
   toastFingerprintShouldRefreshListPath,
+  toastListRefreshAllowedAfterNav,
 } from "@/lib/order-list-live-refresh";
 
 describe("orderCorrectionToastPollMs", () => {
@@ -30,6 +31,13 @@ describe("toastFingerprintShouldRefreshListPath", () => {
     expect(toastFingerprintShouldRefreshListPath("/finance-office")).toBe(true);
     expect(toastFingerprintShouldRefreshListPath("/orders/or_abc")).toBe(false);
     expect(toastFingerprintShouldRefreshListPath("/kanban")).toBe(false);
+  });
+});
+
+describe("toastListRefreshAllowedAfterNav", () => {
+  it("первые 8 с после перехода — без refresh списка", () => {
+    expect(toastListRefreshAllowedAfterNav(1_000, 1_000 + 7_999)).toBe(false);
+    expect(toastListRefreshAllowedAfterNav(1_000, 1_000 + 8_000)).toBe(true);
   });
 });
 

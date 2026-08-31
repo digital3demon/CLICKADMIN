@@ -1,7 +1,7 @@
 "use client";
 
 import type { AppModule, UserRole } from "@prisma/client";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { canDismissSidebarRecentPaidItems } from "@/lib/auth/permissions";
 import { ordersListHref } from "@/lib/orders-list-query";
@@ -43,7 +43,6 @@ export function SidebarPayments({
   sessionRole: UserRole | null;
   moduleAccess?: Partial<Record<AppModule, boolean>> | null;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
   const [items, setItems] = useState<Row[] | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -92,7 +91,7 @@ export function SidebarPayments({
 
   useEffect(() => {
     load();
-  }, [load, pathname]);
+  }, [load]);
 
   const markDismissed = useCallback(
     async (it: Row): Promise<boolean> => {
