@@ -23,6 +23,7 @@ export async function notifyOrderRequestStatusTelegram(opts: {
   const orderId = opts.orderId.trim();
   if (!tenantId || !orderId) return;
   const phrase = orderRequestStatusTelegramPhrase(opts.kind, opts.status);
+  if (!phrase) return;
   const event =
     opts.kind === "correction"
       ? ("tg_order_correction_changed" as const)

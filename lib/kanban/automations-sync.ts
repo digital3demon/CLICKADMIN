@@ -70,6 +70,15 @@ function normalizeRule(raw: unknown): KanbanAutomationRule | null {
   const actions = Array.isArray(r.actions)
     ? r.actions.map(normalizeAction).filter((x): x is KanbanAutomationAction => x != null)
     : [];
+  const cardTypeIds = Array.isArray(r.cardTypeIds)
+    ? [
+        ...new Set(
+          r.cardTypeIds.map((x) => String(x || "").trim()).filter(Boolean),
+        ),
+      ]
+    : [];
+  const cardTypeId = String(r.cardTypeId ?? "").trim();
+  const types = cardTypeIds.length ? cardTypeIds : cardTypeId ? [cardTypeId] : [];
   return {
     id,
     enabled: r.enabled !== false,
@@ -78,7 +87,8 @@ function normalizeRule(raw: unknown): KanbanAutomationRule | null {
     trigger,
     columnId: String(r.columnId ?? ""),
     fromColumnId: String(r.fromColumnId ?? ""),
-    cardTypeId: String(r.cardTypeId ?? ""),
+    cardTypeId: types[0] ?? "",
+    cardTypeIds: types,
     actions,
   };
 }

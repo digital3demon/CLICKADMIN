@@ -103,9 +103,9 @@ export const KANBAN_TELEGRAM_PREF_LABELS: Record<KanbanTelegramPrefKey, string> 
   tg_description_changed: "Изменилось описание",
   tg_due_changed: "Изменился срок выполнения",
   tg_order_correction_changed:
-    "Статус заявки корректировки (принята, отказ)",
+    "Статус корректировки (подтвердили, отказ, вопрос)",
   tg_order_prosthetics_changed:
-    "Статус заявки по протетике (принята, отказ, в пути, приехала)",
+    "Статус протетики (принят, отклонён, в пути, на базе)",
   tg_production_new_card:
     "Новая карточка на доске Производство (дорожка в тексте)",
   tg_production_mentioned:

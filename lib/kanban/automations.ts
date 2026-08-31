@@ -77,8 +77,25 @@ export function createEmptyAutomationRule(
     columnId: colId,
     fromColumnId: "",
     cardTypeId: "",
+    cardTypeIds: [],
     actions: [],
   };
+}
+
+/** Типы-фильтр правила: несколько id или один legacy cardTypeId. Пусто = любой. */
+export function automationRuleCardTypeIds(rule: KanbanAutomationRule): string[] {
+  const many = (rule.cardTypeIds || [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  if (many.length) return [...new Set(many)];
+  const one = String(rule.cardTypeId || "").trim();
+  return one ? [one] : [];
+}
+
+function cardMatchesRuleTypes(card: KanbanCard, rule: KanbanAutomationRule): boolean {
+  const ids = automationRuleCardTypeIds(rule);
+  if (!ids.length) return true;
+  return ids.includes(String(card.cardTypeId || ""));
 }
 
 function ruleMatches(
@@ -93,9 +110,7 @@ function ruleMatches(
   const card = findCard(board, event.cardId)?.card;
   if (!card) return false;
 
-  if (rule.cardTypeId.trim()) {
-    if (String(card.cardTypeId || "") !== rule.cardTypeId.trim()) return false;
-  }
+  if (!cardMatchesRuleTypes(card, rule)) return false;
 
   if (event.type === "card_moved_to_column") {
     if (rule.columnId !== event.toColumnId) return false;
@@ -106,7 +121,8 @@ function ruleMatches(
   }
 
   if (event.type === "card_created_in_column") {
-    return rule.columnId === event.columnId;
+    if (rule.columnId.trim() && rule.columnId !== event.columnId) return false;
+    return true;
   }
 
   if (event.type === "card_blocked" || event.type === "card_unblocked") {
@@ -306,9 +322,11 @@ export function applyKanbanAutomationDelayedArchives(
       const hours = normalizeArchiveAfterHours(action.afterHours);
       if (hours <= 0) continue;
       const thresholdMs = hours * 60 * 60 * 1000;
-      const typeFilter = rule.cardTypeId.trim();
+      const typeIds = automationRuleCardTypeIds(rule);
       for (const card of [...col.cards]) {
-        if (typeFilter && String(card.cardTypeId || "") !== typeFilter) continue;
+        if (typeIds.length && !typeIds.includes(String(card.cardTypeId || ""))) {
+          continue;
+        }
         if (cardIdleSince(card, now) < thresholdMs) continue;
         if (archiveCardByIdOnBoard(board, card.id, "auto")) archived += 1;
       }

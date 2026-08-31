@@ -17,9 +17,9 @@ export const ADMIN_SHARED_MESSENGER_PREF_LABELS: Record<
   tg_mentioned_in_comment:
     "Упоминания в комментариях (канбан, чат наряда / Kaiten)",
   tg_order_correction_changed:
-    "Статус заявки корректировки (принята, отказ)",
+    "Статус корректировки (подтвердили, отказ, вопрос)",
   tg_order_prosthetics_changed:
-    "Статус заявки по протетике (принята, отказ, в пути, приехала)",
+    "Статус протетики (принят, отклонён, в пути, на базе)",
 };
 
 export function mergeAdminSharedMessengerNotifyPrefs(

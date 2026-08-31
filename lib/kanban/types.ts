@@ -248,8 +248,10 @@ export type KanbanAutomationRule = {
   columnId: string;
   /** Только для переноса: из какой колонки (пусто = из любой) */
   fromColumnId: string;
-  /** Ограничить типом карточки (пусто = любой) */
+  /** Ограничить типом карточки (пусто = любой). Совместимость со старыми правилами. */
   cardTypeId: string;
+  /** Несколько типов: пусто = любой. Если задано — cardTypeId не используется. */
+  cardTypeIds?: string[];
   actions: KanbanAutomationAction[];
 };
 

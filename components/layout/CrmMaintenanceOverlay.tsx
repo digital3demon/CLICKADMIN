@@ -14,8 +14,16 @@ export function CrmMaintenanceOverlay() {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: number | null = null;
+
     const apply = (next: Phase | null) => {
       if (!cancelled) setPhase(next);
+    };
+
+    const stopPoll = () => {
+      if (timer == null) return;
+      window.clearInterval(timer);
+      timer = null;
     };
 
     const poll = async () => {
@@ -26,23 +34,38 @@ export function CrmMaintenanceOverlay() {
         });
         if (!res.ok) return;
         const j = (await res.json()) as { phase?: Phase | null };
-        if (j.phase === "backup" || j.phase === "restore") apply(j.phase);
-        else apply(null);
+        if (j.phase === "backup" || j.phase === "restore") {
+          apply(j.phase);
+          return;
+        }
+        apply(null);
+        stopPoll();
       } catch {
         /* сеть — оставим прошлый кадр */
       }
     };
 
-    void poll();
-    const timer = window.setInterval(() => void poll(), 800);
+    const startPoll = () => {
+      if (timer != null || cancelled) return;
+      void poll();
+      timer = window.setInterval(() => void poll(), 800);
+    };
+
+    const onPhase = (next: Phase | null | undefined) => {
+      if (next === "backup" || next === "restore") {
+        apply(next);
+        startPoll();
+        return;
+      }
+      if (next == null) {
+        apply(null);
+        stopPoll();
+      }
+    };
 
     const onLocal = (e: Event) => {
       const ce = e as CustomEvent<{ phase?: Phase | null }>;
-      if (ce.detail?.phase === "backup" || ce.detail?.phase === "restore") {
-        apply(ce.detail.phase);
-      } else if (ce.detail && "phase" in ce.detail && ce.detail.phase == null) {
-        apply(null);
-      }
+      if (ce.detail && "phase" in ce.detail) onPhase(ce.detail.phase);
     };
     window.addEventListener("crm-maintenance", onLocal);
 
@@ -50,11 +73,7 @@ export function CrmMaintenanceOverlay() {
     try {
       ch = new BroadcastChannel("crm-maintenance");
       ch.onmessage = (ev: MessageEvent<{ phase?: Phase | null }>) => {
-        if (ev.data?.phase === "backup" || ev.data?.phase === "restore") {
-          apply(ev.data.phase);
-        } else if (ev.data && ev.data.phase == null) {
-          apply(null);
-        }
+        if (ev.data && "phase" in ev.data) onPhase(ev.data.phase);
       };
     } catch {
       /* нет BroadcastChannel */
@@ -62,7 +81,7 @@ export function CrmMaintenanceOverlay() {
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPoll();
       window.removeEventListener("crm-maintenance", onLocal);
       ch?.close();
     };

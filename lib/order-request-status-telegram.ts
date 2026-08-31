@@ -1,6 +1,7 @@
 /**
  * Текст ТГ по статусу заявки «!!!» / «???».
  * Не про состав наряда и не про склад.
+ * Протетика: принят → отклонён → в пути → на базе. «Проверена» / «готово» в ТГ не пишем.
  */
 
 export type OrderRequestTelegramKind = "correction" | "prosthetics";
@@ -8,6 +9,7 @@ export type OrderRequestTelegramKind = "correction" | "prosthetics";
 export type OrderRequestTelegramStatus =
   | "accepted"
   | "rejected"
+  | "clarify"
   | "ordered"
   | "arrived"
   | "checked"
@@ -16,26 +18,26 @@ export type OrderRequestTelegramStatus =
 export function orderRequestStatusTelegramPhrase(
   kind: OrderRequestTelegramKind,
   status: OrderRequestTelegramStatus,
-): string {
+): string | null {
   if (kind === "correction") {
-    if (status === "accepted") return "корректировка: принята";
-    if (status === "rejected") return "корректировка: отказ";
-    return "корректировка: обновлён статус";
+    if (status === "accepted") return "Корректировку подтвердили";
+    if (status === "rejected") return "В корректировке отказано";
+    if (status === "clarify") return "Есть вопрос по корректировке";
+    return null;
   }
   switch (status) {
     case "accepted":
-      return "протетика: принята";
+      return "Заказ на протетику принят";
     case "rejected":
-      return "протетика: отказ";
+      return "Заказ на протетику отклонен";
     case "ordered":
-      return "протетика: в пути";
+      return "Протетика в пути";
     case "arrived":
-      return "протетика: приехала";
+      return "Протетика на базе";
     case "checked":
-      return "протетика: проверена";
     case "completed":
-      return "протетика: готово";
+      return null;
     default:
-      return "протетика: обновлён статус";
+      return null;
   }
 }

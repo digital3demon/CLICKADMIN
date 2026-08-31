@@ -84,6 +84,7 @@ import {
 import { isCardFileImage } from "@/lib/kanban/card-files";
 import { importMissingKaitenFilesForOrder } from "@/lib/kaiten-files-import";
 import { isKanbanChatLocalOnlyRequest } from "@/lib/kanban/kanban-chat-local-query";
+import { notifyOrderRequestStatusTelegram } from "@/lib/order-request-status-telegram.server";
 import {
   markClarifyAskedIfParentIsPendingCorrection,
   persistClarifyRepliesFromComments,
@@ -799,7 +800,7 @@ export async function POST(
       }
     }
     try {
-      await markClarifyAskedIfParentIsPendingCorrection({
+      const markedClarify = await markClarifyAskedIfParentIsPendingCorrection({
         db: ordersPrisma,
         orderId: order.id,
         parentCommentId: parentId,
@@ -807,6 +808,17 @@ export async function POST(
         newCommentId: String(dup.id || "").trim() || draftCommentId,
         userId: session.sub,
       });
+      if (markedClarify && tenantId) {
+        after(() => {
+          void notifyOrderRequestStatusTelegram({
+            tenantId,
+            orderId: order.id,
+            actorUserId: session.sub,
+            kind: "correction",
+            status: "clarify",
+          }).catch((e) => console.error("[kanban-chat POST] clarify telegram (dup)", e));
+        });
+      }
     } catch (e) {
       console.error("[kanban-chat POST] clarify mark (dup)", orderId, e);
     }
@@ -840,7 +852,7 @@ export async function POST(
     );
   }
   try {
-    await markClarifyAskedIfParentIsPendingCorrection({
+    const markedClarify = await markClarifyAskedIfParentIsPendingCorrection({
       db: ordersPrisma,
       orderId: order.id,
       parentCommentId: parentId,
@@ -848,6 +860,17 @@ export async function POST(
       newCommentId: String(row.id || "").trim() || draftCommentId,
       userId: session.sub,
     });
+    if (markedClarify && tenantId) {
+      after(() => {
+        void notifyOrderRequestStatusTelegram({
+          tenantId,
+          orderId: order.id,
+          actorUserId: session.sub,
+          kind: "correction",
+          status: "clarify",
+        }).catch((e) => console.error("[kanban-chat POST] clarify telegram", e));
+      });
+    }
     await persistClarifyRepliesFromComments({
       db: ordersPrisma,
       orderId: order.id,

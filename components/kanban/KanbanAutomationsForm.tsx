@@ -311,11 +311,18 @@ function KanbanAutomationsFormImpl({
                 <select
                   className="rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-2 text-sm"
                   value={rule.trigger}
-                  onChange={(e) =>
-                    updateRule(rule.id, {
-                      trigger: e.target.value as KanbanAutomationRule["trigger"],
-                    })
-                  }
+                  onChange={(e) => {
+                    const trigger = e.target
+                      .value as KanbanAutomationRule["trigger"];
+                    const patch: Partial<KanbanAutomationRule> = { trigger };
+                    if (
+                      trigger === "card_moved_to_column" &&
+                      !rule.columnId.trim()
+                    ) {
+                      patch.columnId = cols[0]?.id ?? "";
+                    }
+                    updateRule(rule.id, patch);
+                  }}
                 >
                   {KANBAN_AUTOMATION_TRIGGER_OPTIONS.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -325,12 +332,21 @@ function KanbanAutomationsFormImpl({
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-[0.65rem] font-medium uppercase text-[var(--text-muted)]">
-                Колонка
+                {rule.trigger === "card_created_in_column" ||
+                rule.trigger === "card_blocked" ||
+                rule.trigger === "card_unblocked"
+                  ? "Колонка (пусто = любая)"
+                  : "Колонка"}
                 <select
                   className="rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-2 text-sm"
                   value={rule.columnId}
                   onChange={(e) => updateRule(rule.id, { columnId: e.target.value })}
                 >
+                  {rule.trigger === "card_created_in_column" ||
+                  rule.trigger === "card_blocked" ||
+                  rule.trigger === "card_unblocked" ? (
+                    <option value="">— любая —</option>
+                  ) : null}
                   {cols.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.title}
@@ -362,20 +378,49 @@ function KanbanAutomationsFormImpl({
               </label>
               <label className="flex flex-col gap-1 text-[0.65rem] font-medium uppercase text-[var(--text-muted)]">
                 Тип карточки (пусто = любой)
-                <select
-                  className="rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-2 text-sm"
-                  value={rule.cardTypeId}
-                  onChange={(e) =>
-                    updateRule(rule.id, { cardTypeId: e.target.value })
-                  }
-                >
-                  <option value="">— любой —</option>
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="max-h-36 overflow-y-auto rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1.5">
+                  {types.length === 0 ? (
+                    <span className="text-sm font-normal normal-case text-[var(--text-muted)]">
+                      Нет типов на доске
+                    </span>
+                  ) : (
+                    types.map((t) => {
+                      const selected = (
+                        rule.cardTypeIds?.length
+                          ? rule.cardTypeIds
+                          : rule.cardTypeId
+                            ? [rule.cardTypeId]
+                            : []
+                      ).includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className="flex items-center gap-2 py-0.5 text-sm font-normal normal-case text-[var(--app-text)]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(e) => {
+                              const cur = rule.cardTypeIds?.length
+                                ? [...rule.cardTypeIds]
+                                : rule.cardTypeId
+                                  ? [rule.cardTypeId]
+                                  : [];
+                              const next = e.target.checked
+                                ? [...new Set([...cur, t.id])]
+                                : cur.filter((id) => id !== t.id);
+                              updateRule(rule.id, {
+                                cardTypeIds: next,
+                                cardTypeId: next[0] ?? "",
+                              });
+                            }}
+                          />
+                          {t.name}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
               </label>
             </div>
 

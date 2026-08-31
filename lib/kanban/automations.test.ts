@@ -131,6 +131,97 @@ describe("archive automation", () => {
   });
 });
 
+describe("создание и фильтр типов", () => {
+  it("создали в колонке — пустая колонка = любая (кириллица)", () => {
+    const board = boardWithQueueAndAdmins();
+    const card = createCard({
+      id: "card-остренкова",
+      title: "2608-078 Остренкова",
+      cardTypeId: "тип-коронка",
+    });
+    board.columns[0]!.cards.push(card);
+    board.automations = [
+      {
+        id: "auto-любая",
+        enabled: true,
+        name: "Любая колонка",
+        boardId: board.id,
+        trigger: "card_created_in_column",
+        columnId: "",
+        fromColumnId: "",
+        cardTypeId: "",
+        cardTypeIds: [],
+        actions: [{ type: "add_comment", text: "создали Остренкову" }],
+      },
+    ];
+    runKanbanAutomations(board, {
+      type: "card_created_in_column",
+      cardId: "card-остренкова",
+      columnId: "col-к-исполнению",
+    });
+    expect(card.comments?.some((c) => c.text === "создали Остренкову")).toBe(true);
+  });
+
+  it("несколько типов — срабатывает на любой из выбранных", () => {
+    const board = boardWithQueueAndAdmins();
+    const card = createCard({
+      id: "card-пехконен",
+      title: "2607-438 Пехконен",
+      cardTypeId: "тип-сплинт",
+    });
+    board.columns[0]!.cards.push(card);
+    board.automations = [
+      {
+        id: "auto-типы",
+        enabled: true,
+        name: "Коронка или сплинт",
+        boardId: board.id,
+        trigger: "card_created_in_column",
+        columnId: "col-к-исполнению",
+        fromColumnId: "",
+        cardTypeId: "тип-коронка",
+        cardTypeIds: ["тип-коронка", "тип-сплинт"],
+        actions: [{ type: "set_urgent" }],
+      },
+    ];
+    runKanbanAutomations(board, {
+      type: "card_created_in_column",
+      cardId: "card-пехконен",
+      columnId: "col-к-исполнению",
+    });
+    expect(card.urgent).toBe(true);
+  });
+
+  it("legacy cardTypeId один тип — чужой тип не проходит", () => {
+    const board = boardWithQueueAndAdmins();
+    const card = createCard({
+      id: "card-тындик",
+      title: "Тындик",
+      cardTypeId: "тип-модель",
+    });
+    board.columns[0]!.cards.push(card);
+    board.automations = [
+      {
+        id: "auto-один",
+        enabled: true,
+        name: "Только коронка",
+        boardId: board.id,
+        trigger: "card_created_in_column",
+        columnId: "",
+        fromColumnId: "",
+        cardTypeId: "тип-коронка",
+        actions: [{ type: "set_urgent" }],
+      },
+    ];
+    runKanbanAutomations(board, {
+      type: "card_created_in_column",
+      cardId: "card-тындик",
+      columnId: "col-к-исполнению",
+    });
+    expect(card.urgent).toBe(false);
+  });
+});
+
 describe("normalizeArchiveAfterHours", () => {
   it("режет отрицательные и слишком большие значения", () => {
     expect(normalizeArchiveAfterHours(-3)).toBe(0);

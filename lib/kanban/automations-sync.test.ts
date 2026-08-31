@@ -57,6 +57,32 @@ describe("kanban automations snapshot", () => {
     expect(next.boards[0]!.automations).toEqual([]);
   });
 
+  it("несколько типов карточки сохраняются в снимке (кириллица)", () => {
+    const state = defaultAppState();
+    state.boards[0]!.automations = [
+      {
+        id: "auto-типы-юля",
+        enabled: true,
+        name: "Коронка и сплинт Юли",
+        boardId: "kanban-board-клиника-юли",
+        trigger: "card_created_in_column",
+        columnId: "",
+        fromColumnId: "",
+        cardTypeId: "",
+        cardTypeIds: ["тип-коронка", "тип-сплинт"],
+        actions: [{ type: "add_comment", text: "тип Юли" }],
+      },
+    ];
+    const snap = extractKanbanAutomations(state);
+    expect(snap.rules[0]?.cardTypeIds).toEqual(["тип-коронка", "тип-сплинт"]);
+    expect(snap.rules[0]?.cardTypeId).toBe("тип-коронка");
+    const applied = applyKanbanAutomations(defaultAppState(), snap);
+    expect(applied.boards[0]!.automations?.[0]?.cardTypeIds).toEqual([
+      "тип-коронка",
+      "тип-сплинт",
+    ]);
+  });
+
   it("архив через 48 часов сохраняется в снимке (кириллица в id)", () => {
     const state = defaultAppState();
     state.boards[0]!.automations = [

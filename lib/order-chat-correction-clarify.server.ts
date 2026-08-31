@@ -119,9 +119,9 @@ export async function markClarifyAskedIfParentIsPendingCorrection(opts: {
   parentExternalId?: string | null;
   newCommentId: string;
   userId: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const parentId = String(opts.parentCommentId ?? "").trim();
-  if (!parentId) return;
+  if (!parentId) return false;
   const oid = opts.orderId.trim();
   const ext = String(opts.parentExternalId ?? "").trim();
   const numIds: number[] = [];
@@ -161,7 +161,7 @@ export async function markClarifyAskedIfParentIsPendingCorrection(opts: {
     ...legacyHits.map((r) => r.id),
   ];
   const unique = [...new Set(ids)];
-  if (unique.length === 0) return;
+  if (unique.length === 0) return false;
 
   const now = new Date();
   const data = {
@@ -176,6 +176,7 @@ export async function markClarifyAskedIfParentIsPendingCorrection(opts: {
     if (!pair) continue;
     await updateClarifyPair(opts.db, oid, pair, data);
   }
+  return true;
 }
 
 export async function ackCorrectionClarifyReply(opts: {
