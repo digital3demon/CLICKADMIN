@@ -221,6 +221,7 @@ export function OrderCorrectionToastStack() {
   const nextPollAllowedAtRef = useRef(0);
   const pollBackoffMsRef = useRef(0);
   const pathnameRef = useRef(pathname);
+  const lastPathChangeAtRef = useRef(Date.now());
   const isLoginRef = useRef(isLogin);
   const isPublicStickerRef = useRef(isPublicSticker);
   pathnameRef.current = pathname;
