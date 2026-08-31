@@ -18,6 +18,7 @@ export function CorrectionHistoryOrderCell({
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <Link
+        prefetch={false}
         href={orderPathById(order.id)}
         className="truncate font-mono text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
         title={`Заказ ${order.orderNumber}`}

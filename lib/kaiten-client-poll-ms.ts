@@ -1,6 +1,6 @@
 /**
- * Интервал фонового опроса колонок Kaiten в списках (мс).
- * API Kaiten ~5 req/s на токен — по умолчанию 12 с, не 4 с.
+ * Интервал опроса шапки Kaiten на открытом наряде (мс).
+ * Списки используют kaitenListTitlesPollIntervalMs (~45 с) — не этот таймер.
  */
 export function kaitenClientPollIntervalMs(): number {
   const raw = process.env.NEXT_PUBLIC_KAITEN_HEADER_POLL_MS;

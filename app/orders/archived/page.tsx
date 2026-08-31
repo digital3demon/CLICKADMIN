@@ -93,6 +93,7 @@ export default async function OrdersArchivedPage() {
                   >
                     <td className="px-3 py-2">
                       <Link
+                        prefetch={false}
                         href={orderPathById(o.id)}
                         className="font-medium text-[var(--sidebar-blue)] hover:underline"
                       >

@@ -1327,6 +1327,7 @@ export default async function OrdersPage({
                   >
                     <div data-col-body className="flex min-h-[2.5rem] items-center justify-center -translate-y-px">
                       <Link
+                        prefetch={false}
                         href={orderPathById(o.id)}
                         className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
                         title={`${o.orderNumber} — открыть наряд`}
@@ -1351,6 +1352,7 @@ export default async function OrdersPage({
                     className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5"
                   >
                     <Link
+                      prefetch={false}
                       data-col-body
                       href={`/clients/doctors/${o.doctor.id}`}
                       title={o.doctor.fullName}
@@ -1366,6 +1368,7 @@ export default async function OrdersPage({
                     <div data-col-body>
                     {o.clinic ? (
                       <Link
+                        prefetch={false}
                         href={`/clients/${o.clinic.id}`}
                         title={o.clinic.name}
                         className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"

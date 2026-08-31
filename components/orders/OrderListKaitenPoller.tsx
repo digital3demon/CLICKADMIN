@@ -2,31 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { kaitenClientPollIntervalMs } from "@/lib/kaiten-client-poll-ms";
-import { kaitenFastLivePollIntervalMs } from "@/lib/kaiten-rate-limit";
+import {
+  kaitenListTitlesPollIntervalMs,
+  shouldRefreshListFromKaitenPoll,
+} from "@/lib/order-list-live-refresh";
 
 const WINDOW = 10;
-/**
- * Live-импорт чата из Kaiten на широком списке (chat-corrections).
- * Ротация по всему `ids`, не только по текущему titles-бакету — иначе «!!!»/«???»
- * могут ждать несколько минут, пока заказ снова попадёт в окно колонок.
- */
-const LIGHT_COMMENT_PULL_MAX = 8;
-/** Без поиска: live-синк всего видимого списка, если он не шире этого. */
-const FAST_LIVE_SYNC_MAX_DEFAULT = 8;
-/** С активным q: не больше N нарядов за проход, строго по одному (без параллели). */
-const FAST_LIVE_SYNC_MAX_SEARCH = 8;
-/** Обычный refresh списка (колонки/кликлаб) — не чаще. */
+/** Retry failed CRM→Kaiten comments: rarely, not every titles tick. */
+const CHAT_RETRY_MIN_MS = 150_000;
+/** Обычный refresh списка после импорта с Kaiten — не чаще. */
 const LIST_REFRESH_MIN_MS = 15_000;
-/** Импорт «!!!»/«???» — быстрее, иначе UI ждёт канбан. */
 const LIST_REFRESH_IMPORT_MIN_MS = 2_000;
-
-type ChatCorrectionsLivePayload = {
-  error?: string;
-  importedCorrections?: number;
-  importedProsthetics?: number;
-  labMentionDbChanged?: boolean;
-};
 
 function isRateLimited(res: Response, data: { error?: string }): boolean {
   if (res.status === 429) return true;
@@ -48,17 +34,9 @@ function parseRetryAfterMs(value: string | null): number {
   return 90_000;
 }
 
-function chatCorrectionsImported(data: ChatCorrectionsLivePayload): boolean {
-  return (
-    (data.importedCorrections ?? 0) > 0 ||
-    (data.importedProsthetics ?? 0) > 0 ||
-    data.labMentionDbChanged === true
-  );
-}
-
 /**
- * Фоновая синхронизация колонок Kaiten в БД для строк списка и последующий router.refresh().
- * Kaiten ~5 req/s: без параллельных всплесков, приоритет у действий пользователя (очередь kaitenFetch).
+ * Редкий фон: зеркало карточки Kaiten в БД.
+ * Корр / протетика / чат / упоминания с канбана — через тосты (SQLite), не этот поллер.
  */
 export function OrderListKaitenPoller({
   orderIds,
@@ -77,21 +55,19 @@ export function OrderListKaitenPoller({
     [orderIds],
   );
   const idsKey = useMemo(() => ids.join("|"), [ids]);
-  const fastLiveMax = searchActive
-    ? FAST_LIVE_SYNC_MAX_SEARCH
-    : FAST_LIVE_SYNC_MAX_DEFAULT;
   const offsetRef = useRef(0);
-  const lightCommentOffsetRef = useRef(0);
   const backoffRef = useRef(0);
-  const fastBackoffRef = useRef(0);
   const mentionStateRef = useRef("");
   const inFlightRef = useRef(false);
-  const fastInFlightRef = useRef(false);
-  const fastSyncGenRef = useRef(0);
   const lastListRefreshAtRef = useRef(0);
+  const lastRetryAtRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const aliveRef = useRef(true);
 
   const refreshListDebounced = useCallback(
     (opts?: { importHit?: boolean }) => {
+      if (!aliveRef.current) return;
+      if (document.visibilityState !== "visible") return;
       const now = Date.now();
       const minMs = opts?.importHit
         ? LIST_REFRESH_IMPORT_MIN_MS
@@ -103,75 +79,20 @@ export function OrderListKaitenPoller({
     [router],
   );
 
-  /**
-   * GET /chat-corrections → syncOrderChatCorrectionsFromKaitenLive (корректировки + протетика).
-   * Запросы к CRM — по одному, чтобы на сервере не устроить всплеск kaitenListComments.
-   */
-  const pullKaitenChatFeedLiveForVisible = useCallback(async (): Promise<{
-    ok: boolean;
-    imported: boolean;
-  }> => {
-    if (ids.length === 0 || ids.length > fastLiveMax) {
-      return { ok: false, imported: false };
-    }
-    if (document.visibilityState !== "visible") {
-      return { ok: false, imported: false };
-    }
-    if (Date.now() < fastBackoffRef.current || Date.now() < backoffRef.current) {
-      return { ok: false, imported: false };
-    }
-    if (fastInFlightRef.current || inFlightRef.current) {
-      return { ok: false, imported: false };
-    }
-    fastInFlightRef.current = true;
-    const gen = ++fastSyncGenRef.current;
-    let rateLimited = false;
-    let imported = false;
-    try {
-      for (const orderId of ids) {
-        if (gen !== fastSyncGenRef.current) break;
-        if (Date.now() < fastBackoffRef.current) break;
-        try {
-          const res = await fetch(
-            `/api/orders/${encodeURIComponent(orderId)}/chat-corrections`,
-            { credentials: "include", cache: "no-store" },
-          );
-          if (res.status === 429) {
-            rateLimited = true;
-            fastBackoffRef.current =
-              Date.now() + parseRetryAfterMs(res.headers.get("Retry-After"));
-            backoffRef.current = fastBackoffRef.current;
-            break;
-          }
-          if (!res.ok) continue;
-          const data = (await res.json().catch(() => ({}))) as ChatCorrectionsLivePayload;
-          if (chatCorrectionsImported(data)) imported = true;
-        } catch {
-          /* ignore */
-        }
-      }
-    } finally {
-      fastInFlightRef.current = false;
-    }
-    return {
-      ok: gen === fastSyncGenRef.current && !rateLimited,
-      imported,
-    };
-  }, [ids, fastLiveMax]);
-
   const tick = useCallback(async () => {
     if (ids.length === 0) return;
+    if (!aliveRef.current) return;
     if (document.visibilityState !== "visible") return;
     if (Date.now() < backoffRef.current) return;
-    if (inFlightRef.current || fastInFlightRef.current) return;
+    if (inFlightRef.current) return;
     inFlightRef.current = true;
 
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     const n = ids.length;
-    /**
-     * Узкий список (≤ WINDOW): comments в titles-sync.
-     * Широкий: titles без comments + ротация live chat-corrections по всему списку.
-     */
-    const includeComments = n <= WINDOW;
+    const includeComments = n <= WINDOW && !searchActive;
 
     let batch: string[];
     if (n <= WINDOW) {
@@ -190,10 +111,12 @@ export function OrderListKaitenPoller({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderIds: batch, includeComments }),
+        signal: ac.signal,
       });
+      if (ac.signal.aborted || !aliveRef.current) return;
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
-        syncedCount?: number;
+        listUiChanged?: boolean;
         newCorrectionsImported?: boolean;
         newProstheticsImported?: boolean;
         clicklabByOrderId?: Record<string, boolean>;
@@ -202,47 +125,9 @@ export function OrderListKaitenPoller({
       if (!res.ok || isRateLimited(res, data)) {
         const waitMs = parseRetryAfterMs(res.headers.get("Retry-After"));
         backoffRef.current = Date.now() + waitMs;
-        fastBackoffRef.current = backoffRef.current;
         return;
       }
 
-      let lightImported = false;
-      if (!includeComments && ids.length > fastLiveMax) {
-        const lightStart = lightCommentOffsetRef.current % n;
-        const lightIds: string[] = [];
-        const lightTake = Math.min(LIGHT_COMMENT_PULL_MAX, n);
-        for (let i = 0; i < lightTake; i += 1) {
-          lightIds.push(ids[(lightStart + i) % n]!);
-        }
-        lightCommentOffsetRef.current = lightStart + lightTake;
-        for (const orderId of lightIds) {
-          if (Date.now() < backoffRef.current) break;
-          try {
-            const ccRes = await fetch(
-              `/api/orders/${encodeURIComponent(orderId)}/chat-corrections`,
-              { credentials: "include", cache: "no-store" },
-            );
-            if (ccRes.status === 429) {
-              const waitMs = parseRetryAfterMs(ccRes.headers.get("Retry-After"));
-              backoffRef.current = Date.now() + waitMs;
-              fastBackoffRef.current = backoffRef.current;
-              break;
-            }
-            if (!ccRes.ok) continue;
-            const ccData = (await ccRes
-              .json()
-              .catch(() => ({}))) as ChatCorrectionsLivePayload;
-            if (chatCorrectionsImported(ccData)) lightImported = true;
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-      void fetch("/api/orders/kanban-chat-retry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: batch }),
-      }).catch(() => {});
       if (n > WINDOW) {
         offsetRef.current = (offsetRef.current + WINDOW) % n;
       }
@@ -259,66 +144,55 @@ export function OrderListKaitenPoller({
       const mentionChanged = mentionKey !== mentionStateRef.current;
       mentionStateRef.current = mentionKey;
       const importHit =
-        lightImported ||
         data.newCorrectionsImported === true ||
         data.newProstheticsImported === true ||
         data.kaitenLabMentionDbChanged === true;
-      /* Не refresh от голого ok chat-corrections — иначе каждые ~12с шторм RSC. */
       if (
-        importHit ||
-        (data.syncedCount ?? 0) > 0 ||
-        mentionChanged
+        shouldRefreshListFromKaitenPoll({
+          importHit,
+          mentionChanged,
+          listUiChanged: data.listUiChanged === true,
+        })
       ) {
         refreshListDebounced({ importHit });
       }
-    } catch {
+
+      const now = Date.now();
+      if (now - lastRetryAtRef.current >= CHAT_RETRY_MIN_MS) {
+        lastRetryAtRef.current = now;
+        void fetch("/api/orders/kanban-chat-retry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderIds: batch }),
+          signal: ac.signal,
+        }).catch(() => {});
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       /* ignore */
     } finally {
       inFlightRef.current = false;
     }
-  }, [ids, refreshListDebounced, onSyncExtras, fastLiveMax]);
+  }, [ids, refreshListDebounced, onSyncExtras, searchActive]);
 
-  const runFastLiveThenRefresh = useCallback(async () => {
-    if (ids.length === 0 || ids.length > fastLiveMax) return;
-    const result = await pullKaitenChatFeedLiveForVisible();
-    if (result.imported) {
-      refreshListDebounced({ importHit: true });
-    }
-  }, [
-    ids.length,
-    fastLiveMax,
-    pullKaitenChatFeedLiveForVisible,
-    refreshListDebounced,
-  ]);
-
-  /** Смена списка (поиск): один live-проход, тяжёлый tick — с паузой, без наложения на PATCH карточки. */
   useEffect(() => {
-    if (ids.length === 0) return;
-    offsetRef.current = 0;
-    lightCommentOffsetRef.current = 0;
-    let cancelled = false;
-    void (async () => {
-      const result = await pullKaitenChatFeedLiveForVisible();
-      if (cancelled) return;
-      /* Пустой ok Kaiten — не router.refresh(): иначе шторм RSC без смены колонок. */
-      if (result.imported) {
-        refreshListDebounced({ importHit: true });
-      }
-      if (!cancelled) {
-        window.setTimeout(() => {
-          if (!cancelled) void tick();
-        }, 2500);
-      }
-    })();
+    aliveRef.current = true;
     return () => {
-      cancelled = true;
+      aliveRef.current = false;
+      abortRef.current?.abort();
     };
-  }, [idsKey, pullKaitenChatFeedLiveForVisible, refreshListDebounced, tick]);
+  }, []);
+
+  useEffect(() => {
+    offsetRef.current = 0;
+  }, [idsKey]);
 
   useEffect(() => {
     if (ids.length === 0) return;
-    const pollMs = kaitenClientPollIntervalMs();
-    const t0 = window.setTimeout(() => void tick(), 800);
+    const pollMs = kaitenListTitlesPollIntervalMs(
+      process.env.NEXT_PUBLIC_KAITEN_LIST_TITLES_POLL_MS,
+    );
+    const t0 = window.setTimeout(() => void tick(), 2_500);
     const id = window.setInterval(() => void tick(), pollMs);
     return () => {
       window.clearTimeout(t0);
@@ -329,30 +203,15 @@ export function OrderListKaitenPoller({
   useEffect(() => {
     if (ids.length === 0) return;
     const onVis = () => {
-      if (document.visibilityState === "visible") {
-        window.setTimeout(() => void tick(), 500);
+      if (document.visibilityState === "hidden") {
+        abortRef.current?.abort();
+        return;
       }
+      window.setTimeout(() => void tick(), 800);
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [ids, tick]);
-
-  useEffect(() => {
-    if (ids.length === 0 || ids.length > fastLiveMax) return;
-    const fastMs = kaitenFastLivePollIntervalMs();
-    /** Сдвиг на пол-интервала — не совпадать с основным tick списка. */
-    const t0 = window.setTimeout(
-      () => void runFastLiveThenRefresh(),
-      Math.floor(fastMs / 2),
-    );
-    const id = window.setInterval(() => {
-      void runFastLiveThenRefresh();
-    }, fastMs);
-    return () => {
-      window.clearTimeout(t0);
-      window.clearInterval(id);
-    };
-  }, [ids.length, fastLiveMax, runFastLiveThenRefresh]);
 
   return null;
 }

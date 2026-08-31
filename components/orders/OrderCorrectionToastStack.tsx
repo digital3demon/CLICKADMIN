@@ -22,6 +22,11 @@ import {
 } from "@/lib/order-toast-dismiss-storage";
 import { orderPathById } from "@/lib/order-public-ref";
 import { isPublicStickerHubPath } from "@/lib/sticker-public-path";
+import {
+  orderCorrectionToastPollMs,
+  shouldRefreshListFromToastFingerprint,
+  toastFingerprintShouldRefreshListPath,
+} from "@/lib/order-list-live-refresh";
 
 type OrderToastRow = {
   id: string;
@@ -107,13 +112,9 @@ function snippet(text: string, max = 56): string {
 }
 
 function pollMs(): number {
-  const raw = process.env.NEXT_PUBLIC_ORDER_CORRECTION_TOAST_POLL_MS;
-  const n =
-    raw != null && String(raw).trim()
-      ? Number.parseInt(String(raw).trim(), 10)
-      : 15_000;
-  if (!Number.isFinite(n)) return 15_000;
-  return Math.min(Math.max(n, 8000), 60_000);
+  return orderCorrectionToastPollMs(
+    process.env.NEXT_PUBLIC_ORDER_CORRECTION_TOAST_POLL_MS,
+  );
 }
 
 function parseRetryAfterMs(value: string | null): number {
@@ -322,7 +323,8 @@ export function OrderCorrectionToastStack() {
 
         const fp = `h:${chatList.map((x) => x.id).join(",")}|c:${corrList.map((x) => x.id).join(",")}|p:${proList.map((x) => x.id).join(",")}|m:${personalList.map((x) => x.id).join(",")}|lmc:${labMentionCount}`;
         if (fp !== lastFpRef.current) {
-          const hadPrevious = lastFpRef.current.length > 0;
+          const prevFp = lastFpRef.current;
+          const hadPrevious = prevFp.length > 0;
           const nextKeys = toastRowKeys(chatList, corrList, proList, personalList);
           const expand = hadPrevious
             ? shouldExpandToastStack({
@@ -341,8 +343,13 @@ export function OrderCorrectionToastStack() {
             setStackCollapsed(false);
             writeStackCollapsed(false);
           }
-          /* Не делаем router.refresh() от тостов — список и так обновляет Kaiten-поллер;
-           * refresh здесь плодил шторм RSC + /session на /orders. */
+          /* Канбан→CRM: чипы списка только при новом fingerprint, не каждый poll. */
+          if (
+            shouldRefreshListFromToastFingerprint(prevFp, fp) &&
+            toastFingerprintShouldRefreshListPath(pathnameRef.current)
+          ) {
+            router.refresh();
+          }
         }
         pollBackoffMsRef.current = 0;
         nextPollAllowedAtRef.current =

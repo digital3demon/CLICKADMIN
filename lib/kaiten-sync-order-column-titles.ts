@@ -32,6 +32,10 @@ import { ymdFromKaitenDueDate } from "@/lib/kanban/kaiten-head-to-kanban-card";
 import { persistKaitenStageDueToKanbanState } from "@/lib/kanban/kaiten-inbound-card-head";
 import { isKaitenRateLimitedStatus } from "@/lib/kaiten-rate-limit";
 import { kaitenLogger } from "@/lib/server/logger";
+import {
+  kaitenBackgroundShouldWriteOrder,
+  kaitenWrittenFieldsListUiChanged,
+} from "@/lib/order-list-live-refresh";
 
 const MAX_IDS = 10;
 /** Параллельные карточки — очередь в kaitenFetch + малый параллелизм снижает 429. */
@@ -60,6 +64,8 @@ export async function syncKaitenColumnTitlesForOrderIds(
   /** CRM user id с карточки Kaiten, если GET /cards отдал members. */
   membersByOrderId: Record<string, { assignees: string[]; participants: string[] }>;
   syncedCount: number;
+  /** Фон: срочность / описание / блок реально записаны — список имеет смысл refresh. */
+  listUiChanged: boolean;
   errorCount: number;
   /** Есть ли в комментариях упоминание тега лаборатории (Tenant.kanbanAdminMentionTag; подсветка «чат» в списке). */
   clicklabByOrderId: Record<string, boolean>;
@@ -98,12 +104,12 @@ export async function syncKaitenColumnTitlesForOrderIds(
   >();
   const clicklabByOrderId: Record<string, boolean> = {};
   let syncedCount = 0;
+  let listUiChanged = false;
   let errorCount = 0;
   let kaitenLabMentionDbChanged = false;
   let rateLimited = false;
   const includeComments = opts?.includeComments === true;
   /** Фон: с паузой в очереди kaitenFetch (~5 req/s). burst не использовать — блокирует сохранение нарядов. */
-  const successfullyCheckedOrderIds = new Set<string>();
 
   const rows = await db.order.findMany({
     where: { id: { in: uniq } },
@@ -309,7 +315,6 @@ export async function syncKaitenColumnTitlesForOrderIds(
         errorCount += 1;
         continue;
       }
-      successfullyCheckedOrderIds.add(row.id);
       const columnTitle = kaitenColumnTitleFromBoard(cardObj, colList);
       const meta = kaitenBlockedMetaFromCard(cardObj);
       const blocked = meta.blocked;
@@ -348,12 +353,15 @@ export async function syncKaitenColumnTitlesForOrderIds(
       const sameLane =
         !applyColumnFromKaiten || nextLane == null || nextLane === row.kaitenTrackLane;
       if (
-        sameTitle &&
-        sameDescription &&
-        sameBlock &&
-        sameSort &&
-        sameUrgent &&
-        sameLane
+        !kaitenBackgroundShouldWriteOrder({
+          applyColumnFromKaiten,
+          sameTitle,
+          sameDescription,
+          sameBlock,
+          sameSort,
+          sameUrgent,
+          sameLane,
+        })
       ) {
         titles[row.id] = columnTitle;
         if (includeComments && clicklabByOrderId[row.id] === undefined) {
@@ -402,6 +410,15 @@ export async function syncKaitenColumnTitlesForOrderIds(
       invalidateKaitenSnapshotCache(row.id);
       titles[row.id] = columnTitle;
       syncedCount += 1;
+      if (
+        kaitenWrittenFieldsListUiChanged({
+          sameDescription,
+          sameUrgent,
+          wroteBlock: !keepCrmBlock && !sameBlock,
+        })
+      ) {
+        listUiChanged = true;
+      }
     }
   }
 
@@ -413,13 +430,6 @@ export async function syncKaitenColumnTitlesForOrderIds(
         clicklabByOrderId[r.id] = false;
       }
     }
-  }
-
-  if (successfullyCheckedOrderIds.size > 0) {
-    await db.order.updateMany({
-      where: { id: { in: [...successfullyCheckedOrderIds] } },
-      data: { kaitenSyncedAt: new Date(), kaitenSyncError: null },
-    });
   }
 
   for (const [tenantId, patches] of headByTenant) {
@@ -449,6 +459,7 @@ export async function syncKaitenColumnTitlesForOrderIds(
     stageDueByOrderId,
     membersByOrderId,
     syncedCount,
+    listUiChanged,
     errorCount,
     clicklabByOrderId,
     kaitenLabMentionDbChanged,

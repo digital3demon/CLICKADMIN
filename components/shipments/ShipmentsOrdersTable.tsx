@@ -446,6 +446,7 @@ export function ShipmentsOrdersTable({
                   <td className="min-w-0 px-1 py-1 align-middle sm:px-1.5 sm:py-1.5 print:px-1.5">
                     <div className="flex min-h-[2.5rem] flex-col items-center justify-center gap-0.5 -translate-y-px">
                       <Link
+                        prefetch={false}
                         href={orderPathById(o.id)}
                         className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
                         title={`${o.orderNumber} — открыть наряд`}
@@ -469,6 +470,7 @@ export function ShipmentsOrdersTable({
                   <td className="min-w-0 px-1 py-1 align-middle text-center text-[var(--text-strong)] sm:px-1.5 sm:py-1.5 print:px-1.5">
                     {o.clinic ? (
                       <Link
+                        prefetch={false}
                         href={`/clients/${o.clinic.id}`}
                         title={o.clinic.name}
                         className="block hyphens-auto break-words text-center text-[var(--sidebar-blue)] hover:underline"
@@ -599,6 +601,7 @@ export function ShipmentsOrdersTable({
                       <div className="mb-1.5 flex items-start justify-between gap-2">
                         <div className="flex min-w-0 flex-col items-start gap-1">
                           <Link
+                            prefetch={false}
                             href={orderPathById(o.id)}
                             className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
                             title={`${o.orderNumber} — открыть наряд`}
@@ -667,6 +670,7 @@ export function ShipmentsOrdersTable({
 
                       <div className="flex flex-wrap items-center gap-2 [&_a]:inline-flex [&_a]:min-h-[44px] [&_a]:min-w-[44px] [&_a]:items-center [&_a]:justify-center [&_button]:min-h-[44px] [&_button]:min-w-[44px]">
                         <Link
+                          prefetch={false}
                           href={orderPathById(o.id)}
                           className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-medium text-[var(--text-strong)] active:bg-[var(--surface-hover)]"
                           title={`${o.orderNumber} — открыть наряд`}

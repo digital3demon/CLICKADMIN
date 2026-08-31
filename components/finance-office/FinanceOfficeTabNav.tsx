@@ -30,7 +30,7 @@ export function FinanceOfficeTabNav({
     >
       <Link
         prefetch={false}
-        href={financeOfficeListHref({}
+        href={financeOfficeListHref({
           tab: "today",
           from: periodFrom,
           to: periodTo,
@@ -43,7 +43,7 @@ export function FinanceOfficeTabNav({
       </Link>
       <Link
         prefetch={false}
-        href={financeOfficeListHref({}
+        href={financeOfficeListHref({
           tab: "tomorrow",
           from: periodFrom,
           to: periodTo,
@@ -56,7 +56,7 @@ export function FinanceOfficeTabNav({
       </Link>
       <Link
         prefetch={false}
-        href={financeOfficeListHref({}
+        href={financeOfficeListHref({
           tab: "period",
           from: periodFrom,
           to: periodTo,

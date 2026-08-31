@@ -516,6 +516,7 @@ export function OrdersListHeaderActionCards({
                           >
                             <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
                               <Link
+                                prefetch={false}
                                 href={orderPathById(row.orderId)}
                                 className="font-mono text-sm font-medium text-[var(--sidebar-blue)] hover:underline"
                                 onClick={(e) => {

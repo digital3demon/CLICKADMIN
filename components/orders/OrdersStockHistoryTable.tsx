@@ -100,6 +100,7 @@ export function OrdersStockHistoryTable({
                 <td className="min-w-0 px-2 py-2 sm:px-3 sm:py-2.5">
                   {row.order ? (
                     <Link
+                      prefetch={false}
                       href={orderPathById(row.order.id)}
                       className="block truncate font-mono text-[var(--sidebar-blue)] hover:underline"
                       title={`Наряд ${row.order.orderNumber}`}

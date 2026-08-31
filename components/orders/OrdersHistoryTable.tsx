@@ -53,6 +53,7 @@ export function OrdersHistoryTable({ items }: { items: RevisionsHistoryItem[] })
                 </td>
                 <td className="min-w-0 px-2 py-2 sm:px-3 sm:py-2.5 text-[var(--app-text)]">
                   <Link
+                    prefetch={false}
                     href={orderPathById(item.row.order.id)}
                     className="block truncate font-mono font-medium text-[var(--sidebar-blue)] hover:underline"
                     title={`Наряд ${item.row.order.orderNumber}`}
@@ -87,6 +88,7 @@ export function OrdersHistoryTable({ items }: { items: RevisionsHistoryItem[] })
                 </td>
                 <td className="min-w-0 whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                   <Link
+                    prefetch={false}
                     href={`${orderPathById(item.row.order.id)}?tab=history`}
                     className="text-xs font-medium text-[var(--sidebar-blue)] hover:underline"
                   >

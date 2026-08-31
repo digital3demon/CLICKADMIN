@@ -54,6 +54,7 @@ export default async function AttentionPage() {
                     <td className="px-4 py-3 text-[var(--text-secondary)]">{row.detail}</td>
                     <td className="px-4 py-3">
                       <Link
+                        prefetch={false}
                         href={row.href}
                         className="font-medium text-[var(--sidebar-blue)] hover:underline"
                       >

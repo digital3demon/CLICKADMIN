@@ -1191,6 +1191,7 @@ export function InventoryWarehouseClient() {
                     <td className="py-2 pr-2">
                       {m.order ? (
                         <Link
+                          prefetch={false}
                           href={orderPathById(m.order.id)}
                           className="text-[var(--sidebar-blue)] hover:underline"
                         >

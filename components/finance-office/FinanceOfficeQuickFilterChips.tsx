@@ -228,7 +228,7 @@ export function FinanceOfficeQuickFilterChips({
         {showCorrections ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_ORDER_ATTENTION,
             })}
@@ -250,7 +250,7 @@ export function FinanceOfficeQuickFilterChips({
         {showProsthetics ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_PROSTHETICS_PENDING,
             })}
@@ -272,7 +272,7 @@ export function FinanceOfficeQuickFilterChips({
         {showNotCalculated ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_FINANCE_NOT_CALCULATED,
             })}
@@ -294,7 +294,7 @@ export function FinanceOfficeQuickFilterChips({
         {showCalculated ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_FINANCE_CALCULATED,
             })}
@@ -316,7 +316,7 @@ export function FinanceOfficeQuickFilterChips({
         {showWaitPayment ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_WAIT_PAYMENT,
             })}
@@ -342,7 +342,7 @@ export function FinanceOfficeQuickFilterChips({
         {showEdo ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_EDO,
             })}
@@ -364,7 +364,7 @@ export function FinanceOfficeQuickFilterChips({
         {showEdoPaper ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_EDO_PAPER,
             })}
@@ -386,7 +386,7 @@ export function FinanceOfficeQuickFilterChips({
         {showNoEdo ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_NO_EDO,
             })}
@@ -408,7 +408,7 @@ export function FinanceOfficeQuickFilterChips({
         {showChat ? (
           <Link
             prefetch={false}
-            href={financeOfficeListHref({}
+            href={financeOfficeListHref({
               ...listCtx,
               tag: LIST_TAG_KAITEN_LAB_MENTION,
             })}
