@@ -1,5 +1,5 @@
-import { CrmModuleLoading } from "@/components/layout/CrmModuleLoading";
+import { CrmModuleListSnapshot } from "@/components/layout/CrmModuleListSnapshot";
 
 export default function Loading() {
-  return <CrmModuleLoading />;
+  return <CrmModuleListSnapshot title="ФинОтдел" />;
 }

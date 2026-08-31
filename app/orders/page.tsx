@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import type { Prisma } from "@prisma/client";
 import { ModuleFrame } from "@/components/layout/ModuleFrame";
+import { CrmModuleListSnapshotWriter } from "@/components/layout/CrmModuleListSnapshotWriter";
 import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
 import { OrderListDueCell } from "@/components/orders/OrderListDueCell";
 import { OrderListCardTypeTag } from "@/components/orders/OrderListCardTypeTag";
@@ -654,6 +655,17 @@ export default async function OrdersPage({
       rootClassName={ORDERS_FRAME_ROOT}
       titleBesideEnd={<OrdersPageTitleExtras />}
     >
+      <CrmModuleListSnapshotWriter
+        rows={orders.map((o) => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          patientName: o.patientName ?? "",
+          doctorName: o.doctor.fullName,
+          clinicName: o.clinic?.name ?? "",
+          columnTitle: o.kaitenColumnTitle ?? "",
+          payment: o.payment ?? "",
+        }))}
+      />
       <div className={`${ORDERS_MAIN_LAYOUT} space-y-4`}>
       <OrdersListKaitenChatShell
         orderIds={orders

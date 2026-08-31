@@ -10,6 +10,7 @@ import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { FinanceOfficePrintInvoicesButton } from "@/components/finance-office/FinanceOfficePrintInvoicesButton";
 import { FinanceOfficeExportButton } from "@/components/finance-office/FinanceOfficeExportButton";
 import { useFinanceOfficeSelection } from "@/components/finance-office/finance-office-selection";
+import { CrmModuleListSnapshotWriter } from "@/components/layout/CrmModuleListSnapshotWriter";
 
 export type FinanceOfficeOrderTableRow = {
   id: string;
@@ -114,6 +115,19 @@ export function FinanceOfficeOrdersTable({
       selectVisible(visibleIds, on);
     });
   };
+  const snapshotRows = useMemo(
+    () =>
+      orders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        patientName: o.patientName ?? "",
+        doctorName: o.doctor.fullName,
+        clinicName: o.clinic?.name ?? "",
+        columnTitle: o.kaitenColumnTitle ?? "",
+        payment: o.payment ?? "",
+      })),
+    [orders],
+  );
 
   const headerRow = (
     <FinanceOfficeTableHeaderRow
@@ -140,6 +154,7 @@ export function FinanceOfficeOrdersTable({
         toolbarClassName="pb-3"
         toolbar={<div className="space-y-4">{toolbar}</div>}
       >
+        <CrmModuleListSnapshotWriter rows={snapshotRows} />
         <p className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-4 py-6 text-center text-sm text-[var(--text-secondary)]">
           В ФинОтделе нет нарядов по текущему фильтру.
         </p>
@@ -182,6 +197,7 @@ export function FinanceOfficeOrdersTable({
         </div>
       }
     >
+      <CrmModuleListSnapshotWriter rows={snapshotRows} />
       <div className="relative">
       <div className="w-full min-w-0">
         <table className="finance-office-orders-table w-full min-w-0 table-fixed border-separate border-spacing-0 text-center text-sm">
