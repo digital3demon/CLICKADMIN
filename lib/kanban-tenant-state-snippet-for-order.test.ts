@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
-import { firstHandedToAdminsAtFromLinkedOrderKanbanState } from "@/lib/kanban-tenant-state-snippet-for-order";
+import {
+  firstHandedToAdminsAtFromLinkedOrderKanbanState,
+  kanbanSnippetForLinkedOrder,
+} from "@/lib/kanban-tenant-state-snippet-for-order";
+import { KANBAN_STOP_COLUMN_TITLE } from "@/lib/kanban/kanban-stop-column";
 
 describe("firstHandedToAdminsAtFromLinkedOrderKanbanState", () => {
   it("берёт самый ранний переход в колонку «сдана админам» по журналу (новые записи в начале массива)", () => {
@@ -85,5 +89,41 @@ describe("firstHandedToAdminsAtFromLinkedOrderKanbanState", () => {
     };
 
     expect(firstHandedToAdminsAtFromLinkedOrderKanbanState(raw, orderId)).toBeNull();
+  });
+});
+
+describe("kanbanSnippetForLinkedOrder STOP", () => {
+  it("карточка в stoppedCards — колонка СТОП, кириллица в id", () => {
+    const orderId = "наряд-стоп-1";
+    const cardId = crmKanbanLinkedCardId(orderId);
+    const raw = {
+      boards: [
+        {
+          id: "b1",
+          title: "Ортопедия",
+          columns: [{ id: "c1", title: "Очередь", cards: [] }],
+          stoppedCards: [
+            {
+              id: "s1",
+              card: {
+                id: cardId,
+                linkedOrderId: orderId,
+                assignees: [],
+                participants: [],
+                activity: [],
+              },
+              stoppedAt: "2026-08-01T00:00:00.000Z",
+              sourceColumnId: "c1",
+              sourceColumnTitle: "Очередь",
+            },
+          ],
+          users: [],
+          archivedCards: [],
+        },
+      ],
+    };
+    expect(kanbanSnippetForLinkedOrder(raw, orderId)?.columnTitle).toBe(
+      KANBAN_STOP_COLUMN_TITLE,
+    );
   });
 });

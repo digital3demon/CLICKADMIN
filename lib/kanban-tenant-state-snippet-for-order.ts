@@ -35,7 +35,17 @@ function findCardInBoard(board: KanbanBoard, orderId: string): KanbanCard | null
     const c = ac.card;
     if (c.id === wantId || c.linkedOrderId === orderId) return c;
   }
+  for (const row of board.stoppedCards || []) {
+    const c = row.card;
+    if (c.id === wantId || c.linkedOrderId === orderId) return c;
+  }
   return null;
+}
+
+function cardIsStoppedOnBoard(board: KanbanBoard, cardId: string): boolean {
+  const id = String(cardId || "").trim();
+  if (!id) return false;
+  return (board.stoppedCards || []).some((row) => row.card.id === id);
 }
 
 export type KanbanOrderPublicSnippet = {
