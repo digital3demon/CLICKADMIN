@@ -225,43 +225,43 @@ export function ReconciliationPeriodRows({
           <article
             key={k}
             className={[
-              "rounded-lg border px-3 py-2.5",
+              "rounded-xl border px-4 py-3",
               row.highlight && !archive
                 ? "border-amber-400 bg-amber-50/90 dark:border-amber-600 dark:bg-amber-950/35"
                 : "border-[var(--card-border)] bg-[var(--surface-muted)]",
             ].join(" ")}
           >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-semibold text-[var(--app-text)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-base font-semibold leading-snug text-[var(--app-text)]">
                   {row.legalEntityLabel}
-                  {row.inn ? (
-                    <span className="ms-2 text-xs font-normal text-[var(--text-secondary)]">
-                      ИНН {row.inn}
-                    </span>
-                  ) : null}
                 </p>
+                {row.inn ? (
+                  <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                    ИНН {row.inn}
+                  </p>
+                ) : null}
                 <ul className="mt-1 list-none space-y-0.5 text-sm text-[var(--text-body)]">
                   {row.clinicNames.map((name) => (
                     <li key={name}>{name}</li>
                   ))}
                 </ul>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
                   {row.periodLabelRu} · {row.frequencyLabel}
                   {row.periodLocked ? " · период сохранён" : ""}
                   {row.downloadedAt ? " · скачивали" : ""}
                 </p>
-                <p className="mt-0.5 text-sm text-[var(--app-text)]">
+                <p className="mt-1 text-sm font-medium text-[var(--app-text)]">
                   Нарядов: {row.orderCount} · {moneyRu(row.sumRub)}
                 </p>
               </div>
-              <div className="flex flex-col items-stretch gap-1.5 sm:items-end">
-                <div className="flex flex-wrap items-center justify-end gap-1.5">
-                  <label className="flex items-center gap-1 text-[11px] text-[var(--text-body)]">
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-[22rem]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-[var(--text-body)]">
                     с
                     <input
                       type="date"
-                      className="h-8 w-[8.5rem] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-1.5 text-xs"
+                      className="h-9 min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs"
                       value={draft.from}
                       onChange={(e) =>
                         setDraftByKey((prev) => ({
@@ -272,11 +272,11 @@ export function ReconciliationPeriodRows({
                       aria-label="Период сверки с"
                     />
                   </label>
-                  <label className="flex items-center gap-1 text-[11px] text-[var(--text-body)]">
+                  <label className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-[var(--text-body)]">
                     по
                     <input
                       type="date"
-                      className="h-8 w-[8.5rem] rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-1.5 text-xs"
+                      className="h-9 min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-xs"
                       value={draft.to}
                       onChange={(e) =>
                         setDraftByKey((prev) => ({
@@ -287,29 +287,9 @@ export function ReconciliationPeriodRows({
                       aria-label="Период сверки по"
                     />
                   </label>
-                  {resolved.ok ? (
-                    <a
-                      href={downloadHref(row, !archive && lock, {
-                        from: resolved.from,
-                        to: resolved.to,
-                        slot: resolved.slot,
-                      })}
-                      className="inline-flex h-8 items-center justify-center rounded-md bg-[var(--sidebar-blue)] px-2.5 text-xs font-semibold text-white"
-                    >
-                      Скачать сверку
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center justify-center rounded-md bg-[var(--sidebar-blue)] px-2.5 text-xs font-semibold text-white"
-                      onClick={() => setErr(resolved.error)}
-                    >
-                      Скачать сверку
-                    </button>
-                  )}
                 </div>
                 {!archive && canEdit ? (
-                  <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-body)]">
+                  <label className="flex items-center gap-2 text-xs text-[var(--text-body)]">
                     <input
                       type="checkbox"
                       checked={lock}
@@ -320,21 +300,43 @@ export function ReconciliationPeriodRows({
                     Сохранить этот период для этой сверки
                   </label>
                 ) : null}
-                {!archive && canEdit ? (
-                  <button
-                    type="button"
-                    disabled={busy === k}
-                    onClick={() => void markPaid(row)}
-                    className="h-8 rounded-md border border-[var(--card-border)] px-2.5 text-xs font-semibold disabled:opacity-50"
-                  >
-                    Оплачена
-                  </button>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {resolved.ok ? (
+                    <a
+                      href={downloadHref(row, !archive && lock, {
+                        from: resolved.from,
+                        to: resolved.to,
+                        slot: resolved.slot,
+                      })}
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-md bg-[var(--sidebar-blue)] px-3 text-sm font-semibold text-white"
+                    >
+                      Скачать сверку
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-md bg-[var(--sidebar-blue)] px-3 text-sm font-semibold text-white"
+                      onClick={() => setErr(resolved.error)}
+                    >
+                      Скачать сверку
+                    </button>
+                  )}
+                  {!archive && canEdit ? (
+                    <button
+                      type="button"
+                      disabled={busy === k}
+                      onClick={() => void markPaid(row)}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm font-semibold disabled:opacity-50"
+                    >
+                      Оплачена
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
-            <div className="mt-2 border-t border-[var(--border-subtle)] pt-2 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-[var(--text-secondary)]">
+            <div className="mt-3 text-xs">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-semibold text-[var(--app-text)]">
                   Счёт и УПД
                 </span>
                 {row.id && row.hasInvoice ? (
@@ -361,7 +363,7 @@ export function ReconciliationPeriodRows({
               {canEdit ? (
                 <label
                   className={[
-                    "mt-2 flex min-h-[2.5rem] cursor-pointer items-center justify-center rounded-md border border-dashed px-3 py-2 text-center font-semibold",
+                    "mt-2 flex min-h-[3.25rem] cursor-pointer items-center justify-center rounded-lg border border-dashed px-3 py-3 text-center text-sm font-semibold",
                     dragKey === k
                       ? "border-[var(--sidebar-blue)] bg-[var(--sidebar-blue)]/10 text-[var(--app-text)]"
                       : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)]",

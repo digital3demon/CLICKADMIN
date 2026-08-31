@@ -29,7 +29,8 @@ export function FinanceOfficeTabNav({
       aria-label="Вид ФинОтдела"
     >
       <Link
-        href={financeOfficeListHref({
+        prefetch={false}
+        href={financeOfficeListHref({}
           tab: "today",
           from: periodFrom,
           to: periodTo,
@@ -41,7 +42,8 @@ export function FinanceOfficeTabNav({
         Сегодня
       </Link>
       <Link
-        href={financeOfficeListHref({
+        prefetch={false}
+        href={financeOfficeListHref({}
           tab: "tomorrow",
           from: periodFrom,
           to: periodTo,
@@ -53,7 +55,8 @@ export function FinanceOfficeTabNav({
         Завтра
       </Link>
       <Link
-        href={financeOfficeListHref({
+        prefetch={false}
+        href={financeOfficeListHref({}
           tab: "period",
           from: periodFrom,
           to: periodTo,

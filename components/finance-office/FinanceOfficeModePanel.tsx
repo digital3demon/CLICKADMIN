@@ -80,7 +80,7 @@ export function FinanceOfficeModePanel({
       <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1.5">
         <Link
           href={allHref}
-          prefetch
+          prefetch={false}
           className={[
             "inline-flex h-8 shrink-0 items-center rounded-md px-2 text-[11px] font-bold uppercase tracking-wide transition-colors sm:h-9 sm:px-2.5 sm:text-xs",
             allActive
@@ -94,7 +94,7 @@ export function FinanceOfficeModePanel({
         </Link>
         <Link
           href={actualHref}
-          prefetch
+          prefetch={false}
           className={[
             "inline-flex h-8 shrink-0 items-center rounded-md px-2 text-[11px] font-bold uppercase tracking-wide transition-colors sm:h-9 sm:px-2.5 sm:text-xs",
             actualActive
@@ -113,7 +113,7 @@ export function FinanceOfficeModePanel({
 
         <Link
           href={periodHref(defaultTo)}
-          prefetch
+          prefetch={false}
           className={dayBtn(todayActive)}
           title="Лаб-срок — сегодня (МСК)"
           aria-current={todayActive ? "page" : undefined}
@@ -122,7 +122,7 @@ export function FinanceOfficeModePanel({
         </Link>
         <Link
           href={periodHref(tomorrowYmd)}
-          prefetch
+          prefetch={false}
           className={dayBtn(tomorrowActive)}
           title="Лаб-срок — завтра (МСК)"
           aria-current={tomorrowActive ? "page" : undefined}

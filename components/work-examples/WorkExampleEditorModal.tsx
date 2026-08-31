@@ -6,6 +6,11 @@ import { WorkExampleHtmlViewer } from "@/components/work-examples/WorkExampleHtm
 import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import type { WorkExampleCardType, WorkExampleItem } from "@/components/work-examples/types";
 import {
+  cloudFolderProviderLabel,
+  isImportableCloudFolderUrl,
+  parseCloudFolderImportUrl,
+} from "@/lib/work-examples/cloud-folder-url";
+import {
   parseWorkExampleCloudUrls,
   serializeWorkExampleCloudUrls,
   splitWorkExampleCloudUrlDraft,
@@ -78,7 +83,11 @@ export function WorkExampleEditorModal({
   const [savedFiles, setSavedFiles] = useState(item?.files ?? []);
   const [savedId, setSavedId] = useState(item?.id ?? "");
   const [busy, setBusy] = useState(false);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudNote, setCloudNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const importedCloudRef = useRef<Set<string>>(new Set());
+  const skipCloudAutoRef = useRef(true);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cadInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -158,6 +167,24 @@ export function WorkExampleEditorModal({
     };
   }, [q]);
 
+  useEffect(() => {
+    if (skipCloudAutoRef.current) {
+      skipCloudAutoRef.current = false;
+      return;
+    }
+    const fresh = cloudUrls
+      .map((u) => u.trim())
+      .filter((u) => {
+        const key = cloudImportKey(u);
+        return key != null && !importedCloudRef.current.has(key);
+      });
+    if (!fresh.length) return;
+    const t = window.setTimeout(() => {
+      void pullCloudNow(fresh);
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, [cloudUrls]);
+
   const pickOrder = async (hit: OrderHit | null) => {
     if (!hit) {
       setOrderId("");
@@ -202,6 +229,90 @@ export function WorkExampleEditorModal({
     }
     setSavedId(j.item.id);
     return j.item;
+  };
+
+  const cloudImportKey = (url: string): string | null => {
+    const t = parseCloudFolderImportUrl(url);
+    if (!t) return null;
+    return (t.yandexPublicUrl || t.driveId || url).toLowerCase();
+  };
+
+  const importCloudFolders = async (
+    exampleId: string,
+    urls: string[],
+  ): Promise<WorkExampleItem | null> => {
+    let latest: WorkExampleItem | null = null;
+    const notes: string[] = [];
+    for (const url of urls) {
+      const target = parseCloudFolderImportUrl(url);
+      if (!target) continue;
+      const key = cloudImportKey(url);
+      setCloudNote(`Забираю фото с ${cloudFolderProviderLabel(target.provider)}…`);
+      try {
+        const r = await fetch(`/api/work-examples/${exampleId}/cloud-import`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folderUrl: url }),
+          signal: AbortSignal.timeout(180_000),
+        });
+        const j = (await r.json().catch(() => ({}))) as {
+          item?: WorkExampleItem;
+          imported?: number;
+          skipped?: number;
+          truncated?: boolean;
+          error?: string;
+          errors?: string[];
+        };
+        if (j.item) {
+          latest = j.item;
+          setSavedFiles(j.item.files);
+          setSavedId(j.item.id);
+          if (j.item.title) {
+            setTitle((prev) => prev.trim() || j.item!.title);
+          }
+        }
+        if (!r.ok) {
+          notes.push(j.error || "Не удалось забрать фото");
+          continue;
+        }
+        if (key) importedCloudRef.current.add(key);
+        const parts: string[] = [];
+        if (j.imported) parts.push(`забрано ${j.imported}`);
+        if (j.skipped) parts.push(`уже были ${j.skipped}`);
+        if (j.truncated) parts.push("лимит 40 за раз");
+        notes.push(
+          parts.length
+            ? `${cloudFolderProviderLabel(target.provider)}: ${parts.join(", ")}`
+            : `${cloudFolderProviderLabel(target.provider)}: готово`,
+        );
+        if (j.errors?.length) notes.push(j.errors.slice(0, 3).join(" · "));
+      } catch {
+        notes.push("Сеть недоступна при загрузке из облака");
+      }
+    }
+    setCloudNote(notes.filter(Boolean).join(" · ") || null);
+    return latest;
+  };
+
+  const pullCloudNow = async (urls?: string[]) => {
+    const list = (urls ?? cloudUrls).map((u) => u.trim()).filter(isImportableCloudFolderUrl);
+    if (!list.length) {
+      setCloudNote("Вставьте ссылку на папку Google Drive или Яндекс Диска");
+      return;
+    }
+    setCloudBusy(true);
+    setErr(null);
+    try {
+      const next = await persistMeta();
+      if (!next) return;
+      const imported = await importCloudFolders(next.id, list);
+      if (imported) onSaved(imported);
+    } catch {
+      setErr("Не удалось забрать фото из облака");
+    } finally {
+      setCloudBusy(false);
+    }
   };
 
   const uploadPending = async (
@@ -279,6 +390,19 @@ export function WorkExampleEditorModal({
           setErr(uploaded.errors.join(" · "));
           onSaved(saved);
           return;
+        }
+      }
+      const freshCloud = cloudUrls
+        .map((u) => u.trim())
+        .filter((u) => {
+          const key = cloudImportKey(u);
+          return key != null && !importedCloudRef.current.has(key);
+        });
+      if (freshCloud.length) {
+        const imported = await importCloudFolders(next.id, freshCloud);
+        if (imported) {
+          saved = imported;
+          setSavedFiles(imported.files);
         }
       }
       setPending([]);
@@ -486,11 +610,21 @@ export function WorkExampleEditorModal({
               >
                 <input
                   className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[var(--text-placeholder)]"
-                  placeholder="https://…"
+                  placeholder="папка Яндекс Диска или Google Drive…"
                   value={href}
                   onChange={(e) => setCloudUrlAt(i, e.target.value)}
                   aria-label={i === 0 ? "Ссылка на облако" : `Ссылка на облако ${i + 1}`}
                 />
+                {isImportableCloudFolderUrl(href) ? (
+                  <button
+                    type="button"
+                    className="ml-2 shrink-0 text-xs text-[var(--sidebar-blue)] disabled:opacity-50"
+                    disabled={busy || cloudBusy}
+                    onClick={() => void pullCloudNow([href])}
+                  >
+                    забрать
+                  </button>
+                ) : null}
                 {cloudUrls.length > 1 ? (
                   <button
                     type="button"
@@ -504,11 +638,11 @@ export function WorkExampleEditorModal({
                   >
                     убрать
                   </button>
-                ) : (
+                ) : !isImportableCloudFolderUrl(href) ? (
                   <span className="ml-2 shrink-0 text-xs text-[var(--text-muted)]">
                     Ссылка
                   </span>
-                )}
+                ) : null}
               </div>
             ))}
             {cloudUrls.length < WORK_EXAMPLE_CLOUD_URL_MAX ? (
@@ -520,6 +654,13 @@ export function WorkExampleEditorModal({
                 + ещё ссылка
               </button>
             ) : null}
+            {cloudNote ? (
+              <p className="text-xs text-[var(--text-muted)]">{cloudNote}</p>
+            ) : (
+              <p className="text-xs text-[var(--text-muted)]">
+                Из папки заберу только фото с именами; архивы, КТ и прочее останутся по ссылке
+              </p>
+            )}
           </div>
 
           <div className="grid min-h-[10rem] flex-1 grid-cols-3 gap-1.5">
@@ -693,11 +834,11 @@ export function WorkExampleEditorModal({
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || cloudBusy}
               className="rounded-lg bg-[var(--sidebar-blue)] px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
               onClick={() => void save()}
             >
-              {busy ? "Сохранение…" : "Сохранить"}
+              {cloudBusy ? "Забираю фото…" : busy ? "Сохранение…" : "Сохранить"}
             </button>
           </div>
         </footer>

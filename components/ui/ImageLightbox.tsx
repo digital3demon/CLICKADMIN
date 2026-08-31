@@ -24,7 +24,7 @@ export function ImageLightbox({
   state: ImageLightboxState;
   onClose: () => void;
   onIndexChange?: (index: number) => void;
-  /** На публичной витрине имя файла не показываем. */
+  /** Подпись фото; на витрине примеров — название кадра. */
   showFileName?: boolean;
 }) {
   const current = state.images[state.index];

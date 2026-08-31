@@ -222,6 +222,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
       >
         <div className="flex items-center justify-center">
           <Link
+            prefetch={false}
             href={orderPathById(o.id)}
             className="whitespace-nowrap font-mono text-[11px] font-semibold leading-none text-[var(--sidebar-blue)] hover:underline sm:text-xs"
             title={`${o.orderNumber} — открыть наряд`}
@@ -233,6 +234,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
       <td className="min-w-0 w-[11%] px-1 py-2 text-center align-middle">
         {o.clinic ? (
           <Link
+            prefetch={false}
             href={`/clients/${o.clinic.id}`}
             title={o.clinic.address?.trim() || undefined}
             className={`block hyphens-auto break-words text-center hover:underline ${financeOfficeClinicNameClass(o.clinic.address)}`}
@@ -247,6 +249,7 @@ const DesktopRestCells = memo(function DesktopRestCells(args: RowChrome) {
       </td>
       <td className="min-w-0 w-[7.25rem] px-1 py-2 text-center align-middle">
         <Link
+          prefetch={false}
           href={`/clients/doctors/${o.doctor.id}`}
           className="block break-words text-center text-[var(--sidebar-blue)] hover:underline"
         >
@@ -397,6 +400,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
           >
             <div className="mb-1 flex min-w-0 items-center gap-1.5">
               <Link
+                prefetch={false}
                 href={orderPathById(o.id)}
                 className="shrink-0 font-mono text-[0.95rem] font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
                 title={`${o.orderNumber} — открыть наряд`}

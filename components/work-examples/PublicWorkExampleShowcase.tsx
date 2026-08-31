@@ -8,6 +8,7 @@ import {
 import { WorkExampleHtmlViewer } from "@/components/work-examples/WorkExampleHtmlViewer";
 import { WorkExampleMeshViewer } from "@/components/work-examples/WorkExampleMeshViewer";
 import type { WorkExampleCompositionLine } from "@/components/work-examples/types";
+import { workExamplePhotoCaption } from "@/lib/work-examples/cloud-folder-photo";
 import {
   isWorkExampleViewableHtml,
   isWorkExampleViewableMesh,
@@ -105,16 +106,18 @@ export function PublicWorkExampleShowcase({
 
         {photos.length ? (
           <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {photos.map((p, _, all) => (
+            {photos.map((p, _, all) => {
+              const caption = workExamplePhotoCaption(p.fileName);
+              return (
               <button
                 key={p.id}
                 type="button"
-                className="overflow-hidden rounded-2xl border border-white/10"
+                className="overflow-hidden rounded-2xl border border-white/10 text-left"
                 onClick={() =>
                   setLightbox({
                     images: all.map((x) => ({
                       id: x.id,
-                      fileName: x.fileName,
+                      fileName: workExamplePhotoCaption(x.fileName) || x.fileName,
                       url: fileHref(x.id),
                     })),
                     index: all.findIndex((x) => x.id === p.id),
@@ -122,9 +125,19 @@ export function PublicWorkExampleShowcase({
                 }
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={fileHref(p.id)} alt="" className="aspect-square w-full object-cover" />
+                <img
+                  src={fileHref(p.id)}
+                  alt={caption}
+                  className="aspect-square w-full object-cover"
+                />
+                {caption ? (
+                  <span className="block truncate px-2.5 py-1.5 text-xs text-zinc-300">
+                    {caption}
+                  </span>
+                ) : null}
               </button>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
@@ -228,7 +241,7 @@ export function PublicWorkExampleShowcase({
       {lightbox ? (
         <ImageLightbox
           state={lightbox}
-          showFileName={false}
+          showFileName
           onClose={() => setLightbox(null)}
           onIndexChange={(index) => setLightbox((s) => (s ? { ...s, index } : s))}
         />

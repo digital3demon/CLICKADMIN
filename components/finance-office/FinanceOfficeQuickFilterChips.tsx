@@ -227,7 +227,8 @@ export function FinanceOfficeQuickFilterChips({
       <div className="flex flex-wrap items-center gap-2">
         {showCorrections ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_ORDER_ATTENTION,
             })}
@@ -248,7 +249,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showProsthetics ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_PROSTHETICS_PENDING,
             })}
@@ -269,7 +271,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showNotCalculated ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_FINANCE_NOT_CALCULATED,
             })}
@@ -290,7 +293,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showCalculated ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_FINANCE_CALCULATED,
             })}
@@ -311,7 +315,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showWaitPayment ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_WAIT_PAYMENT,
             })}
@@ -336,7 +341,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showEdo ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_EDO,
             })}
@@ -357,7 +363,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showEdoPaper ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_EDO_PAPER,
             })}
@@ -378,7 +385,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showNoEdo ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_NO_EDO,
             })}
@@ -399,7 +407,8 @@ export function FinanceOfficeQuickFilterChips({
         ) : null}
         {showChat ? (
           <Link
-            href={financeOfficeListHref({
+            prefetch={false}
+            href={financeOfficeListHref({}
               ...listCtx,
               tag: LIST_TAG_KAITEN_LAB_MENTION,
             })}
@@ -427,6 +436,7 @@ export function FinanceOfficeQuickFilterChips({
               </strong>
             </span>
             <Link
+              prefetch={false}
               href={financeOfficeListHref(listCtx)}
               className="shrink-0 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-0.5 text-xs font-medium text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
             >
