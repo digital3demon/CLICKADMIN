@@ -1175,6 +1175,7 @@ export async function PATCH(
       id: true,
       kaitenCardId: true,
       kaitenTrackLane: true,
+      kaitenColumnTitle: true,
       isUrgent: true,
       kaitenCardTitleMirror: true,
       kaitenCardDescriptionMirror: true,
