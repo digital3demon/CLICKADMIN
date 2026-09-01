@@ -25,7 +25,7 @@ import {
   findCardInAppState,
   generateId,
   getActiveBoard,
-  getCardTypeAccent,
+  isCardBlocked,
   KAITEN_MIRROR_DEFAULT_QUEUE_TITLE,
   KANBAN_KAITEN_CARD_TYPES_SYNCED_EVENT,
   loadKanbanState,
@@ -77,6 +77,8 @@ import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-
 import { showKanbanKaitenRefreshButton } from "@/lib/kaiten-integration/ui";
 import { collectSharedArchivedCards } from "@/lib/kanban/collect-shared-archived-cards";
 import { collectSharedStoppedCards } from "@/lib/kanban/collect-shared-stopped-cards";
+import { buildKanbanStopViewBoard } from "@/lib/kanban/build-stop-view-board";
+import { KANBAN_STOP_REQUIRES_BLOCK_MESSAGE } from "@/lib/kanban/kanban-stop-column";
 import type { KanbanCardOpenOrigin } from "@/lib/kanban/card-modal-animation";
 import {
   applyKanbanCardMembersOnBoard,
@@ -355,136 +357,6 @@ function clampStopHoverPreviewPosition(x: number, y: number) {
       Math.min(y + STOP_HOVER_PREVIEW_OFFSET, window.innerHeight - estHeight - margin),
     ),
   };
-}
-
-function KanbanStopView({
-  board,
-  stoppedCards,
-  resolveHomeBoard,
-  onOpenCard,
-  onRestore,
-}: {
-  board: KanbanBoard;
-  stoppedCards: KanbanStoppedCard[];
-  resolveHomeBoard?: (row: KanbanStoppedCard) => KanbanBoard;
-  onOpenCard: (cardId: string) => void;
-  onRestore: (stoppedId: string) => void;
-}) {
-  return (
-    <div className="min-h-0 flex-1 overflow-auto bg-[var(--kanban-workspace-bg)] p-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-extrabold tracking-wide text-[var(--kanban-text)]">
-            СТОП
-          </h2>
-          <p className="text-sm text-[var(--kanban-text-muted)]">
-            Карточки, временно убранные из дорожек: {stoppedCards.length}
-          </p>
-        </div>
-      </div>
-      {stoppedCards.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] p-6 text-center text-sm text-[var(--kanban-text-muted)]">
-          Перетащите карточку на кнопку СТОП или отправьте её через меню карточки.
-        </div>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-2">
-          {stoppedCards.map((row) => {
-            return (
-              <StoppedKanbanCard
-                key={row.id}
-                board={resolveHomeBoard?.(row) ?? board}
-                row={row}
-                onOpenCard={onOpenCard}
-                onRestore={onRestore}
-              />
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StoppedKanbanCard({
-  board,
-  row,
-  onOpenCard,
-  onRestore,
-}: {
-  board: KanbanBoard;
-  row: KanbanStoppedCard;
-  onOpenCard: (cardId: string) => void;
-  onRestore: (stoppedId: string) => void;
-}) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (e: globalThis.MouseEvent) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setMenuOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, [menuOpen]);
-
-  const accent = getCardTypeAccent(board, row.card.cardTypeId);
-  const typeName = board.cardTypes.find((t) => t.id === row.card.cardTypeId)?.name ?? "";
-  return (
-    <article className="relative rounded-xl border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] p-3 pr-10 shadow-[var(--kanban-shadow)]">
-      <div ref={menuRef} className="absolute right-2 top-2">
-        <button
-          type="button"
-          className="rounded-md p-1 text-[var(--kanban-text-muted)] hover:bg-black/10 hover:text-[var(--kanban-text)] dark:hover:bg-white/10"
-          aria-label="Меню карточки в стопе"
-          title="Действия"
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenuOpen((v) => !v);
-          }}
-        >
-          ⋮
-        </button>
-        {menuOpen ? (
-          <div className="absolute right-0 z-30 mt-1 w-48 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] py-1 text-sm text-[var(--kanban-text)] shadow-lg">
-            <button
-              type="button"
-              className="w-full px-3 py-2 text-left hover:bg-black/[0.06] dark:hover:bg-white/[0.06]"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRestore(row.id);
-                setMenuOpen(false);
-              }}
-            >
-              Вернуть из стопа
-            </button>
-          </div>
-        ) : null}
-      </div>
-      {typeName ? (
-        <div
-          className="mb-2 rounded-md px-2 py-1 text-[0.68rem] font-bold uppercase tracking-wide"
-          style={{
-            color: `color-mix(in srgb, ${accent} 75%, var(--kanban-text))`,
-            background: `color-mix(in srgb, ${accent} 12%, var(--kanban-card-bg))`,
-          }}
-        >
-          {typeName}
-        </div>
-      ) : null}
-      <button
-        type="button"
-        className="block w-full text-left text-sm font-semibold leading-snug text-[var(--kanban-text)] hover:underline"
-        onClick={() => onOpenCard(row.card.id)}
-      >
-        {row.card.title}
-      </button>
-      <div className="mt-2 text-[0.72rem] leading-snug text-[var(--kanban-text-muted)]">
-        Было: {row.sourceColumnTitle || "колонка"} ·{" "}
-        {new Date(row.stoppedAt).toLocaleDateString("ru-RU")}
-      </div>
-    </article>
-  );
 }
 
 export function KanbanApp({
@@ -1700,6 +1572,25 @@ export function KanbanApp({
     },
     [appState, board],
   );
+  const stopViewBoard = useMemo(() => {
+    if (!viewBoard) return null;
+    return buildKanbanStopViewBoard(viewBoard, stoppedCards);
+  }, [viewBoard, stoppedCards]);
+  const stopCardHomeBoardId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const row of stoppedCards) {
+      m.set(row.card.id, resolveStoppedCardHomeBoard(row).id);
+    }
+    return m;
+  }, [stoppedCards, resolveStoppedCardHomeBoard]);
+  const resolveStopViewCardHomeBoard = useCallback(
+    (c: KanbanCard) => {
+      const row = stoppedCards.find((r) => r.card.id === c.id);
+      if (row) return resolveStoppedCardHomeBoard(row);
+      return resolveCardHomeBoard(c);
+    },
+    [stoppedCards, resolveStoppedCardHomeBoard, resolveCardHomeBoard],
+  );
   const findArchivedCardHomeBoardId = useCallback(
     (archivedRowId: string) => {
       if (!appState) return board?.id ?? "";
@@ -2358,6 +2249,10 @@ export function KanbanApp({
     if (!appState) return;
     const found = findCardInAppState(appState, cardId);
     if (!found) return;
+    if (!isCardBlocked(found.card)) {
+      showToast(KANBAN_STOP_REQUIRES_BLOCK_MESSAGE, true);
+      return;
+    }
     const titleSnapshot = (found.card.title || "").trim() || "карточка";
     const linkedOrderId = found.card.linkedOrderId?.trim() || "";
     const kaitenCardId = found.card.kaitenCardId;
@@ -3555,14 +3450,79 @@ export function KanbanApp({
                 : "min-h-0 flex-1 overflow-hidden"
             }`}
           >
-          {stopOpen ? (
-            <KanbanStopView
-              board={board}
-              stoppedCards={stoppedCards}
-              resolveHomeBoard={resolveStoppedCardHomeBoard}
-              onOpenCard={openKanbanCard}
-              onRestore={restoreStoppedCard}
-            />
+          {stopOpen && stopViewBoard ? (
+            appState.viewMode === "list" ? (
+              <KanbanListView
+                appState={appState}
+                board={stopViewBoard}
+                sort={listSortFromViewPref(viewSort)}
+                onSortChange={persistViewSort}
+                cardHomeBoardId={stopCardHomeBoardId}
+                canManageAssignees={kanbanCardPerms.manageAssignees}
+                canManageParticipants={kanbanCardPerms.manageParticipants}
+                onUpdateCardMembers={applyCardMembersFromList}
+                canEditDueDate={kanbanCardPerms.editDueDate}
+                onUpdateStageDue={applyCardStageDueFromList}
+                onToggleUrgent={applyCardUrgentFromList}
+                onCopyCardLink={copyCardLink}
+                canManageKanbanBlock={canManageKanbanBlock}
+                onRequestKanbanBlock={(cardId) => {
+                  setListExpandedCardId(cardId);
+                  const loc = findCardInAppState(appState, cardId);
+                  if (loc && !loc.card.blocked) {
+                    setListAutoOpenBlock(true);
+                  }
+                }}
+                expandedCardId={listExpandedCardId}
+                onExpandedCardIdChange={setListExpandedCardId}
+                renderExpandedCard={(cardId) => (
+                  <KanbanCardModal
+                    embed
+                    cardId={cardId}
+                    board={
+                      findCardInAppState(appState, cardId)?.board ??
+                      modalBoard ??
+                      board
+                    }
+                    allBoards={appState.boards}
+                    activityActorLabel={activityActorLabel}
+                    commentAuthorUserId={kanbanSessionUserId ?? undefined}
+                    sessionUserRole={kanbanSessionRole}
+                    onClose={() => setListExpandedCardId(null)}
+                    onApply={applyModalBoard}
+                    toast={showToast}
+                    onMovePrevStage={() => {}}
+                    onMoveNextStage={() => {}}
+                    onCopyCardLink={copyCardLink}
+                    canManageKanbanBlock={canManageKanbanBlock}
+                    autoOpenBlock={listAutoOpenBlock}
+                    onAutoOpenBlockConsumed={() => setListAutoOpenBlock(false)}
+                  />
+                )}
+              />
+            ) : (
+              <BoardCanvas
+                appState={appState}
+                board={stopViewBoard}
+                columnSort={boardColumnSortFromViewPref(viewSort)}
+                resolveCardHomeBoard={resolveStopViewCardHomeBoard}
+                activityActorLabel={activityActorLabel}
+                sessionUserId={kanbanSessionUserId}
+                dndLocked
+                aggregateLayoutLocked
+                onPatchBoard={() => {}}
+                onOpenCard={openKanbanCard}
+                onAddColumn={() => {}}
+                onRenameColumn={() => {}}
+                onDeleteColumn={() => {}}
+                onAddCard={() => {}}
+                onCopyCardLink={copyCardLink}
+                onRequestMoveCard={() => {}}
+                onRequestArchiveCard={() => {}}
+                onRequestDeleteCard={() => {}}
+                allowMoveToOtherBoard={false}
+              />
+            )
           ) : appState.viewMode === "board" ? (
             <BoardCanvas
               appState={appState}

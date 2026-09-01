@@ -8,3 +8,7 @@ export function isKanbanStopColumnTitle(
 }
 
 export const KANBAN_STOP_COLUMN_TITLE = "СТОП";
+
+/** Тост при попытке отправить в СТОП незаблокированную карточку. */
+export const KANBAN_STOP_REQUIRES_BLOCK_MESSAGE =
+  "сначала заблокируйте карточку";

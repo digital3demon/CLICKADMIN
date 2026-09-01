@@ -31,8 +31,8 @@ function correctionStatusClass(
 function cardShell(isHarmony: boolean, dense = false): string {
   if (dense) {
     return isHarmony
-      ? "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5"
-      : "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5";
+      ? "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5 lg:min-h-0"
+      : "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5 lg:min-h-0";
   }
   return isHarmony
     ? "flex min-h-[4.75rem] w-full min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"

@@ -40,8 +40,8 @@ type UnifiedProstheticsRow = {
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
-    ? "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
-    : "flex min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
+    ? "flex h-full min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 lg:min-h-0"
+    : "flex h-full min-h-[4.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] lg:min-h-0";
 }
 
 /** Подпись следующей кнопки: Подтвердил → Заказал → Пришла → Проверил → Готово. */
@@ -121,6 +121,7 @@ export function OrdersListHeaderActionCards({
   canResolveTasks = false,
   showProstheticsBlock = true,
   canAcceptCorrections = false,
+  className = "",
 }: {
   initialInTransitCount: number;
   /** Непринятые заявки «???» — счётчик «Заказать». */
@@ -133,6 +134,7 @@ export function OrdersListHeaderActionCards({
   /** Скрыть блок «Заказы протетики», если у роли нет права на эти уведомления. */
   showProstheticsBlock?: boolean;
   canAcceptCorrections?: boolean;
+  className?: string;
 }) {
   const isHarmony = useUiDesign() === "harmony";
   const router = useRouter();
@@ -360,7 +362,9 @@ export function OrdersListHeaderActionCards({
 
   return (
     <>
-      <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:w-auto lg:max-w-[36rem] xl:max-w-[42rem]">
+      <div
+        className={`grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:h-full lg:w-auto lg:max-w-[36rem] lg:items-stretch xl:max-w-[42rem] ${className}`.trim()}
+      >
         {showProstheticsBlock ? (
           <button
             type="button"
@@ -401,18 +405,21 @@ export function OrdersListHeaderActionCards({
         ) : null}
 
         <CorrectionsHistoryActionCard
-          className="flex-1"
+          className="h-full w-full"
+          dense
           initialPendingCount={initialCorrectionsPendingCount}
           canAcceptCorrections={canAcceptCorrections}
         />
         <LabTasksActionCard
-          className="flex-1"
+          className="h-full w-full"
+          dense
           kind="TASK"
           initialPendingCount={initialTasksPendingCount}
           canResolve={canResolveTasks}
         />
         <LabTasksActionCard
-          className="flex-1"
+          className="h-full w-full"
+          dense
           kind="PICKUP_FROM"
           initialPendingCount={initialPickupsPendingCount}
           canResolve={canResolveTasks}

@@ -681,7 +681,7 @@ export default async function OrdersPage({
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-        <div className="order-1 min-w-0 lg:order-2 lg:flex-1">
+        <div className="order-1 flex min-w-0 flex-col lg:order-2 lg:flex-1">
           <OrderPostingMonthBar
             toolbarEnd={
               <OrdersListShippedToolbar
@@ -701,8 +701,9 @@ export default async function OrdersPage({
             }
           />
         </div>
-        <div className="order-2 min-w-0 lg:order-1 lg:shrink-0">
+        <div className="order-2 flex min-w-0 flex-col self-stretch lg:order-1 lg:shrink-0">
           <OrdersListHeaderActionCards
+            className="h-full lg:flex-1"
             initialInTransitCount={prostheticsInTransitCount}
             initialToOrderCount={prostheticsToOrderCount}
             initialCorrectionsPendingCount={attentionCount}
@@ -810,7 +811,7 @@ export default async function OrdersPage({
             Показаны не все: первые 5000 неотгруженных нарядов по фильтру — уточните период или поиск.
           </div>
         ) : null}
-        <div className="sticky top-0 z-50 -mx-2 bg-[var(--app-bg)] py-2 pe-2 ps-[var(--app-mobile-menu-inset,0px)] shadow-[0_4px_12px_-8px_rgba(0,0,0,0.45)] shell-laptop:static shell-laptop:z-auto shell-laptop:mx-0 shell-laptop:bg-transparent shell-laptop:p-0 shell-laptop:shadow-none">
+        <div className="sticky top-0 z-50 bg-[var(--app-bg)] py-2 shadow-[0_4px_12px_-8px_rgba(0,0,0,0.45)] shell-laptop:static shell-laptop:z-auto shell-laptop:bg-transparent shell-laptop:p-0 shell-laptop:shadow-none">
           <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
             <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
               <Suspense

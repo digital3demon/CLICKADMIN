@@ -772,6 +772,7 @@ export function stopCardByIdOnBoard(board: KanbanBoard, cardId: string): boolean
     if (ix < 0) continue;
     const card = col.cards[ix];
     if (!card) return false;
+    if (!isCardBlocked(card)) return false;
     col.cards.splice(ix, 1);
     card.lastMovedAt = now;
     pushActivity(card, "Перемещена в «СТОП»", board.users[0]?.id, board);
