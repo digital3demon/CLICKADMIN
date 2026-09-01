@@ -22,23 +22,31 @@ function htmlSessionKey(path: string): string {
 function writeHtmlSession(path: string, html: string): void {
   if (typeof window === "undefined") return;
   const key = htmlSessionKey(path);
-  try {
-    window.sessionStorage.setItem(key, html);
-    return;
-  } catch {
-    /* quota — вытесняем чужие кадры списков */
-  }
-  try {
-    const prefix = CRM_MODULE_LIST_HTML_STORAGE_PREFIX;
-    const drop: string[] = [];
-    for (let i = 0; i < window.sessionStorage.length; i++) {
-      const k = window.sessionStorage.key(i);
-      if (k && k.startsWith(prefix) && k !== key) drop.push(k);
+  const sizes = [html.length, 180_000, 90_000, 45_000];
+  const seen = new Set<number>();
+  for (const n of sizes) {
+    if (seen.has(n)) continue;
+    seen.add(n);
+    const payload = n >= html.length ? html : html.slice(0, n);
+    try {
+      window.sessionStorage.setItem(key, payload);
+      return;
+    } catch {
+      /* quota */
     }
-    for (const k of drop) window.sessionStorage.removeItem(k);
-    window.sessionStorage.setItem(key, html);
-  } catch {
-    /* всё ещё quota */
+    try {
+      const prefix = CRM_MODULE_LIST_HTML_STORAGE_PREFIX;
+      const drop: string[] = [];
+      for (let i = 0; i < window.sessionStorage.length; i++) {
+        const k = window.sessionStorage.key(i);
+        if (k && k.startsWith(prefix) && k !== key) drop.push(k);
+      }
+      for (const k of drop) window.sessionStorage.removeItem(k);
+      window.sessionStorage.setItem(key, payload);
+      return;
+    } catch {
+      /* пробуем короче */
+    }
   }
 }
 
@@ -72,16 +80,27 @@ export function readCrmModuleListHtml(path: string): string | null {
   return null;
 }
 
+/** Заголовок loading.tsx без таблицы — не кадр списка. */
+export function isCrmModuleListLoadingHtml(html: string | null | undefined): boolean {
+  if (html == null || html.trim() === "") return true;
+  if (/Загрузка списка/.test(html) && !/<table/i.test(html)) return true;
+  return false;
+}
+
 export function rememberCrmModuleListHtml(
   path: string,
   html: string | null,
 ): void {
   const clean = path.startsWith("/") ? path : null;
   if (!clean) return;
-  const sanitized = sanitizeCrmModuleListHtml(html);
-  if (!sanitized) {
+  if (html == null) {
     htmlByPath.delete(clean);
     dropHtmlSession(clean);
+    return;
+  }
+  const sanitized = sanitizeCrmModuleListHtml(html);
+  if (!sanitized || isCrmModuleListLoadingHtml(sanitized)) {
+    /* Пустой/loading при уходе с заказов не должен стирать рабочий кадр. */
     return;
   }
   htmlByPath.set(clean, sanitized);

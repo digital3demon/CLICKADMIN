@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   CRM_MODULE_LIST_HTML_MAX_CHARS,
   dropCrmModuleListHtmlMemory,
+  isCrmModuleListLoadingHtml,
   rememberCrmModuleListHtml,
   readCrmModuleListHtml,
   sanitizeCrmModuleListHtml,
@@ -98,6 +99,28 @@ describe("rememberCrmModuleListHtml", () => {
     expect(readCrmModuleListHtml("/orders")).toContain("до клиника Иванов после");
     rememberCrmModuleListHtml("/orders", null);
     dropCrmModuleListHtmlMemory("/orders");
+    expect(readCrmModuleListHtml("/orders")).toBeNull();
+  });
+
+  it("пустой и loading HTML не стирают кадр заказов с кириллицей", () => {
+    const table =
+      "<table><tbody><tr><td>до клиника Секерин после</td></tr></tbody></table>";
+    rememberCrmModuleListHtml("/orders", table);
+    rememberCrmModuleListHtml("/orders", "");
+    rememberCrmModuleListHtml(
+      "/orders",
+      "<h1>Заказы</h1><p>Загрузка списка…</p>",
+    );
+    expect(isCrmModuleListLoadingHtml("<h1>Заказы</h1><p>Загрузка списка…</p>")).toBe(
+      true,
+    );
+    expect(
+      isCrmModuleListLoadingHtml(
+        "<table><tbody><tr><td>Заказы</td></tr></tbody></table>",
+      ),
+    ).toBe(false);
+    expect(readCrmModuleListHtml("/orders")).toContain("Секерин");
+    rememberCrmModuleListHtml("/orders", null);
     expect(readCrmModuleListHtml("/orders")).toBeNull();
   });
 });

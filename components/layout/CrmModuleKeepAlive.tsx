@@ -87,7 +87,9 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     if (!live || !path || !liveRootRef.current) return;
-    rememberCrmModuleListHtml(path, liveRootRef.current.innerHTML);
+    const html = liveRootRef.current.innerHTML;
+    if (!html.trim()) return;
+    rememberCrmModuleListHtml(path, html);
   }, [live, path, children]);
 
   useEffect(() => {
@@ -95,7 +97,9 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
       const p = pathRef.current;
       const el = liveRootRef.current;
       if (!p || !el || !liveRef.current) return;
-      rememberCrmModuleListHtml(p, el.innerHTML);
+      const html = el.innerHTML;
+      if (!html.trim()) return;
+      rememberCrmModuleListHtml(p, html);
     };
     const onHide = () => {
       if (document.visibilityState === "hidden") capture();
