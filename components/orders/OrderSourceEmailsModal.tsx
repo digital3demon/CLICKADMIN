@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { OrderSourceEmailView } from "@/components/orders/OrderSourceEmailView";
 import type { OrderSourceEmailRow } from "@/lib/mail/order-source-emails";
 
@@ -47,9 +48,11 @@ export function OrderSourceEmailsModal({
 
   const many = emails.length > 1;
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4"
+      className="fixed inset-0 z-[280] flex items-center justify-center bg-black/55 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Письма наряда"
@@ -122,6 +125,7 @@ export function OrderSourceEmailsModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

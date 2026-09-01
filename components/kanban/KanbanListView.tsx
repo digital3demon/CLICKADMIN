@@ -337,14 +337,15 @@ function ListStageDueCell({
   hideUrgent?: boolean;
 }) {
   const dueUrgentRed = stageDue ? isDueUrgentRedInList(stageDue) : false;
+  const layoutClass = compact
+    ? "flex shrink-0 flex-row items-center gap-0.5 p-0.5 -m-0.5"
+    : hideUrgent
+      ? "flex min-w-0 flex-row items-center p-0.5 -m-0.5"
+      : "flex min-w-0 flex-col items-stretch gap-1 p-0.5 -m-0.5";
   return (
     <div
       data-list-row-control
-      className={
-        compact
-          ? "flex shrink-0 flex-row items-center gap-0.5 p-0.5 -m-0.5"
-          : "flex min-w-0 flex-col gap-1 p-0.5 -m-0.5"
-      }
+      className={layoutClass}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
@@ -361,7 +362,7 @@ function ListStageDueCell({
         }
         className={`${
           compact
-            ? "h-3.5 min-h-3.5 w-[3.4rem] min-w-0 px-1 py-0 text-[0.58rem] font-semibold"
+            ? "h-5 min-h-5 w-[4.25rem] min-w-0 px-1 py-0 text-[0.62rem] font-semibold"
             : "h-7 min-h-7 w-[7.1rem] px-1.5 py-0.5 text-[0.65rem]"
         } max-w-full shrink-0 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
           dueUrgentRed ? "font-semibold text-red-500 dark:text-red-400" : ""
@@ -379,8 +380,8 @@ function ListStageDueCell({
           }
           className={`shrink-0 rounded border font-bold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             compact
-              ? "h-3.5 min-h-3.5 px-1 py-0 text-[0.45rem] leading-none"
-              : "h-7 min-h-7 w-fit max-w-full px-2 py-0.5 text-[0.58rem]"
+              ? "h-5 min-h-5 px-1.5 py-0 text-[0.55rem] leading-none"
+              : "h-7 min-h-7 w-fit max-w-full px-2.5 py-0.5 text-[0.62rem]"
           } ${
             urgent
               ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
@@ -413,7 +414,7 @@ function ListUrgentPillButton({
           ? "Снять метку «Срочно» для следующего отдела (только канбан)"
           : "Срочно для следующего отдела (только канбан, наряд не меняется)"
       }
-      className={`inline-flex h-3.5 min-h-3.5 min-w-0 shrink-0 items-center whitespace-nowrap rounded-md border px-1.5 text-[0.45rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex min-h-7 shrink-0 items-center whitespace-nowrap rounded-md border px-2.5 text-[0.62rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
         urgent
           ? "border-orange-600 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
           : "border-[var(--kanban-text-muted)] bg-transparent text-[var(--kanban-text)]"
@@ -627,7 +628,7 @@ export function KanbanListView({
         >
         <div className={LIST_TABLE}>
         <div
-          className="sticky top-0 z-10 hidden border-b border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] pb-1 text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:border-l-[3px] sm:border-l-transparent sm:border-r sm:border-r-transparent"
+          className="sticky top-0 z-10 hidden border-b border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] pb-1 text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-center sm:border-l-[3px] sm:border-l-transparent sm:border-r sm:border-r-transparent"
         >
           <div className="min-w-0 sm:px-2">
             <SortHeaderButton
@@ -708,7 +709,7 @@ export function KanbanListView({
             return (
                 <article
                   key={card.id}
-                  className="relative w-full min-w-0 cursor-pointer overflow-x-hidden overflow-y-visible rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-start sm:overflow-x-visible"
+                  className="relative w-full min-w-0 cursor-pointer overflow-x-hidden overflow-y-visible rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-center sm:overflow-x-visible"
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
@@ -989,7 +990,7 @@ export function KanbanListView({
                         </div>
                       </div>
                     </div>
-                    <div className="hidden min-h-[2rem] sm:flex sm:min-w-0 sm:items-start sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
+                    <div className="hidden min-h-[2rem] sm:flex sm:min-w-0 sm:items-center sm:gap-1 sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
                       <span className="min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
                         {columnTitle}
                       </span>
@@ -1012,7 +1013,7 @@ export function KanbanListView({
                       ) : null}
                     </div>
                     <div
-                      className="hidden sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      className="hidden sm:flex sm:items-center sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
                       data-list-row-control
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
@@ -1030,7 +1031,7 @@ export function KanbanListView({
                       />
                     </div>
                     <div
-                      className="hidden sm:flex sm:items-start sm:justify-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      className="hidden sm:flex sm:items-center sm:justify-start sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
                       data-list-row-control
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
@@ -1045,7 +1046,7 @@ export function KanbanListView({
                       />
                     </div>
                     <div
-                      className="relative hidden sm:flex sm:items-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      className="relative hidden sm:flex sm:items-center sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
                       data-list-row-control
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
@@ -1061,7 +1062,7 @@ export function KanbanListView({
                       />
                     </div>
                     <div
-                      className="relative hidden sm:flex sm:items-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      className="relative hidden sm:flex sm:items-center sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
                       data-list-row-control
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
