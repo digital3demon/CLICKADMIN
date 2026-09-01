@@ -2422,6 +2422,7 @@ export function OrderEditForm({
       }
     }
     setSaving(true);
+    await constructionsPersistChainRef.current.catch(() => undefined);
   let parsedPaymentPartialRub: number | null = null;
   if (payment === ORDER_PAYMENT_PARTIAL) {
     const n = Number(paymentPartialRubText.trim());

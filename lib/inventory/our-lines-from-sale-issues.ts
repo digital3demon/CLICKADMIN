@@ -1,11 +1,12 @@
 /**
- * «Наше» из журнала склада: открытые SALE_ISSUE по наряду
- * (не возвращённые). Timezone не влияет.
+ * «Наше» из журнала склада: SALE_ISSUE минус RETURN_IN по наряду.
+ * Корректировка состава в наряде пишет RETURN_IN и не ставит
+ * returnedToWarehouseAt — без вычета возвратов страница затирает JSON.
+ * Timezone не влияет.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   prostheticsFromDb,
-  prostheticsToJson,
   type OrderProstheticsV1,
   type ProstheticsOurLine,
 } from "@/lib/order-prosthetics";
@@ -24,25 +25,45 @@ export function aggregateSaleIssueOurLines(
     quantity: number;
   }>,
 ): ProstheticsOurLine[] {
-  const map = new Map<string, ProstheticsOurLine>();
-  for (const r of rows) {
-    const itemId = String(r.itemId ?? "").trim();
-    const warehouseId = String(r.warehouseId ?? "").trim();
-    const quantity = qtyInt(Number(r.quantity));
-    if (!itemId || quantity <= 0) continue;
-    const key = `${itemId}\t${warehouseId}`;
-    const prev = map.get(key);
-    if (prev) {
-      prev.quantity += quantity;
-    } else {
-      map.set(key, {
-        inventoryItemId: itemId,
-        quantity,
-        ...(warehouseId ? { warehouseId } : {}),
-      });
+  return netStockOurLines(rows, []);
+}
+
+/**
+ * Открытые списания минус возвраты по той же паре позиция+склад.
+ * Кириллица в id не участвует в ключе иначе чем как строка.
+ */
+export function netStockOurLines(
+  issues: Array<{ itemId: string; warehouseId: string; quantity: number }>,
+  returns: Array<{ itemId: string; warehouseId: string; quantity: number }>,
+): ProstheticsOurLine[] {
+  const map = new Map<string, { itemId: string; warehouseId: string; quantity: number }>();
+  const bump = (
+    rows: Array<{ itemId: string; warehouseId: string; quantity: number }>,
+    sign: 1 | -1,
+  ) => {
+    for (const r of rows) {
+      const itemId = String(r.itemId ?? "").trim();
+      const warehouseId = String(r.warehouseId ?? "").trim();
+      const quantity = qtyInt(Number(r.quantity));
+      if (!itemId || quantity <= 0) continue;
+      const key = `${itemId}\t${warehouseId}`;
+      const prev = map.get(key);
+      const nextQty = (prev?.quantity ?? 0) + sign * quantity;
+      map.set(key, { itemId, warehouseId, quantity: nextQty });
     }
+  };
+  bump(issues, 1);
+  bump(returns, -1);
+  const out: ProstheticsOurLine[] = [];
+  for (const row of map.values()) {
+    if (row.quantity <= 0) continue;
+    out.push({
+      inventoryItemId: row.itemId,
+      quantity: row.quantity,
+      ...(row.warehouseId ? { warehouseId: row.warehouseId } : {}),
+    });
   }
-  return [...map.values()];
+  return out;
 }
 
 /** Склад — источник истины по уже списанным позициям; прочие строки JSON оставляем. */
@@ -91,28 +112,30 @@ export async function loadOurLinesFromOrderSaleIssues(
   const rows = await db.stockMovement.findMany({
     where: {
       orderId: id,
-      kind: "SALE_ISSUE",
-      returnedToWarehouseAt: null,
+      kind: { in: ["SALE_ISSUE", "RETURN_IN"] },
     },
-    select: { itemId: true, warehouseId: true, quantity: true },
+    select: {
+      kind: true,
+      itemId: true,
+      warehouseId: true,
+      quantity: true,
+      returnedToWarehouseAt: true,
+    },
   });
-  return aggregateSaleIssueOurLines(rows);
+  const issues = rows.filter(
+    (r) => r.kind === "SALE_ISSUE" && r.returnedToWarehouseAt == null,
+  );
+  const returns = rows.filter((r) => r.kind === "RETURN_IN");
+  return netStockOurLines(issues, returns);
 }
 
-/** Подтянуть «Наше» из журнала и записать в JSON наряда, если расходится. */
+/**
+ * Показ состава: JSON наряда — источник истины после «Сохранить».
+ * Журнал не пишем обратно: иначе старые SALE_ISSUE затирают правку.
+ */
 export async function hydrateOrderProstheticsFromStock(
-  db: MovementDb,
+  _db: MovementDb,
   order: { id: string; prosthetics: unknown },
 ): Promise<OrderProstheticsV1> {
-  const json = prostheticsFromDb(order.prosthetics);
-  const stock = await loadOurLinesFromOrderSaleIssues(db, order.id);
-  const merged = mergeProstheticsFromStock(json, stock);
-  if (ourLinesFingerprint(merged.ourLines) === ourLinesFingerprint(json.ourLines)) {
-    return merged;
-  }
-  await db.order.update({
-    where: { id: order.id },
-    data: { prosthetics: prostheticsToJson(merged) },
-  });
-  return merged;
+  return prostheticsFromDb(order.prosthetics);
 }
