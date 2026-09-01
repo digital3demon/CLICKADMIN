@@ -11,6 +11,11 @@ import {
 import {
   compareOrdersByEffectiveFinanceRecord,
 } from "@/lib/finance-office-list-filter";
+import {
+  parseFinanceOfficePageSize,
+  sliceFinanceOfficePage,
+} from "@/lib/finance-office-list-query";
+import { parseOrdersListPage } from "@/lib/orders-list-query";
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import { hydrateOrderKaitenLabMentionHighlight } from "@/lib/hydrate-order-kaiten-lab-mention-highlight";
 import {
@@ -134,6 +139,17 @@ export type FinanceOfficeOrderRow = Omit<
   listPendingChatCorrections: boolean;
   listPendingProstheticsRequests: boolean;
   listKaitenLabMentionHighlight: boolean;
+};
+
+/** Потолок индекса (id + ключи сортировки/фильтра), не полные ряды таблицы. */
+export const FINANCE_OFFICE_INDEX_CAP = 3000;
+
+export type FinanceOfficeOrdersPage = {
+  orders: FinanceOfficeOrderRow[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  truncated: boolean;
 };
 
 export {
@@ -414,72 +430,245 @@ export async function countFinanceOfficeQuickFilterChips(
   };
 }
 
-function financePriority(row: FinanceOfficeOrderRow): number {
+function financePriority(row: {
+  listPendingChatCorrections: boolean;
+  listPendingProstheticsRequests: boolean;
+  financeCalculated: boolean;
+}): number {
   if (row.listPendingChatCorrections) return 0;
   if (row.listPendingProstheticsRequests) return 1;
   if (!row.financeCalculated) return 2;
   return 3;
 }
 
-export async function fetchFinanceOfficeOrders(
+const financeOfficeIndexPendingSelect = {
+  where: { resolvedAt: null, rejectedAt: null },
+  select: { id: true },
+  take: 1,
+} as const;
+
+const financeOfficeIndexSelect = {
+  id: true,
+  orderNumber: true,
+  dueDate: true,
+  financeCalculated: true,
+  clinicId: true,
+  doctorId: true,
+  invoiceParsedTotalRub: true,
+  invoiceMismatchAckFingerprint: true,
+  isUrgent: true,
+  urgentCoefficient: true,
+  compositionDiscountPercent: true,
+  chatCorrections: financeOfficeIndexPendingSelect,
+  prostheticsRequests: financeOfficeIndexPendingSelect,
+  kaitenChatHasLabMention: true,
+  kaitenLabMentionSignalAt: true,
+} as const satisfies Prisma.OrderSelect;
+
+const financeOfficeIndexAttentionSelect = {
+  ...financeOfficeIndexSelect,
+  constructions: {
+    select: {
+      quantity: true,
+      unitPrice: true,
+      lineDiscountPercent: true,
+    },
+  },
+} as const satisfies Prisma.OrderSelect;
+
+type FinanceOfficeIndexRow = {
+  id: string;
+  orderNumber: string;
+  dueDate: Date | null;
+  financeCalculated: boolean;
+  clinicId: string | null;
+  doctorId: string;
+  invoiceParsedTotalRub: number | null;
+  invoiceMismatchAckFingerprint: string | null;
+  isUrgent: boolean;
+  urgentCoefficient: number | null;
+  compositionDiscountPercent: number | null;
+  chatCorrections: { id: string }[];
+  prostheticsRequests: { id: string }[];
+  kaitenChatHasLabMention: boolean;
+  kaitenLabMentionSignalAt: Date | null;
+  constructions?: Array<{
+    quantity: number;
+    unitPrice: number | null;
+    lineDiscountPercent: number;
+  }>;
+};
+
+async function loadClinicDocFlagsForIndex(
+  rows: Array<{ clinicId: string | null; doctorId: string }>,
+): Promise<{
+  clinicFlags: Map<string, { edo: boolean; paper: boolean }>;
+  privateFlags: Map<string, { edo: boolean; paper: boolean }>;
+}> {
+  const clinicIds = Array.from(
+    new Set(rows.map((r) => r.clinicId).filter((id): id is string => id != null)),
+  );
+  const doctorIds = Array.from(
+    new Set(rows.filter((r) => !r.clinicId).map((r) => r.doctorId)),
+  );
+  if (clinicIds.length === 0 && doctorIds.length === 0) {
+    return { clinicFlags: new Map(), privateFlags: new Map() };
+  }
+  const clientsPrisma = await getClientsPrisma();
+  const [clinics, doctorsIp] = await Promise.all([
+    clinicIds.length
+      ? clientsPrisma.clinic.findMany({
+          where: { id: { in: clinicIds }, deletedAt: null },
+          select: { id: true, worksWithEdo: true, usesPaperDocs: true },
+        })
+      : Promise.resolve([]),
+    doctorIds.length
+      ? clientsPrisma.doctor.findMany({
+          where: { id: { in: doctorIds } },
+          select: {
+            id: true,
+            ipClinicAsSource: {
+              select: {
+                worksWithEdo: true,
+                usesPaperDocs: true,
+                deletedAt: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  return {
+    clinicFlags: new Map(
+      clinics.map((c) => [
+        c.id,
+        { edo: Boolean(c.worksWithEdo), paper: Boolean(c.usesPaperDocs) },
+      ]),
+    ),
+    privateFlags: new Map(
+      doctorsIp.map((d) => {
+        const ip = d.ipClinicAsSource;
+        if (!ip || ip.deletedAt != null) {
+          return [d.id, { edo: false, paper: false }] as const;
+        }
+        return [
+          d.id,
+          {
+            edo: Boolean(ip.worksWithEdo),
+            paper: Boolean(ip.usesPaperDocs),
+          },
+        ] as const;
+      }),
+    ),
+  };
+}
+
+function sortFinanceOfficeIndex<
+  T extends {
+    listPendingChatCorrections: boolean;
+    listPendingProstheticsRequests: boolean;
+    financeCalculated: boolean;
+    dueDate: Date | null;
+    orderNumber: string;
+    id: string;
+  },
+>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const pr = financePriority(a) - financePriority(b);
+    if (pr !== 0) return pr;
+    return compareOrdersByEffectiveFinanceRecord(a, b);
+  });
+}
+
+async function rankFinanceOfficeIndexIds(
   db: PrismaClient,
-  tenantId: string,
-  opts: {
-    listTag?: string | null;
-    search?: string | null;
-    mode?: "all" | "actual" | "period";
-    fromYmd?: string | null;
-    toYmd?: string | null;
-    userId?: string | null;
-    appointment?: FinanceOfficeAppointmentFilter | null;
-    invoiceIssued?: FinanceOfficeInvoiceIssuedFilter | null;
-    /** Явный набор id (выгрузка выбранных) — без окна фильтра списка. */
-    ids?: readonly string[] | null;
-  } = {},
-): Promise<FinanceOfficeOrderRow[]> {
-  const selectedIds = [
-    ...new Set((opts.ids ?? []).map((id) => id.trim()).filter(Boolean)),
-  ].slice(0, 500);
-  const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
-  const mode = opts.mode ?? "all";
-  const tagOverridesCalculated = financeOfficeTagOverridesCalculated(opts.listTag);
-  const parts: Prisma.OrderWhereInput[] =
-    selectedIds.length > 0
-      ? [{ tenantId, archivedAt: null }, { id: { in: selectedIds } }]
-      : [
-          financeOfficeScopeWhere(tenantId, {
-            search: opts.search,
-            mode,
-            fromYmd: opts.fromYmd,
-            toYmd: opts.toYmd,
-            actualNotCalculatedOnly: !tagOverridesCalculated,
-            appointment: opts.appointment,
-            invoiceIssued: opts.invoiceIssued,
-          }),
-        ];
-  if (selectedIds.length === 0 && parsedTag) {
-    if (
-      parsedTag.kind === "edo" ||
-      parsedTag.kind === "noEdo" ||
-      parsedTag.kind === "edoPaper"
-    ) {
-      // Точный отбор по каналу ЭДО/бумдоки (в т.ч. ИП врача) — после гидрации клиник.
-    } else {
-      parts.push(
-        parsedTag.kind === "orderAttention"
-          ? orderAttentionListSupersetWhere()
-          : listTagWhere(parsedTag),
-      );
+  indexRows: FinanceOfficeIndexRow[],
+  parsedTag: ReturnType<typeof parseListTagParam>,
+  userId: string | null | undefined,
+): Promise<string[]> {
+  let working: Array<
+    FinanceOfficeIndexRow & {
+      listPendingChatCorrections: boolean;
+      listPendingProstheticsRequests: boolean;
+      listCompositionMismatch: boolean;
+      clinicWorksWithEdo: boolean;
+      clinicUsesPaperDocs: boolean;
+      listKaitenLabMentionHighlight: boolean;
     }
+  > = indexRows.map((r) => ({
+    ...r,
+    listPendingChatCorrections: (r.chatCorrections?.length ?? 0) > 0,
+    listPendingProstheticsRequests: (r.prostheticsRequests?.length ?? 0) > 0,
+    listCompositionMismatch: orderInvoiceCompositionMismatch({
+      invoiceParsedTotalRub: r.invoiceParsedTotalRub,
+      invoiceMismatchAckFingerprint: r.invoiceMismatchAckFingerprint,
+      isUrgent: r.isUrgent,
+      urgentCoefficient: r.urgentCoefficient,
+      compositionDiscountPercent: r.compositionDiscountPercent,
+      constructions: (r.constructions ?? []).map((c) => ({
+        quantity: c.quantity,
+        unitPrice: c.unitPrice,
+        lineDiscountPercent: c.lineDiscountPercent,
+      })),
+    }),
+    clinicWorksWithEdo: false,
+    clinicUsesPaperDocs: false,
+    listKaitenLabMentionHighlight: false,
+  }));
+
+  const edoTag =
+    parsedTag?.kind === "edo" ||
+    parsedTag?.kind === "noEdo" ||
+    parsedTag?.kind === "edoPaper";
+  if (edoTag) {
+    const flags = await loadClinicDocFlagsForIndex(working);
+    working = working.filter((r) => {
+      const f = r.clinicId
+        ? flags.clinicFlags.get(r.clinicId)
+        : flags.privateFlags.get(r.doctorId);
+      const ch = clinicDocChannel(f?.edo ?? false, f?.paper ?? false);
+      if (parsedTag.kind === "edo") return ch === "edo";
+      if (parsedTag.kind === "edoPaper") return ch === "edoPaper";
+      return ch === "paper";
+    });
   }
 
-  const stageFiltered = await db.order.findMany({
-    where: { AND: parts },
-    orderBy: [{ createdAt: "desc" }, { orderNumber: "desc" }],
-    take: selectedIds.length > 0 ? selectedIds.length : 500,
-    select: financeOfficeOrderSelect,
-  });
+  working = await hydrateListPendingProstheticsFromInbox(
+    db,
+    await hydrateListPendingChatCorrectionsFromInbox(db, working),
+  );
 
+  if (parsedTag?.kind === "kaitenLabMention") {
+    const withMention = await hydrateOrderKaitenLabMentionHighlight(
+      db,
+      userId,
+      working.map((r) => ({
+        id: r.id,
+        kaitenChatHasLabMention: r.kaitenChatHasLabMention,
+        kaitenLabMentionSignalAt: r.kaitenLabMentionSignalAt,
+      })),
+    );
+    const mentionById = new Map(
+      withMention.map((r) => [r.id, r.listKaitenLabMentionHighlight]),
+    );
+    working = working.filter((r) => mentionById.get(r.id) === true);
+  }
+
+  if (parsedTag?.kind === "orderAttention") {
+    working = working.filter(
+      (r) => r.listCompositionMismatch || r.listPendingChatCorrections,
+    );
+  }
+
+  return sortFinanceOfficeIndex(working).map((r) => r.id);
+}
+
+async function hydrateFinanceOfficeRawRows(
+  db: PrismaClient,
+  tenantId: string,
+  userId: string | null | undefined,
+  stageFiltered: FinanceOfficeRaw[],
+): Promise<FinanceOfficeOrderRow[]> {
   const clientsPrisma = await getClientsPrisma();
   const pricingPrisma = await getPricingPrisma();
   const doctorIds = Array.from(new Set(stageFiltered.map((x) => x.doctorId)));
@@ -675,25 +864,10 @@ export async function fetchFinanceOfficeOrders(
     };
   });
 
-  const exact =
-    parsedTag?.kind === "edo" ||
-    parsedTag?.kind === "noEdo" ||
-    parsedTag?.kind === "edoPaper"
-      ? mapped.filter((r) => {
-          const ch = clinicDocChannel(
-            r.clinicWorksWithEdo,
-            r.clinicUsesPaperDocs,
-          );
-          if (parsedTag.kind === "edo") return ch === "edo";
-          if (parsedTag.kind === "edoPaper") return ch === "edoPaper";
-          return ch === "paper";
-        })
-      : mapped;
-
   const withMention = await hydrateOrderKaitenLabMentionHighlight(
     db,
-    opts.userId,
-    exact.map((r) => ({
+    userId,
+    mapped.map((r) => ({
       id: r.id,
       kaitenChatHasLabMention: r.kaitenChatHasLabMention,
       kaitenLabMentionSignalAt: r.kaitenLabMentionSignalAt,
@@ -702,7 +876,7 @@ export async function fetchFinanceOfficeOrders(
   const mentionById = new Map(
     withMention.map((r) => [r.id, r.listKaitenLabMentionHighlight]),
   );
-  const withHighlight = exact.map((r) => ({
+  const withHighlight = mapped.map((r) => ({
     ...r,
     listKaitenLabMentionHighlight: mentionById.get(r.id) ?? false,
   }));
@@ -712,28 +886,164 @@ export async function fetchFinanceOfficeOrders(
     await hydrateListPendingChatCorrectionsFromInbox(db, withHighlight),
   );
 
-  const filtered =
-    parsedTag?.kind === "orderAttention"
-      ? withInbox.filter(
-          (r) => r.listCompositionMismatch || r.listPendingChatCorrections,
-        )
-      : parsedTag?.kind === "kaitenLabMention"
-        ? withInbox.filter((r) => r.listKaitenLabMentionHighlight)
-        : withInbox;
-
   const stopped = await loadStoppedLinkedOrderIdSet(tenantId);
-  return filtered
-    .map((r) => ({
-      ...r,
-      kaitenColumnTitle: overlayCrmStopColumnTitle(
-        r.id,
-        r.kaitenColumnTitle,
-        stopped,
-      ),
-    }))
-    .sort((a, b) => {
-      const pr = financePriority(a) - financePriority(b);
-      if (pr !== 0) return pr;
-      return compareOrdersByEffectiveFinanceRecord(a, b);
+  return withInbox.map((r) => ({
+    ...r,
+    kaitenColumnTitle: overlayCrmStopColumnTitle(
+      r.id,
+      r.kaitenColumnTitle,
+      stopped,
+    ),
+  }));
+}
+
+function emptyFinanceOfficePage(
+  page: number,
+  pageSize: number,
+): FinanceOfficeOrdersPage {
+  return {
+    orders: [],
+    totalCount: 0,
+    page,
+    pageSize,
+    truncated: false,
+  };
+}
+
+/**
+ * Список ФинОтдела: индекс (до INDEX_CAP id + ключи сортировки) → срез страницы →
+ * полная гидрация только этой страницы. Пилюли считают весь scope отдельно
+ * (`countFinanceOfficeQuickFilterChips`). Выгрузка по `ids` — без пагинации.
+ */
+export async function fetchFinanceOfficeOrders(
+  db: PrismaClient,
+  tenantId: string,
+  opts: {
+    listTag?: string | null;
+    search?: string | null;
+    mode?: "all" | "actual" | "period";
+    fromYmd?: string | null;
+    toYmd?: string | null;
+    userId?: string | null;
+    appointment?: FinanceOfficeAppointmentFilter | null;
+    invoiceIssued?: FinanceOfficeInvoiceIssuedFilter | null;
+    /** Явный набор id (выгрузка выбранных) — без окна фильтра списка. */
+    ids?: readonly string[] | null;
+    page?: number | null;
+    pageSize?: number | null;
+  } = {},
+): Promise<FinanceOfficeOrdersPage> {
+  const selectedIds = [
+    ...new Set((opts.ids ?? []).map((id) => id.trim()).filter(Boolean)),
+  ].slice(0, 500);
+  const parsedTag = opts.listTag?.trim() ? parseListTagParam(opts.listTag) : null;
+  const mode = opts.mode ?? "all";
+  const pageSize =
+    selectedIds.length > 0
+      ? selectedIds.length
+      : parseFinanceOfficePageSize(
+          opts.pageSize != null ? String(opts.pageSize) : null,
+        );
+  const requestedPage =
+    selectedIds.length > 0 ? 1 : parseOrdersListPage(String(opts.page ?? 1));
+  const tagOverridesCalculated = financeOfficeTagOverridesCalculated(opts.listTag);
+  const parts: Prisma.OrderWhereInput[] =
+    selectedIds.length > 0
+      ? [{ tenantId, archivedAt: null }, { id: { in: selectedIds } }]
+      : [
+          financeOfficeScopeWhere(tenantId, {
+            search: opts.search,
+            mode,
+            fromYmd: opts.fromYmd,
+            toYmd: opts.toYmd,
+            actualNotCalculatedOnly: !tagOverridesCalculated,
+            appointment: opts.appointment,
+            invoiceIssued: opts.invoiceIssued,
+          }),
+        ];
+  if (selectedIds.length === 0 && parsedTag) {
+    if (
+      parsedTag.kind === "edo" ||
+      parsedTag.kind === "noEdo" ||
+      parsedTag.kind === "edoPaper"
+    ) {
+      // Точный отбор по каналу ЭДО/бумдоки (в т.ч. ИП врача) — после гидрации клиник.
+    } else {
+      parts.push(
+        parsedTag.kind === "orderAttention"
+          ? orderAttentionListSupersetWhere()
+          : listTagWhere(parsedTag),
+      );
+    }
+  }
+
+  if (selectedIds.length > 0) {
+    const raw = await db.order.findMany({
+      where: { AND: parts },
+      orderBy: [{ createdAt: "desc" }, { orderNumber: "desc" }],
+      take: selectedIds.length,
+      select: financeOfficeOrderSelect,
     });
+    const hydrated = await hydrateFinanceOfficeRawRows(
+      db,
+      tenantId,
+      opts.userId,
+      raw,
+    );
+    const ordered = sortFinanceOfficeIndex(hydrated);
+    return {
+      orders: ordered,
+      totalCount: ordered.length,
+      page: 1,
+      pageSize: ordered.length || pageSize,
+      truncated: false,
+    };
+  }
+
+  const needConstructions = parsedTag?.kind === "orderAttention";
+  const indexRows = (await db.order.findMany({
+    where: { AND: parts },
+    orderBy: [{ createdAt: "desc" }, { orderNumber: "desc" }],
+    take: FINANCE_OFFICE_INDEX_CAP,
+    select: needConstructions
+      ? financeOfficeIndexAttentionSelect
+      : financeOfficeIndexSelect,
+  })) as FinanceOfficeIndexRow[];
+  const truncated = indexRows.length >= FINANCE_OFFICE_INDEX_CAP;
+  const rankedIds = await rankFinanceOfficeIndexIds(
+    db,
+    indexRows,
+    parsedTag,
+    opts.userId,
+  );
+  const sliced = sliceFinanceOfficePage(rankedIds, requestedPage, pageSize);
+  if (sliced.slice.length === 0) {
+    return {
+      ...emptyFinanceOfficePage(sliced.page, pageSize),
+      totalCount: rankedIds.length,
+      truncated,
+    };
+  }
+
+  const pageRaw = await db.order.findMany({
+    where: { id: { in: sliced.slice } },
+    select: financeOfficeOrderSelect,
+  });
+  const hydrated = await hydrateFinanceOfficeRawRows(
+    db,
+    tenantId,
+    opts.userId,
+    pageRaw,
+  );
+  const byId = new Map(hydrated.map((r) => [r.id, r]));
+  const orders = sliced.slice
+    .map((id) => byId.get(id))
+    .filter((r): r is FinanceOfficeOrderRow => r != null);
+  return {
+    orders,
+    totalCount: rankedIds.length,
+    page: sliced.page,
+    pageSize,
+    truncated,
+  };
 }

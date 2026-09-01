@@ -18,8 +18,12 @@ import { canAcceptOrderChatCorrections } from "@/lib/auth/permissions";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
+import { FinanceOfficeListPagination } from "@/components/finance-office/FinanceOfficeListPagination";
 import {
   fetchFinanceOfficeOrders,
+  FINANCE_OFFICE_INDEX_CAP,
+  type FinanceOfficeOrderRow,
+  type FinanceOfficeOrdersPage,
 } from "@/lib/fetch-finance-office-orders";
 import { countOrdersWithPendingMergedCorrections } from "@/lib/order-chat-corrections-read";
 import { countFinanceOfficeDebts } from "@/lib/finance-office-debts";
@@ -32,9 +36,12 @@ import {
   parseListTagParam,
 } from "@/lib/order-list-tag-filter";
 import {
+  FINANCE_OFFICE_DEFAULT_PAGE_SIZE,
   financeOfficeListHref,
   parseFinanceOfficeInvoiceIssuedParams,
+  parseFinanceOfficePageSize,
 } from "@/lib/finance-office-list-query";
+import { parseOrdersListPage } from "@/lib/orders-list-query";
 import {
   ordersShipmentModeLabel,
   parseOrdersShipmentParams,
@@ -60,7 +67,7 @@ function rangeDaySpan(fromYmd: string, toYmd: string): number {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / (24 * 60 * 60 * 1000));
 }
 
-function serializeOrder(o: Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>[number]): FinanceOfficeOrderTableRow {
+function serializeOrder(o: FinanceOfficeOrderRow): FinanceOfficeOrderTableRow {
   return {
     id: o.id,
     orderNumber: o.orderNumber,
@@ -123,6 +130,8 @@ export default async function FinanceOfficePage({
     shipTo?: string;
     invFrom?: string;
     invTo?: string;
+    page?: string;
+    limit?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -145,6 +154,8 @@ export default async function FinanceOfficePage({
   const parsedTag = rawTag ? parseListTagParam(rawTag) : null;
   const rawTagInvalid = Boolean(rawTag && !parsedTag);
   const q = sp.q?.trim() || "";
+  const pageSize = parseFinanceOfficePageSize(sp.limit);
+  const listPage = parseOrdersListPage(sp.page);
   const mode = parseFinanceOfficeMode(sp.tab);
   const fromRaw = parseYmdOrNull(sp.from ?? null);
   const toRaw = parseYmdOrNull(sp.to ?? null);
@@ -216,7 +227,14 @@ export default async function FinanceOfficePage({
       mode === "actual" ||
       (mode === "period" && Boolean(toRaw)));
   const ordersPrisma = await getOrdersPrisma();
-  const [orders, correctionsPendingCount, debtsCount, reconHighlightCount] = await Promise.all([
+  const emptyPage: FinanceOfficeOrdersPage = {
+    orders: [],
+    totalCount: 0,
+    page: listPage,
+    pageSize,
+    truncated: false,
+  };
+  const [listPageResult, correctionsPendingCount, debtsCount, reconHighlightCount] = await Promise.all([
     shouldFetch && !error
       ? fetchFinanceOfficeOrders(ordersPrisma, tenantId, {
           listTag: rawTagInvalid ? null : rawTag,
@@ -237,10 +255,10 @@ export default async function FinanceOfficePage({
           userId: session?.sub,
           appointment: invoiceIssued ? null : appointment,
           invoiceIssued,
+          page: listPage,
+          pageSize,
         })
-      : Promise.resolve(
-          [] as Awaited<ReturnType<typeof fetchFinanceOfficeOrders>>,
-        ),
+      : Promise.resolve(emptyPage),
     countOrdersWithPendingMergedCorrections(ordersPrisma, tenantId),
     ordersPrisma.tenant
       .findUnique({
@@ -261,12 +279,28 @@ export default async function FinanceOfficePage({
     tagLabel && rangeSummary
       ? `${tagLabel} · ${rangeSummary}`
       : rangeSummary;
+  const listTotalCount = listPageResult.totalCount;
+  const listCurrentPage = listPageResult.page;
+  const listTruncated = listPageResult.truncated;
   const listSummaryLine =
     listRangeSummary && shouldFetch && !error
-      ? `${listRangeSummary} · нарядов: ${orders.length}`
+      ? `${listRangeSummary} · нарядов: ${listTotalCount}`
       : null;
   const tableOrders =
-    error || !shouldFetch ? [] : orders.map(serializeOrder);
+    error || !shouldFetch ? [] : listPageResult.orders.map(serializeOrder);
+  const listHrefOpts = {
+    tab: mode,
+    from: fromRaw,
+    to: toRaw,
+    tag: rawTagInvalid ? null : rawTag,
+    q,
+    ship: invoiceIssued ? undefined : appointment?.mode,
+    shipFrom: invoiceIssued ? undefined : appointment?.shipFrom,
+    shipTo: invoiceIssued ? undefined : appointment?.shipTo,
+    invFrom: invoiceIssued?.fromYmd,
+    invTo: invoiceIssued?.toYmd,
+    limit: pageSize,
+  };
   const orderIdsWithInvoice = tableOrders
     .filter((o) => o.invoiceAttachmentId)
     .map((o) => o.id);
@@ -296,6 +330,9 @@ export default async function FinanceOfficePage({
         ) : null}
         {rawTag && !rawTagInvalid ? (
           <input type="hidden" name="tag" value={rawTag} />
+        ) : null}
+        {pageSize !== FINANCE_OFFICE_DEFAULT_PAGE_SIZE ? (
+          <input type="hidden" name="limit" value={String(pageSize)} />
         ) : null}
         <input
           name="q"
@@ -414,10 +451,18 @@ export default async function FinanceOfficePage({
             shipTo={invoiceIssued ? null : appointment?.shipTo ?? null}
             invFrom={invoiceIssued?.fromYmd ?? null}
             invTo={invoiceIssued?.toYmd ?? null}
+            limit={pageSize}
           />
+        ) : null}
+        {listTruncated ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+            Показаны не все: индекс ограничен первыми {FINANCE_OFFICE_INDEX_CAP}{" "}
+            нарядами по фильтру — уточните период или поиск.
+          </p>
         ) : null}
         <FinanceOfficeOrdersTable
           orders={tableOrders}
+          totalCount={listTotalCount}
           activeTag={tagLabel}
           tab={mode}
           periodFrom={fromRaw}
@@ -430,6 +475,14 @@ export default async function FinanceOfficePage({
           invFrom={invoiceIssued?.fromYmd ?? null}
           invTo={invoiceIssued?.toYmd ?? null}
         />
+        {shouldFetch && !error ? (
+          <FinanceOfficeListPagination
+            totalCount={listTotalCount}
+            pageSize={pageSize}
+            currentPage={listCurrentPage}
+            hrefOpts={listHrefOpts}
+          />
+        ) : null}
       </div>
       </FinanceOfficeSelectionProvider>
     </ModuleFrame>

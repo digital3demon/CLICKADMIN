@@ -10,7 +10,8 @@ export const CRM_MODULE_LIST_SNAPSHOT_MAX_ROWS = 150;
 /** Сколько рядов tbody оставляем в HTML-кадре (шапка и фильтры целиком). */
 export const CRM_MODULE_LIST_SNAPSHOT_MAX_BODY_ROWS = 80;
 export const CRM_MODULE_LIST_PREFETCH_KEY = "dental-crm:list-prefetch:v1";
-export const CRM_MODULE_LIST_PREFETCH_MAX = 2;
+/** Один соседний список: второй prefetch снова кладёт Flight в память. */
+export const CRM_MODULE_LIST_PREFETCH_MAX = 1;
 
 export type CrmModuleListSnapshotRow = {
   id: string;

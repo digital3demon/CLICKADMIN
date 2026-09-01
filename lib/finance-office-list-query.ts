@@ -1,5 +1,11 @@
+import { ORDERS_LIST_PAGE_NUM_MAX } from "@/lib/orders-list-query";
 import type { OrdersShipmentMode } from "@/lib/orders-shipment-list-query";
 import { parseYmdOrNull } from "@/lib/shipments-date-range";
+
+/** Как у заказов: страница по умолчанию, без загрузки всего списка. */
+export const FINANCE_OFFICE_DEFAULT_PAGE_SIZE = 30;
+export const FINANCE_OFFICE_PAGE_SIZE_MIN = 1;
+export const FINANCE_OFFICE_PAGE_SIZE_MAX = 100;
 
 export type FinanceOfficeListHrefInput = {
   tag?: string | null;
@@ -12,7 +18,49 @@ export type FinanceOfficeListHrefInput = {
   shipTo?: string | null;
   invFrom?: string | null;
   invTo?: string | null;
+  /** С 1. `1` в URL не пишем. */
+  page?: number | null;
+  /** Если равно дефолту — в URL не пишем. */
+  limit?: number | null;
 };
+
+export function parseFinanceOfficePageSize(
+  raw: string | null | undefined,
+): number {
+  const n =
+    raw == null || String(raw).trim() === ""
+      ? FINANCE_OFFICE_DEFAULT_PAGE_SIZE
+      : Number(String(raw).trim().replace(",", "."));
+  if (!Number.isFinite(n)) return FINANCE_OFFICE_DEFAULT_PAGE_SIZE;
+  return Math.min(
+    FINANCE_OFFICE_PAGE_SIZE_MAX,
+    Math.max(FINANCE_OFFICE_PAGE_SIZE_MIN, Math.floor(n)),
+  );
+}
+
+/**
+ * Срез страницы после сортировки индекса. Пустой список → стр. 1.
+ * Страница за пределами → последняя.
+ */
+export function sliceFinanceOfficePage<T>(
+  items: readonly T[],
+  page: number,
+  pageSize: number,
+): { slice: T[]; page: number; totalPages: number } {
+  const size = parseFinanceOfficePageSize(String(pageSize));
+  if (items.length === 0) {
+    return { slice: [], page: 1, totalPages: 1 };
+  }
+  const totalPages = Math.max(1, Math.ceil(items.length / size));
+  const rawPage = Number.isFinite(page) ? Math.floor(page) : 1;
+  const safePage = Math.min(Math.max(1, rawPage), totalPages);
+  const start = (safePage - 1) * size;
+  return {
+    slice: items.slice(start, start + size),
+    page: safePage,
+    totalPages,
+  };
+}
 
 export function parseFinanceOfficeInvoiceIssuedParams(input: {
   invFrom?: string | null;
@@ -81,6 +129,23 @@ export function financeOfficeListHref(
   }
   if (invFrom) sp.set("invFrom", invFrom);
   if (invTo) sp.set("invTo", invTo);
+  const pageNum =
+    input.page != null && Number.isFinite(input.page)
+      ? Math.floor(input.page)
+      : 0;
+  if (pageNum > 1) {
+    sp.set("page", String(Math.min(ORDERS_LIST_PAGE_NUM_MAX, pageNum)));
+  }
+  if (
+    input.limit != null &&
+    Number.isFinite(input.limit) &&
+    input.limit >= 1
+  ) {
+    const lim = parseFinanceOfficePageSize(String(input.limit));
+    if (lim !== FINANCE_OFFICE_DEFAULT_PAGE_SIZE) {
+      sp.set("limit", String(lim));
+    }
+  }
   const qs = sp.toString();
   return qs ? `/finance-office?${qs}` : "/finance-office";
 }

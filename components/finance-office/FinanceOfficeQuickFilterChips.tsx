@@ -55,6 +55,7 @@ export function FinanceOfficeQuickFilterChips({
   shipTo = null,
   invFrom = null,
   invTo = null,
+  limit = null,
 }: {
   activeFilter?: ParsedListTag | null;
   tab: string;
@@ -67,6 +68,8 @@ export function FinanceOfficeQuickFilterChips({
   shipTo?: string | null;
   invFrom?: string | null;
   invTo?: string | null;
+  /** Сохраняет размер страницы при смене пилюли (страница сбрасывается). */
+  limit?: number | null;
 }) {
   const [counts, setCounts] = useState<FinanceOfficeChipCounts | null>(null);
   const [countsLoading, setCountsLoading] = useState(true);
@@ -178,6 +181,7 @@ export function FinanceOfficeQuickFilterChips({
     shipTo: shipTo ?? undefined,
     invFrom: invFrom ?? undefined,
     invTo: invTo ?? undefined,
+    limit: limit ?? undefined,
   };
 
   const showCorrections =

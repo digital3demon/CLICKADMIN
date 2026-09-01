@@ -63,6 +63,7 @@ export type FinanceOfficeOrderTableRow = {
 
 export function FinanceOfficeOrdersTable({
   orders,
+  totalCount,
   activeTag = null,
   listTag = null,
   tab,
@@ -77,6 +78,8 @@ export function FinanceOfficeOrdersTable({
   toolbar = null,
 }: {
   orders: FinanceOfficeOrderTableRow[];
+  /** Всего по фильтру (все страницы). Пилюли считают тот же объём отдельно. */
+  totalCount?: number;
   activeTag?: string | null;
   listTag?: string | null;
   tab: string;
@@ -171,7 +174,7 @@ export function FinanceOfficeOrdersTable({
           {toolbar}
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
             <div className="text-sm font-medium text-[var(--text-body)]">
-              Нарядов: {orders.length} · выбрано: {selectedCount}
+              Нарядов: {totalCount ?? orders.length} · выбрано: {selectedCount}
               {activeTag ? (
                 <span className="ml-2 text-[var(--text-muted)]">
                   Фильтр: {activeTag}

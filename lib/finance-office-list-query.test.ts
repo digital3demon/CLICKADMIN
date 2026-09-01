@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   financeOfficeListHref,
   parseFinanceOfficeInvoiceIssuedParams,
+  parseFinanceOfficePageSize,
+  sliceFinanceOfficePage,
 } from "@/lib/finance-office-list-query";
 
 describe("financeOfficeListHref", () => {
@@ -50,6 +52,27 @@ describe("financeOfficeListHref", () => {
     expect(financeOfficeListHref({})).toBe("/finance-office");
   });
 
+  it("кириллица до и после номера страницы в поиске", () => {
+    expect(
+      financeOfficeListHref({
+        q: "клиника Соколов наряд",
+        page: 3,
+      }),
+    ).toBe(
+      "/finance-office?q=%D0%BA%D0%BB%D0%B8%D0%BD%D0%B8%D0%BA%D0%B0+%D0%A1%D0%BE%D0%BA%D0%BE%D0%BB%D0%BE%D0%B2+%D0%BD%D0%B0%D1%80%D1%8F%D0%B4&page=3",
+    );
+  });
+
+  it("page=1 и дефолтный limit не пишутся в URL", () => {
+    expect(
+      financeOfficeListHref({
+        q: "Соколов",
+        page: 1,
+        limit: 30,
+      }),
+    ).toBe("/finance-office?q=%D0%A1%D0%BE%D0%BA%D0%BE%D0%BB%D0%BE%D0%B2");
+  });
+
   it("без даты «по» у счёта — ошибка на русском", () => {
     const parsed = parseFinanceOfficeInvoiceIssuedParams({
       invFrom: "2026-05-07",
@@ -57,5 +80,32 @@ describe("financeOfficeListHref", () => {
     });
     expect(parsed.error).toMatch(/по/i);
     expect(parsed.toYmd).toBeNull();
+  });
+});
+
+describe("sliceFinanceOfficePage", () => {
+  it("режет после сортировки и зажимает страницу", () => {
+    expect(sliceFinanceOfficePage(["а", "б", "в", "г"], 2, 2)).toEqual({
+      slice: ["в", "г"],
+      page: 2,
+      totalPages: 2,
+    });
+    expect(sliceFinanceOfficePage(["один"], 9, 30)).toEqual({
+      slice: ["один"],
+      page: 1,
+      totalPages: 1,
+    });
+    expect(sliceFinanceOfficePage([], 2, 30)).toEqual({
+      slice: [],
+      page: 1,
+      totalPages: 1,
+    });
+  });
+
+  it("parseFinanceOfficePageSize режет мусор и потолок", () => {
+    expect(parseFinanceOfficePageSize(undefined)).toBe(30);
+    expect(parseFinanceOfficePageSize("abc")).toBe(30);
+    expect(parseFinanceOfficePageSize("200")).toBe(100);
+    expect(parseFinanceOfficePageSize("15")).toBe(15);
   });
 });

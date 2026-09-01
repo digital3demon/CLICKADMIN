@@ -108,7 +108,7 @@ export async function GET(req: Request) {
   const periodLabel = `selected-${ids.length}`;
   const orders = (await fetchFinanceOfficeOrders(await getOrdersPrisma(), tenantId, {
     ids,
-  })).filter(
+  })).orders.filter(
     (order) =>
       !isReconciliationPaymentStatus(order.payment) &&
       !isPrivatePersonWithoutDoctorRequisites(order),
