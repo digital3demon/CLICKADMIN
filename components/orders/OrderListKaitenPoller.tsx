@@ -192,8 +192,8 @@ export function OrderListKaitenPoller({
     const pollMs = kaitenListTitlesPollIntervalMs(
       process.env.NEXT_PUBLIC_KAITEN_LIST_TITLES_POLL_MS,
     );
-    let initialId: ReturnType<typeof setTimeout> | null = null;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let initialId: number | null = null;
+    let intervalId: number | null = null;
 
     const stop = () => {
       if (initialId != null) {
