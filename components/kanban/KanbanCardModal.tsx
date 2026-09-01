@@ -1015,6 +1015,68 @@ export function KanbanCardModal({
     });
   };
 
+  const handleKanbanBlockToggle = useCallback(() => {
+    if (!canManageKanbanBlock) {
+      toast(KANBAN_BLOCK_PERM_HINT, true);
+      return;
+    }
+    if (!card) return;
+    if (blocked) {
+      const oid = card.linkedOrderId?.trim() || "";
+      const hasKaiten =
+        card.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
+      onApply((b) => {
+        const fc = findCard(b, cardId);
+        if (!fc) return;
+        performUnblock(fc.card, b, act);
+        runKanbanAutomations(
+          b,
+          { type: "card_unblocked", cardId, columnId: fc.col.id },
+          0,
+          act,
+        );
+        if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
+          const t = (fc.card.title || "").trim() || "Без названия";
+          const linkHtml = kanbanCardLinkHtml(cardId, board.id, t);
+          const who = escapeTelegramHtml((act || "Пользователь").trim());
+          const linkedOid = fc.card.linkedOrderId?.trim();
+          const { cardWord, orderWord } = linkedOid
+            ? cardOrderWordLinks(linkedOid, cardId, board.id)
+            : { cardWord: "", orderWord: "" };
+          postKanbanCrmTelegramNotify({
+            kaitenCardId: fc.card.kaitenCardId,
+            event: "tg_card_unblocked",
+            cardMembers: fc.card,
+            parseMode: "HTML",
+            lines: [`${who} снял(а) блокировку с ${linkHtml}`],
+            ...(linkedOid
+              ? {
+                  linesAdmin: [
+                    `${who} снял(а) блокировку с ${cardWord} и ${orderWord}`,
+                  ],
+                }
+              : {}),
+          });
+        }
+      });
+      if (oid) {
+        persistLinkedOrderBlock(oid, { blocked: false }, undefined, hasKaiten);
+      }
+    } else {
+      setBlockReasonDraft("");
+      setBlockPopupOpen(true);
+    }
+  }, [
+    act,
+    blocked,
+    board.id,
+    canManageKanbanBlock,
+    card,
+    cardId,
+    onApply,
+    toast,
+  ]);
+
   const confirmBlock = () => {
     if (!canManageKanbanBlock) return;
     const reasonForTg = (blockReasonDraft || "").trim();
@@ -2233,55 +2295,7 @@ export function KanbanCardModal({
               }
               disabled={!canManageKanbanBlock}
               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] disabled:cursor-not-allowed disabled:opacity-40 sm:h-[2.1rem] sm:w-[2.1rem]"
-              onClick={() => {
-                if (!canManageKanbanBlock) {
-                  toast(KANBAN_BLOCK_PERM_HINT, true);
-                  return;
-                }
-                if (blocked) {
-                  const oid = card.linkedOrderId?.trim() || "";
-                  const hasKaiten =
-                    card.kaitenCardId != null &&
-                    Number.isFinite(card.kaitenCardId);
-                  onApply((b) => {
-                    const fc = findCard(b, cardId);
-                    if (!fc) return;
-                    performUnblock(fc.card, b, act);
-                    runKanbanAutomations(
-                      b,
-                      { type: "card_unblocked", cardId, columnId: fc.col.id },
-                      0,
-                      act,
-                    );
-                    if (!shouldSkipCrmKanbanTelegram(fc.card.kaitenCardId)) {
-                      const t = (fc.card.title || "").trim() || "Без названия";
-                      const linkHtml = kanbanCardLinkHtml(cardId, board.id, t);
-                      const who = escapeTelegramHtml((act || "Пользователь").trim());
-                      const linkedOid = fc.card.linkedOrderId?.trim();
-                      const { cardWord, orderWord } = linkedOid
-                        ? cardOrderWordLinks(linkedOid, cardId, board.id)
-                        : { cardWord: "", orderWord: "" };
-                      postKanbanCrmTelegramNotify({
-                        kaitenCardId: fc.card.kaitenCardId,
-                        event: "tg_card_unblocked",
-                        cardMembers: fc.card,
-                        parseMode: "HTML",
-                        lines: [`${who} снял(а) блокировку с ${linkHtml}`],
-                        ...(linkedOid
-                          ? {
-                              linesAdmin: [
-                                `${who} снял(а) блокировку с ${cardWord} и ${orderWord}`,
-                              ],
-                            }
-                          : {}),
-                      });
-                    }
-                  });
-                  if (oid) {
-                    persistLinkedOrderBlock(oid, { blocked: false }, undefined, hasKaiten);
-                  }
-                } else openBlockPopup();
-              }}
+              onClick={handleKanbanBlockToggle}
             >
               {blocked ? (
                 <IconUnlock className={TOOLBAR_CIRCLE_ICON} />
@@ -2802,6 +2816,65 @@ export function KanbanCardModal({
                   <aside
                     className="flex min-h-[100px] flex-col rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 sm:min-h-[120px]"
                   >
+                    {embed ? (
+                      <div className="mb-2 flex shrink-0 flex-wrap items-stretch gap-1">
+                        <button
+                          type="button"
+                          data-no-touch-expand
+                          title={
+                            canManageKanbanBlock
+                              ? blocked
+                                ? "Снять блокировку"
+                                : "Заблокировать карточку"
+                              : KANBAN_BLOCK_PERM_HINT
+                          }
+                          aria-label={
+                            blocked ? "Снять блокировку" : "Заблокировать карточку"
+                          }
+                          disabled={!canManageKanbanBlock}
+                          className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-1.5 py-1 text-[0.62rem] font-medium leading-tight text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] disabled:cursor-not-allowed disabled:opacity-40"
+                          onClick={handleKanbanBlockToggle}
+                        >
+                          {blocked ? (
+                            <IconUnlock className="h-3.5 w-3.5 shrink-0" />
+                          ) : (
+                            <IconBrick className="h-3.5 w-3.5 shrink-0" />
+                          )}
+                          <span className="truncate">
+                            {blocked ? "Разблок." : "Блок."}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          data-no-touch-expand
+                          title={
+                            showOrderMailButton
+                              ? (card.sourceEmailCount ?? 0) > 0
+                                ? `Письма наряда (${card.sourceEmailCount})`
+                                : "Письма наряда"
+                              : "Нет связанного наряда"
+                          }
+                          aria-label="Письма наряда"
+                          disabled={!showOrderMailButton}
+                          className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-1.5 py-1 text-[0.62rem] font-medium leading-tight text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] disabled:cursor-not-allowed disabled:opacity-40"
+                          onClick={() => setOrderMailOpen(true)}
+                        >
+                          <IconMail className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">Письма</span>
+                        </button>
+                        <button
+                          type="button"
+                          data-no-touch-expand
+                          title="Скопировать ссылку на карточку"
+                          aria-label="Поделиться — копировать ссылку"
+                          className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-1.5 py-1 text-[0.62rem] font-medium leading-tight text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)]"
+                          onClick={() => onCopyCardLink(cardId)}
+                        >
+                          <IconLink className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">Ссылка</span>
+                        </button>
+                      </div>
+                    ) : null}
                     <div className="mb-1 shrink-0 text-[0.55rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                       Файлы наряда и чата
                     </div>

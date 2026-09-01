@@ -596,6 +596,9 @@ export function KanbanListView({
   );
 
   const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
+  useEffect(() => {
+    if (expandedCardId) onPreviewLeave();
+  }, [expandedCardId, onPreviewLeave]);
 
   const rows = useMemo(
     () =>
@@ -759,7 +762,10 @@ export function KanbanListView({
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
-                  onMouseMove={(event) => onPreviewMove(card, event)}
+                  onMouseMove={(event) => {
+                    if (expandedCardId === card.id) return;
+                    onPreviewMove(card, event);
+                  }}
                   onMouseLeave={onPreviewLeave}
                   onClick={() => onOpenCard(card.id)}
                   onKeyDown={(e) => {
