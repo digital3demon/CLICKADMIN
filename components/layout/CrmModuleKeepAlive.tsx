@@ -2,8 +2,10 @@
 
 import {
   isValidElement,
+  useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
@@ -42,8 +44,9 @@ function isCrmModuleListLoading(node: ReactNode, depth = 0): boolean {
 }
 
 /**
- * Пока RSC списка считается — HTML-кадр прошлого визита этого модуля.
- * Второе React-дерево не держим: Заказы и ФинОтдел сразу ~×2 к памяти вкладки.
+ * Кадр прошлого визита — сразу на экране (переключение быстрое).
+ * Живое React-дерево монтируем только после idle и только у текущего модуля.
+ * Иначе вкладка держит Заказы+ФинОтдел целиком (~×2 RAM).
  */
 export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
@@ -56,8 +59,26 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
   const loadingUi = isCrmModuleListLoading(children);
   const live = Boolean(path && painted === path && !loadingUi);
   const liveRootRef = useRef<HTMLDivElement>(null);
-  const htmlSnap =
-    !live && path ? readCrmModuleListHtml(path) : null;
+  const htmlSnap = !live && path ? readCrmModuleListHtml(path) : null;
+  const [hydratedPath, setHydratedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!path) {
+      setHydratedPath(null);
+      return;
+    }
+    if (!readCrmModuleListHtml(path)) {
+      setHydratedPath(path);
+      return;
+    }
+    const hydrate = () => setHydratedPath(path);
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(hydrate, { timeout: 400 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(hydrate, 200);
+    return () => window.clearTimeout(t);
+  }, [path]);
 
   useLayoutEffect(() => {
     if (!live || !path || !liveRootRef.current) return;
@@ -67,6 +88,8 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
   if (!path) {
     return <CrmModuleListLive>{children}</CrmModuleListLive>;
   }
+
+  const mountLive = !htmlSnap || hydratedPath === path;
 
   return (
     <div className="relative">
@@ -79,14 +102,16 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
         </p>
       ) : null}
       {htmlSnap ? <CrmModuleListHtmlFrame html={htmlSnap} /> : null}
-      <div
-        ref={liveRootRef}
-        hidden={Boolean(htmlSnap)}
-        className={htmlSnap ? "hidden" : undefined}
-        inert={htmlSnap ? true : undefined}
-      >
-        <CrmModuleListLive>{children}</CrmModuleListLive>
-      </div>
+      {mountLive ? (
+        <div
+          ref={liveRootRef}
+          hidden={Boolean(htmlSnap)}
+          className={htmlSnap ? "hidden" : undefined}
+          inert={htmlSnap ? true : undefined}
+        >
+          <CrmModuleListLive>{children}</CrmModuleListLive>
+        </div>
+      ) : null}
     </div>
   );
 }

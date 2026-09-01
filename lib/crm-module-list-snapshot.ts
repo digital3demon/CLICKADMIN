@@ -125,7 +125,7 @@ export function writeCrmModuleListSnapshot(
       CRM_MODULE_LIST_SNAPSHOT_PREFIX + key,
       JSON.stringify(payload),
     );
-    rememberCrmModuleListPrefetchHref(key);
+    /* prefetch соседнего списка снова кладёт второй Flight в RAM — не пишем */
   } catch {
     /* quota / private mode */
   }

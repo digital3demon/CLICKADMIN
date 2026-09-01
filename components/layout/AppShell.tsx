@@ -1,9 +1,8 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { readCrmModuleListPrefetchHrefs } from "@/lib/crm-module-list-snapshot";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { OrderCorrectionToastStack } from "@/components/orders/OrderCorrectionToastStack";
 import { OrderBackgroundUploadToast } from "@/components/orders/OrderBackgroundUploadToast";
@@ -63,25 +62,6 @@ function AppShellChrome({ children }: { children: ReactNode }) {
   useEffect(() => {
     closeMobileNav();
   }, [pathname, closeMobileNav]);
-
-  useEffect(() => {
-    const hrefs = readCrmModuleListPrefetchHrefs().filter((href) => {
-      const path = href.split("?")[0];
-      return path !== pathname;
-    });
-    if (hrefs.length === 0) return;
-    const run = () => {
-      for (const href of hrefs) {
-        void router.prefetch(href);
-      }
-    };
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(run, { timeout: 4000 });
-      return () => window.cancelIdleCallback(id);
-    }
-    const t = window.setTimeout(run, 2000);
-    return () => window.clearTimeout(t);
-  }, [pathname, router]);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
