@@ -109,6 +109,11 @@ import {
   updateKanbanBlockReason,
   userNameById,
 } from "@/lib/kanban/model";
+import {
+  KANBAN_CARD_MODAL_ANIM_MS,
+  kanbanCardModalClosedTransform,
+  type KanbanCardOpenOrigin,
+} from "@/lib/kanban/card-modal-animation";
 import { runKanbanAutomations } from "@/lib/kanban/automations";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -265,6 +270,8 @@ type KanbanCardModalProps = {
   /** Подпись текущего пользователя для журнала активности. */
   activityActorLabel?: string;
   onClose: () => void;
+  /** Прямоугольник карточки на доске — анимация «вырастания» в модалку. */
+  openOrigin?: KanbanCardOpenOrigin | null;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   toast: (msg: string, err?: boolean) => void;
   onMovePrevStage: (id: string) => void;
@@ -587,6 +594,7 @@ export function KanbanCardModal({
   allBoards,
   activityActorLabel,
   onClose,
+  openOrigin = null,
   onApply,
   toast,
   onMovePrevStage,
@@ -632,6 +640,11 @@ export function KanbanCardModal({
   const [descCanCollapse, setDescCanCollapse] = useState(false);
   const descUserOverrideRef = useRef(false);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const originSnapRef = useRef<KanbanCardOpenOrigin | null>(null);
+  const closingRef = useRef(false);
+  const [backdropOpacity, setBackdropOpacity] = useState(1);
+  const [panelAnimStyle, setPanelAnimStyle] = useState<CSSProperties>({});
   const descBoxRef = useRef<HTMLDivElement>(null);
   const descMeasureRef = useRef<HTMLDivElement>(null);
   const [placementFieldsOpen, setPlacementFieldsOpen] = useState(false);
@@ -649,6 +662,109 @@ export function KanbanCardModal({
   const card = found?.card;
   const showOrderMailButton = Boolean(card?.linkedOrderId);
   const act = (activityActorLabel ?? "").trim() || undefined;
+
+  const requestAnimatedClose = useCallback(() => {
+    if (embed) {
+      onClose();
+      return;
+    }
+    if (closingRef.current) return;
+    const prefersReduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      onClose();
+      return;
+    }
+    closingRef.current = true;
+    const panel = panelRef.current;
+    if (!panel) {
+      onClose();
+      return;
+    }
+    const panelRect = panel.getBoundingClientRect();
+    const closedTransform = kanbanCardModalClosedTransform(
+      panelRect,
+      originSnapRef.current,
+    );
+    setBackdropOpacity(0);
+    setPanelAnimStyle({
+      transform: closedTransform,
+      opacity: 0.88,
+      transition: `transform ${KANBAN_CARD_MODAL_ANIM_MS}ms cubic-bezier(0.4, 0, 0.6, 1), opacity ${KANBAN_CARD_MODAL_ANIM_MS}ms ease-in`,
+    });
+    window.setTimeout(onClose, KANBAN_CARD_MODAL_ANIM_MS);
+  }, [embed, onClose]);
+
+  useLayoutEffect(() => {
+    if (embed || !cardId) return;
+    closingRef.current = false;
+    if (openOrigin) originSnapRef.current = openOrigin;
+  }, [cardId, embed, openOrigin]);
+
+  useLayoutEffect(() => {
+    if (embed || !cardId || !card) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      setBackdropOpacity(1);
+      setPanelAnimStyle({});
+      return;
+    }
+
+    const panelRect = panel.getBoundingClientRect();
+    const closedTransform = kanbanCardModalClosedTransform(
+      panelRect,
+      originSnapRef.current,
+    );
+
+    setBackdropOpacity(0);
+    setPanelAnimStyle({
+      transform: closedTransform,
+      opacity: originSnapRef.current ? 0.92 : 0,
+      transition: "none",
+    });
+
+    panel.getBoundingClientRect();
+
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setBackdropOpacity(1);
+        setPanelAnimStyle({
+          transform: "none",
+          opacity: 1,
+          transition: `transform ${KANBAN_CARD_MODAL_ANIM_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${KANBAN_CARD_MODAL_ANIM_MS}ms ease-out`,
+        });
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [cardId, embed, card]);
+
+  useEffect(() => {
+    if (embed || !cardId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (blockPopupOpen || pickerMode || fileViewer || manualRouteOpen || orderMailOpen) {
+        return;
+      }
+      e.preventDefault();
+      requestAnimatedClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    blockPopupOpen,
+    cardId,
+    embed,
+    fileViewer,
+    manualRouteOpen,
+    orderMailOpen,
+    pickerMode,
+    requestAnimatedClose,
+  ]);
 
   useEffect(() => {
     if (!autoOpenBlock) return;
@@ -1898,7 +2014,7 @@ export function KanbanCardModal({
       className={
         embed
           ? "kanban-root relative z-0 flex min-h-0 w-full flex-col overflow-visible bg-transparent p-0"
-          : "kanban-root fixed inset-0 z-[200] flex overflow-hidden bg-black/55 max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
+          : "kanban-root fixed inset-0 z-[200] flex overflow-hidden max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
       }
       role={embed ? "region" : "dialog"}
       aria-modal={embed ? undefined : true}
@@ -1906,10 +2022,20 @@ export function KanbanCardModal({
         embed
           ? undefined
           : (ev) => {
-              if (ev.target === ev.currentTarget) onClose();
+              if (ev.target === ev.currentTarget) requestAnimatedClose();
             }
       }
     >
+      {!embed ? (
+        <div
+          className="pointer-events-none absolute inset-0 bg-black/55 transition-opacity ease-out"
+          style={{
+            opacity: backdropOpacity,
+            transitionDuration: `${KANBAN_CARD_MODAL_ANIM_MS}ms`,
+          }}
+          aria-hidden
+        />
+      ) : null}
       {blockPopupOpen && (
         <div
           className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 p-4"
@@ -2074,10 +2200,12 @@ export function KanbanCardModal({
       ) : null}
 
       <div
+        ref={panelRef}
+        style={embed ? undefined : panelAnimStyle}
         className={
           embed
             ? "flex w-full min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
-            : "flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
+            : "relative flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         }
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -2276,7 +2404,7 @@ export function KanbanCardModal({
             <button
               type="button"
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] sm:h-12 sm:w-12"
-              onClick={onClose}
+              onClick={requestAnimatedClose}
               aria-label="Закрыть"
             >
               <IconX className="h-5 w-5 sm:h-6 sm:w-6" />

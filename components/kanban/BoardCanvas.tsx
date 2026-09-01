@@ -13,6 +13,10 @@ import {
 } from "@/lib/kanban/list-view-sort";
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "@/lib/kanban/kanban-card-move-preview";
 import { VirtualizedKanbanColumnCards } from "@/components/kanban/VirtualizedKanbanColumnCards";
+import {
+  readKanbanCardOpenOrigin,
+  type KanbanCardOpenOrigin,
+} from "@/lib/kanban/card-modal-animation";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { isKanbanCardTimerExpired } from "@/lib/kanban/kanban-card-timer";
 import {
@@ -98,7 +102,7 @@ type BoardCanvasProps = {
   /** Перенос карточки по виртуальной доске — правит реальные колонки на дорожках. */
   onAggregateCardDrag?: (drag: AggregateCardDragArgs) => void;
   onPatchBoard: (fn: (b: KanbanBoard) => void) => void;
-  onOpenCard: (cardId: string) => void;
+  onOpenCard: (cardId: string, origin?: KanbanCardOpenOrigin) => void;
   onAddColumn: () => void;
   onRenameColumn: (columnId: string) => void;
   onDeleteColumn: (columnId: string) => void;
@@ -243,7 +247,7 @@ function KanbanCardView({
   homeBoard: KanbanBoard;
   /** При поиске по всем доскам — название доски-владельца, если это не активная доска. */
   foreignBoardLabel?: string;
-  onOpen: () => void;
+  onOpen: (origin: KanbanCardOpenOrigin) => void;
   onCopyLink: () => void;
   onMoveCard: () => void;
   onArchiveCard: () => void;
@@ -388,7 +392,10 @@ function KanbanCardView({
           onMouseLeave={() => onPreviewLeave?.()}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest(".card-more-menu")) return;
-            onOpen();
+            const frame = (e.currentTarget as HTMLElement).closest(
+              "[data-card-id]",
+            );
+            onOpen(readKanbanCardOpenOrigin(frame ?? e.currentTarget));
           }}
         >
           {blocked ? (
@@ -618,7 +625,7 @@ function SortableKanbanCard({
   homeBoard: KanbanBoard;
   foreignBoardLabel?: string;
   dndLocked: boolean;
-  onOpenCard: (id: string) => void;
+  onOpenCard: (id: string, origin?: KanbanCardOpenOrigin) => void;
   onCopyCardLink: (id: string) => void;
   onRequestMoveCard: (id: string) => void;
   onRequestArchiveCard: (id: string) => void;
@@ -652,7 +659,7 @@ function SortableKanbanCard({
         card={card}
         homeBoard={homeBoard}
         foreignBoardLabel={foreignBoardLabel}
-        onOpen={() => onOpenCard(card.id)}
+        onOpen={(origin) => onOpenCard(card.id, origin)}
         onCopyLink={() => onCopyCardLink(card.id)}
         onMoveCard={() => onRequestMoveCard(card.id)}
         onArchiveCard={() => onRequestArchiveCard(card.id)}

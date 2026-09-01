@@ -77,6 +77,7 @@ import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-
 import { showKanbanKaitenRefreshButton } from "@/lib/kaiten-integration/ui";
 import { collectSharedArchivedCards } from "@/lib/kanban/collect-shared-archived-cards";
 import { collectSharedStoppedCards } from "@/lib/kanban/collect-shared-stopped-cards";
+import type { KanbanCardOpenOrigin } from "@/lib/kanban/card-modal-animation";
 import {
   applyKanbanCardMembersOnBoard,
   notifyKanbanCardDueChange,
@@ -504,6 +505,9 @@ export function KanbanApp({
   /** Настоящая доска до «Мои» / «Ответственный» — не ортопедия по умолчанию. */
   const lastRealBoardIdRef = useRef("");
   const [cardModalId, setCardModalId] = useState<string | null>(null);
+  const [cardModalOrigin, setCardModalOrigin] = useState<KanbanCardOpenOrigin | null>(
+    null,
+  );
   const [listExpandedCardId, setListExpandedCardId] = useState<string | null>(
     null,
   );
@@ -1466,9 +1470,15 @@ export function KanbanApp({
     };
   }, [isDemo, pullCatalogCardTypes]);
 
-  const openKanbanCard = useCallback((cardId: string) => {
+  const openKanbanCard = useCallback((cardId: string, origin?: KanbanCardOpenOrigin) => {
     setListExpandedCardId(null);
+    setCardModalOrigin(origin ?? null);
     setCardModalId(cardId);
+  }, []);
+
+  const closeKanbanCard = useCallback(() => {
+    setCardModalId(null);
+    setCardModalOrigin(null);
   }, []);
 
   useEffect(() => {
@@ -3771,7 +3781,6 @@ export function KanbanApp({
               sort={listSortFromViewPref(viewSort)}
               onSortChange={persistViewSort}
               cardHomeBoardId={cardHomeBoardId}
-              onOpenCard={openKanbanCard}
               onAdvanceCardColumn={
                 kanbanCardPerms.moveColumns ? moveCardToNextStage : undefined
               }
@@ -3854,6 +3863,7 @@ export function KanbanApp({
                   onAutoOpenBlockConsumed={() => setListAutoOpenBlock(false)}
                   onOpenLinkedCard={(id) => {
                     setListExpandedCardId(null);
+                    setCardModalOrigin(null);
                     setCardModalId(id);
                   }}
                   onParentProductionFilesUpdated={
@@ -3875,7 +3885,8 @@ export function KanbanApp({
         activityActorLabel={activityActorLabel}
         commentAuthorUserId={kanbanSessionUserId ?? undefined}
         sessionUserRole={kanbanSessionRole}
-        onClose={() => setCardModalId(null)}
+        onClose={closeKanbanCard}
+        openOrigin={cardModalOrigin}
         onApply={applyModalBoard}
         toast={showToast}
         onMovePrevStage={(id) => {
@@ -3920,7 +3931,10 @@ export function KanbanApp({
         canManageKanbanTimer={kanbanCardPerms.manageKanbanTimer}
         canAttachFiles={kanbanCardPerms.attachFiles}
         canManageKanbanBlock={canManageKanbanBlock}
-        onOpenLinkedCard={(id) => setCardModalId(id)}
+        onOpenLinkedCard={(id) => {
+          setCardModalOrigin(null);
+          setCardModalId(id);
+        }}
         onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}
         isDemo={isDemo}
       />

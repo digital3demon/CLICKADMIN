@@ -35,14 +35,20 @@ import { extractOrderNumberLabelFromKanbanCardTitle } from "@/lib/kanban-mention
 
 /**
  * Desktop: одна сетка на шапку + все строки (`auto` = max по столбцу).
- * Первый столбец — кнопка раскрытия; название — не 1fr: иначе пустота между текстом и «Колонка».
+ * Название — не 1fr: иначе пустота между текстом и «Колонка».
  * Хвост `1fr` забирает лишнюю ширину, карточка остаётся на всю строку.
  */
 const LIST_TABLE =
-  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[auto_minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
+  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
 
 /** Mobile: своя сетка. Desktop: `contents` — ячейки входят в subgrid карточки. */
 const LIST_ROW_INNER = "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:contents";
+
+const LIST_ROW_CONTROL = "data-list-row-control";
+
+function eventTargetsListRowControl(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(`[${LIST_ROW_CONTROL}]`) != null;
+}
 
 function IconChevronRight(props: { className?: string }) {
   return (
@@ -61,13 +67,7 @@ function IconChevronRight(props: { className?: string }) {
   );
 }
 
-function ListInlineExpandedBody({
-  card,
-  onOpenCard,
-}: {
-  card: KanbanCard;
-  onOpenCard: () => void;
-}) {
+function ListInlineExpandedBody({ card }: { card: KanbanCard }) {
   const body = kanbanCardHoverPreviewBody(card);
   const blockReason = kanbanCardHoverPreviewBlockReason(card);
   const cl = card.checklist || [];
@@ -107,65 +107,7 @@ function ListInlineExpandedBody({
           ))}
         </ul>
       ) : null}
-      <button
-        type="button"
-        className="rounded-md border border-[var(--kanban-border)] px-2 py-1 text-[0.68rem] font-medium text-[var(--kanban-text)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenCard();
-        }}
-      >
-        Открыть карточку
-      </button>
     </div>
-  );
-}
-
-function IconChevronDown(props: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      className={props.className}
-      aria-hidden
-    >
-      <path
-        fillRule="evenodd"
-        d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-}
-
-function ListRowExpandButton({
-  expanded,
-  onToggle,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      data-no-touch-expand
-      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08]"
-      title={expanded ? "Свернуть карточку" : "Раскрыть карточку в списке"}
-      aria-expanded={expanded}
-      aria-label={
-        expanded ? "Свернуть карточку" : "Раскрыть карточку в списке"
-      }
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-    >
-      <IconChevronDown
-        className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
-      />
-    </button>
   );
 }
 
@@ -194,13 +136,14 @@ function ListMemberAddButton({
     <button
       type="button"
       data-no-touch-expand
+      data-list-row-control
       disabled={disabled}
       title={title}
       aria-label={title}
       className={`box-border inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-dashed border-[var(--kanban-text-muted)] p-0 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40 ${
         compact
-          ? "!h-4 !w-4 !min-h-4 !min-w-4 !max-h-4 !max-w-4"
-          : "h-4 w-4 max-h-4 max-w-4"
+          ? "!h-6 !w-6 !min-h-6 !min-w-6 !max-h-6 !max-w-6"
+          : "h-6 w-6 min-h-6 min-w-6 max-h-6 max-w-6"
       }`}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
@@ -234,7 +177,12 @@ function ListMembersCell({
   const visible = userIds.slice(0, maxVisible);
   const overflow = userIds.length - visible.length;
   return (
-    <div className="flex min-w-0 flex-nowrap items-start justify-start gap-0.5 overflow-visible">
+    <div
+      data-list-row-control
+      className="flex min-w-0 flex-nowrap items-start justify-start gap-0.5 overflow-visible p-0.5 -m-0.5"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
       {visible.length > 0 ? (
         <div className="flex min-w-0 items-start gap-1">
           {visible.map((uid) => (
@@ -391,10 +339,11 @@ function ListStageDueCell({
   const dueUrgentRed = stageDue ? isDueUrgentRedInList(stageDue) : false;
   return (
     <div
+      data-list-row-control
       className={
         compact
-          ? "flex shrink-0 flex-row items-center gap-0.5"
-          : "flex min-w-0 flex-col gap-1"
+          ? "flex shrink-0 flex-row items-center gap-0.5 p-0.5 -m-0.5"
+          : "flex min-w-0 flex-col gap-1 p-0.5 -m-0.5"
       }
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
@@ -411,8 +360,8 @@ function ListStageDueCell({
         }
         className={`${
           compact
-            ? "h-6 w-[6.5rem] min-w-0 px-1 py-0 text-[0.65rem] font-semibold"
-            : "w-[6.85rem] px-1 py-0.5 text-[0.65rem]"
+            ? "h-7 min-h-7 w-[6.75rem] min-w-0 px-1.5 py-0 text-[0.65rem] font-semibold"
+            : "h-7 min-h-7 w-[7.1rem] px-1.5 py-0.5 text-[0.65rem]"
         } max-w-full shrink-0 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
           dueUrgentRed ? "font-semibold text-red-500 dark:text-red-400" : ""
         } [color-scheme:light] dark:[color-scheme:dark]`}
@@ -428,8 +377,8 @@ function ListStageDueCell({
           }
           className={`shrink-0 rounded border font-bold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             compact
-              ? "h-6 px-1 py-0 text-[0.5rem] leading-none"
-              : "w-fit max-w-full px-1.5 py-0.5 text-[0.58rem]"
+              ? "h-7 min-h-7 px-1.5 py-0 text-[0.5rem] leading-none"
+              : "h-7 min-h-7 w-fit max-w-full px-2 py-0.5 text-[0.58rem]"
           } ${
             urgent
               ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
@@ -455,13 +404,14 @@ function ListUrgentPillButton({
     <button
       type="button"
       data-no-touch-expand
+      data-list-row-control
       disabled={!onUrgentChange}
       title={
         urgent
           ? "Снять метку «Срочно» для следующего отдела (только канбан)"
           : "Срочно для следующего отдела (только канбан, наряд не меняется)"
       }
-      className={`inline-flex h-5 min-h-0 min-w-0 shrink-0 items-center whitespace-nowrap rounded-md border px-2 text-[0.5rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex h-7 min-h-7 min-w-0 shrink-0 items-center whitespace-nowrap rounded-md border px-2.5 text-[0.5rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
         urgent
           ? "border-orange-600 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
           : "border-[var(--kanban-text-muted)] bg-transparent text-[var(--kanban-text)]"
@@ -492,10 +442,11 @@ function ListMobileIconButton({
     <button
       type="button"
       data-no-touch-expand
+      data-list-row-control
       disabled={disabled}
       title={title}
       aria-label={title}
-      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.08]"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.08]"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
@@ -512,7 +463,6 @@ type KanbanListViewProps = {
   board: KanbanBoard;
   /** Карта «карточка → доска-владелец» при глобальном поиске; иначе не передавать. */
   cardHomeBoardId?: Map<string, string>;
-  onOpenCard: (cardId: string) => void;
   /** Следующая колонка на доске-владельце (как «вперёд» на доске). */
   onAdvanceCardColumn?: (cardId: string) => void;
   canManageAssignees?: boolean;
@@ -542,7 +492,6 @@ export function KanbanListView({
   appState,
   board,
   cardHomeBoardId,
-  onOpenCard,
   onAdvanceCardColumn,
   canManageAssignees = true,
   canManageParticipants = true,
@@ -678,7 +627,6 @@ export function KanbanListView({
         <div
           className="sticky top-0 z-10 hidden border-b border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] pb-1 text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:border-l-[3px] sm:border-l-transparent sm:border-r sm:border-r-transparent"
         >
-          <div className="min-w-0 sm:w-7" aria-hidden />
           <div className="min-w-0 sm:px-2">
             <SortHeaderButton
               label="Название"
@@ -762,30 +710,25 @@ export function KanbanListView({
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
+                  aria-expanded={expandedCardId === card.id}
                   onMouseMove={(event) => {
                     if (expandedCardId === card.id) return;
                     onPreviewMove(card, event);
                   }}
                   onMouseLeave={onPreviewLeave}
-                  onClick={() => onOpenCard(card.id)}
+                  onClick={(e) => {
+                    if (eventTargetsListRowControl(e.target)) return;
+                    toggleExpandedCard(card.id);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
+                      if (eventTargetsListRowControl(e.target)) return;
                       e.preventDefault();
-                      onOpenCard(card.id);
+                      toggleExpandedCard(card.id);
                     }
                   }}
                 >
                   <div className={LIST_ROW_INNER}>
-                    <div
-                      className="hidden sm:flex sm:items-start sm:justify-center sm:px-0.5 sm:py-1.5"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ListRowExpandButton
-                        expanded={expandedCardId === card.id}
-                        onToggle={() => toggleExpandedCard(card.id)}
-                      />
-                    </div>
                     {/* Mobile: тип | контент; отв./участн. справа сверху */}
                     <div className="flex min-w-0 sm:contents">
                       <div
@@ -865,7 +808,12 @@ export function KanbanListView({
                               </div>
                             ) : null}
                             {/* Mobile: дата + таймер + срочно + полное имя колонки */}
-                            <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto pb-0.5 sm:hidden">
+                            <div
+                              className="mt-1 flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto pb-0.5 sm:hidden"
+                              data-list-row-control
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <ListStageDueCell
                                 compact
                                 hideUrgent
@@ -916,7 +864,8 @@ export function KanbanListView({
                                 {onAdvanceCardColumn ? (
                                   <button
                                     type="button"
-                                    className="shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
+                                    data-list-row-control
+                                    className="shrink-0 rounded p-1.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
                                     title="Следующая колонка"
                                     aria-label="Переместить в следующую колонку"
                                     disabled={!canAdvance}
@@ -932,7 +881,12 @@ export function KanbanListView({
                               </span>
                             </div>
                           </div>
-                          <div className="flex shrink-0 flex-col items-end gap-1 self-start sm:hidden">
+                          <div
+                            className="flex shrink-0 flex-col items-end gap-1 self-start sm:hidden"
+                            data-list-row-control
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <div className="flex items-start gap-2">
                               <div className="flex flex-col items-center gap-0.5">
                                 <span className="text-[0.38rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)]">
@@ -1014,7 +968,7 @@ export function KanbanListView({
                                 title={
                                   canManageKanbanBlock
                                     ? blocked
-                                      ? "Снять блокировку — раскройте карточку"
+                                      ? "Снять блокировку"
                                       : "Заблокировать карточку"
                                     : "Блокировку могут менять ответственные и участники карточки или администратор"
                                 }
@@ -1027,10 +981,6 @@ export function KanbanListView({
                                   <IconBrick className="h-3.5 w-3.5" />
                                 )}
                               </ListMobileIconButton>
-                              <ListRowExpandButton
-                                expanded={expandedCardId === card.id}
-                                onToggle={() => toggleExpandedCard(card.id)}
-                              />
                             </div>
                           </div>
                         </div>
@@ -1043,7 +993,8 @@ export function KanbanListView({
                       {onAdvanceCardColumn ? (
                         <button
                           type="button"
-                          className="shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
+                          data-list-row-control
+                          className="shrink-0 rounded p-1.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
                           title="Следующая колонка"
                           aria-label="Переместить в следующую колонку"
                           disabled={!canAdvance}
@@ -1057,7 +1008,12 @@ export function KanbanListView({
                         </button>
                       ) : null}
                     </div>
-                    <div className="hidden sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
+                    <div
+                      className="hidden sm:block sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      data-list-row-control
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <ListStageDueCell
                         hideUrgent
                         stageDue={stageDue}
@@ -1071,7 +1027,8 @@ export function KanbanListView({
                       />
                     </div>
                     <div
-                      className="hidden sm:flex sm:items-start sm:justify-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1.5"
+                      className="hidden sm:flex sm:items-start sm:justify-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      data-list-row-control
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -1084,7 +1041,12 @@ export function KanbanListView({
                         }
                       />
                     </div>
-                    <div className="relative hidden sm:flex sm:items-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
+                    <div
+                      className="relative hidden sm:flex sm:items-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      data-list-row-control
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <ListMembersCell
                         userIds={assignees}
                         variant="assignee"
@@ -1095,7 +1057,12 @@ export function KanbanListView({
                         }
                       />
                     </div>
-                    <div className="relative hidden sm:flex sm:items-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
+                    <div
+                      className="relative hidden sm:flex sm:items-start sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
+                      data-list-row-control
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <ListMembersCell
                         userIds={participants}
                         variant="participant"
@@ -1116,10 +1083,7 @@ export function KanbanListView({
                       {renderExpandedCard ? (
                         renderExpandedCard(card.id)
                       ) : (
-                        <ListInlineExpandedBody
-                          card={card}
-                          onOpenCard={() => onOpenCard(card.id)}
-                        />
+                        <ListInlineExpandedBody card={card} />
                       )}
                     </div>
                   ) : null}
