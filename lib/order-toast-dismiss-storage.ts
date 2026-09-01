@@ -9,6 +9,14 @@ export const ORDER_TOAST_COLLAPSED_KEY = "orderToastStackCollapsedV1";
 const LS_DISMISSED = "crm.orderToastDismissedV1";
 const LS_COLLAPSED = "crm.orderToastStackCollapsedV1";
 
+/** Потолок ключей «скрыто» — иначе localStorage и Set в RAM растут без bound. */
+export const ORDER_TOAST_DISMISSED_MAX = 500;
+
+export function capDismissedIds(ids: readonly string[]): string[] {
+  if (ids.length <= ORDER_TOAST_DISMISSED_MAX) return [...ids];
+  return ids.slice(-ORDER_TOAST_DISMISSED_MAX);
+}
+
 export type OrderToastDismissKind =
   | "chat"
   | "correction"
@@ -41,7 +49,10 @@ export function readDismissedFromLocalStorage(): string[] {
 export function writeDismissedToLocalStorage(ids: readonly string[]): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(LS_DISMISSED, JSON.stringify([...ids]));
+    window.localStorage.setItem(
+      LS_DISMISSED,
+      JSON.stringify(capDismissedIds(ids)),
+    );
   } catch {
     /* quota / private mode */
   }

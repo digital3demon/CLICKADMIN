@@ -192,26 +192,47 @@ export function OrderListKaitenPoller({
     const pollMs = kaitenListTitlesPollIntervalMs(
       process.env.NEXT_PUBLIC_KAITEN_LIST_TITLES_POLL_MS,
     );
-    const t0 = window.setTimeout(() => void tick(), 12_000);
-    const id = window.setInterval(() => void tick(), pollMs);
-    return () => {
-      window.clearTimeout(t0);
-      window.clearInterval(id);
-    };
-  }, [ids.length, tick]);
+    let initialId: ReturnType<typeof setTimeout> | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-  useEffect(() => {
-    if (ids.length === 0) return;
+    const stop = () => {
+      if (initialId != null) {
+        window.clearTimeout(initialId);
+        initialId = null;
+      }
+      if (intervalId != null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+      abortRef.current?.abort();
+    };
+
+    const start = () => {
+      if (document.visibilityState !== "visible") return;
+      if (initialId != null || intervalId != null) return;
+      initialId = window.setTimeout(() => {
+        initialId = null;
+        void tick();
+        intervalId = window.setInterval(() => void tick(), pollMs);
+      }, 12_000);
+    };
+
     const onVis = () => {
-      if (document.visibilityState === "hidden") {
-        abortRef.current?.abort();
+      if (document.visibilityState === "visible") {
+        window.setTimeout(() => void tick(), 800);
+        start();
         return;
       }
-      window.setTimeout(() => void tick(), 800);
+      stop();
     };
+
+    start();
     document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [ids, tick]);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [ids.length, tick]);
 
   return null;
 }

@@ -16,6 +16,9 @@ import type { ChecklistItem, KanbanAppState, KanbanCard } from "@/lib/kanban/typ
 
 export const KANBAN_CARD_HEADS_CACHE_KEY = "kanban-card-heads-v1";
 
+/** Потолок строк кэша — merge не LRU по времени, режем старейшие ключи. */
+export const KANBAN_CARD_HEADS_CACHE_MAX_KEYS = 1800;
+
 export type KanbanCardHeadCacheRow = {
   assignees: string[];
   participants: string[];
@@ -168,13 +171,27 @@ export function mergeKanbanCardHeadsCache(
       columnTitle: (row.columnTitle || "").trim() || prev.columnTitle || "",
     };
   }
+  return pruneKanbanCardHeadsCache(out);
+}
+
+function pruneKanbanCardHeadsCache(
+  heads: KanbanCardHeadsCache,
+): KanbanCardHeadsCache {
+  const keys = Object.keys(heads);
+  if (keys.length <= KANBAN_CARD_HEADS_CACHE_MAX_KEYS) return heads;
+  const drop = keys.length - KANBAN_CARD_HEADS_CACHE_MAX_KEYS;
+  const out: KanbanCardHeadsCache = { ...heads };
+  for (let i = 0; i < drop; i += 1) {
+    delete out[keys[i]!];
+  }
   return out;
 }
 
 function writeHeadsCache(heads: KanbanCardHeadsCache): void {
   if (typeof window === "undefined") return;
-  if (Object.keys(heads).length === 0) return;
-  window.localStorage.setItem(KANBAN_CARD_HEADS_CACHE_KEY, JSON.stringify(heads));
+  const pruned = pruneKanbanCardHeadsCache(heads);
+  if (Object.keys(pruned).length === 0) return;
+  window.localStorage.setItem(KANBAN_CARD_HEADS_CACHE_KEY, JSON.stringify(pruned));
 }
 
 export function persistKanbanCardHeadsCache(state: KanbanAppState): void {

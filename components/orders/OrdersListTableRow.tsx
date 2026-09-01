@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { OrderListCardTypeTag } from "@/components/orders/OrderListCardTypeTag";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
@@ -27,10 +27,25 @@ function targetInsideInteractive(target: EventTarget | null) {
   );
 }
 
+function subscribeNarrow(cb: () => void) {
+  const mq = window.matchMedia(SHELL_LAPTOP_MEDIA);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+function getNarrowSnapshot() {
+  return !window.matchMedia(SHELL_LAPTOP_MEDIA).matches;
+}
+
+/** SSR: desktop-строка; после гидрации — одна ветка по viewport. */
+function getNarrowServerSnapshot() {
+  return false;
+}
+
 /**
  * Строка списка нарядов: клик по пустой области ведёт в карточку наряда
  * (клики по ссылкам, кнопкам и полям — без перехода).
- * tagsNode монтируется один раз: desktop td или mobile-карточка (matchMedia).
+ * Одна `<tr>` на наряд: desktop-table или mobile-карточка (matchMedia).
  */
 export function OrdersListTableRow({
   orderId,
@@ -60,7 +75,6 @@ export function OrdersListTableRow({
   mobileShippedNode,
   mobileDatesNode,
   tagsNode,
-  mobileTagsNode,
 }: {
   orderId: string;
   orderNumber: string;
@@ -92,22 +106,15 @@ export function OrdersListTableRow({
   /** Пикеры ЛАБ / Запись справа от иконок. */
   mobileDatesNode?: ReactNode;
   tagsNode?: ReactNode;
-  /** Отметки на mobile-карточке (если нужен другой стиль «+»). */
-  mobileTagsNode?: ReactNode;
 }) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
   const href = orderPathById(orderId);
-  /** SSR + первый paint: desktop (false). После mount — реальный viewport; один tagsNode. */
-  const [isNarrow, setIsNarrow] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia(SHELL_LAPTOP_MEDIA);
-    const apply = () => setIsNarrow(!mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
+  const isNarrow = useSyncExternalStore(
+    subscribeNarrow,
+    getNarrowSnapshot,
+    getNarrowServerSnapshot,
+  );
 
   const go = (e: MouseEvent<HTMLElement>) => {
     if (e.button !== 0) return;
@@ -119,39 +126,27 @@ export function OrdersListTableRow({
   };
 
   const desktopRowClass = isHarmony
-    ? "orders-harmony-data-row hidden cursor-pointer shell-laptop:table-row print:table-row"
-      : className
-      ? `hidden shell-laptop:table-row print:table-row ${className} cursor-pointer`
-      : "hidden cursor-pointer shell-laptop:table-row print:table-row";
+    ? "orders-harmony-data-row cursor-pointer print:table-row"
+    : className
+      ? `${className} cursor-pointer print:table-row`
+      : "cursor-pointer print:table-row";
   const mobileCardAccent = orderListMobileCardAccentClass(rowAccent);
   const mobileCardClass = [
     "cursor-pointer p-3",
-    mobileCardAccent || (kaitenBlocked ? "rounded-lg border-2 border-red-500/55 bg-red-50/35 dark:border-red-700/55 dark:bg-red-950/25" : ""),
+    mobileCardAccent ||
+      (kaitenBlocked
+        ? "rounded-lg border-2 border-red-500/55 bg-red-50/35 dark:border-red-700/55 dark:bg-red-950/25"
+        : ""),
   ]
     .filter(Boolean)
     .join(" ");
 
-  return (
-    <>
+  if (isNarrow) {
+    return (
       <tr
-        className={desktopRowClass}
-        {...(isHarmony ? { "data-harmony-row": harmonyRowState } : {})}
-        onClick={(e) => {
-          if (targetInsideInteractive(e.target)) return;
-          go(e);
-        }}
+        className="border-b border-[var(--card-border)] print:hidden"
+        suppressHydrationWarning
       >
-        {children}
-        {tagsNode ? (
-          <td
-            data-col="tags"
-            className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5"
-          >
-            <div data-col-body>{!isNarrow ? tagsNode : null}</div>
-          </td>
-        ) : null}
-      </tr>
-      <tr className="border-b border-[var(--card-border)] shell-laptop:hidden print:hidden">
         <td colSpan={99} className="p-0">
           <div
             className={mobileCardClass}
@@ -174,7 +169,8 @@ export function OrdersListTableRow({
             }}
           >
             <div className="mb-2 flex min-w-0 items-center gap-2">
-              <Link prefetch={false}
+              <Link
+                prefetch={false}
                 href={href}
                 className="shrink-0 font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
                 title={`${orderNumber} — открыть наряд`}
@@ -223,7 +219,7 @@ export function OrdersListTableRow({
               ) : null}
             </div>
 
-            {(mobileActionsNode || mobileDatesNode || mobileShippedNode) ? (
+            {mobileActionsNode || mobileDatesNode || mobileShippedNode ? (
               <div className="flex min-w-0 items-center gap-1.5">
                 {mobileActionsNode ? (
                   <div
@@ -255,18 +251,40 @@ export function OrdersListTableRow({
               </div>
             ) : null}
 
-            {(mobileTagsNode ?? tagsNode) && isNarrow ? (
+            {tagsNode ? (
               <div
                 className="mt-2.5 text-xs text-[var(--text-secondary)]"
                 data-row-click-ignore
                 onClick={(e) => e.stopPropagation()}
               >
-                {mobileTagsNode ?? tagsNode}
+                {tagsNode}
               </div>
             ) : null}
           </div>
         </td>
       </tr>
-    </>
+    );
+  }
+
+  return (
+    <tr
+      className={desktopRowClass}
+      {...(isHarmony ? { "data-harmony-row": harmonyRowState } : {})}
+      suppressHydrationWarning
+      onClick={(e) => {
+        if (targetInsideInteractive(e.target)) return;
+        go(e);
+      }}
+    >
+      {children}
+      {tagsNode ? (
+        <td
+          data-col="tags"
+          className="min-w-0 px-1 py-1 align-top sm:px-1.5 sm:py-1.5"
+        >
+          <div data-col-body>{tagsNode}</div>
+        </td>
+      ) : null}
+    </tr>
   );
 }

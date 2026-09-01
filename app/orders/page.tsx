@@ -27,9 +27,10 @@ import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
 import { OrdersListTableHeaderRow } from "@/components/orders/OrdersListTableHeaderRow";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
+import { OrdersListMirrorTheadGate } from "@/components/orders/OrdersListMirrorTheadGate";
 import {
   ORDER_LIST_MOBILE_ACTION_BTN,
-  ORDER_LIST_MOBILE_TAG_ADD_BTN,
+  ORDER_LIST_TAG_ADD_BTN,
 } from "@/lib/order-list-mobile-ui";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
@@ -986,24 +987,26 @@ export default async function OrdersPage({
       <OrdersListChrome
         className="w-full max-w-full min-w-0 self-start"
         toolbar={
-          <div className="orders-list-mirror-thead hidden w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] shell-laptop:block print:hidden">
-            <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
-              <OrdersTableColGroup />
-              <thead>
-                <OrdersTableHeader
-                  isDemo={isDemo}
-                  pageSize={pageSize}
-                  appliedFrom={fromUrl}
-                  appliedTo={toUrl}
-                  shipMode={shipmentModeActive ? shipParsed.mode : null}
-                  appliedShipFrom={shipFromUrl}
-                  appliedShipTo={shipToUrl}
-                  appliedOtprFrom={otprFromUrl}
-                  appliedOtprTo={otprToUrl}
-                />
-              </thead>
-            </table>
-          </div>
+          <OrdersListMirrorTheadGate>
+            <div className="orders-list-mirror-thead w-full min-w-0 overflow-x-auto overflow-y-hidden rounded-t-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] shadow-[0_1px_0_var(--card-border),0_10px_18px_rgba(0,0,0,0.10)] [-webkit-overflow-scrolling:touch] print:hidden">
+              <table className={ORDERS_TABLE_CLASS} aria-hidden="true">
+                <OrdersTableColGroup />
+                <thead>
+                  <OrdersTableHeader
+                    isDemo={isDemo}
+                    pageSize={pageSize}
+                    appliedFrom={fromUrl}
+                    appliedTo={toUrl}
+                    shipMode={shipmentModeActive ? shipParsed.mode : null}
+                    appliedShipFrom={shipFromUrl}
+                    appliedShipTo={shipToUrl}
+                    appliedOtprFrom={otprFromUrl}
+                    appliedOtprTo={otprToUrl}
+                  />
+                </thead>
+              </table>
+            </div>
+          </OrdersListMirrorTheadGate>
         }
       >
       <div className="orders-harmony-table-shell w-full min-w-0 overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch] rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] print:max-w-none print:w-full">
@@ -1158,10 +1161,9 @@ export default async function OrdersPage({
                     isDemoMode={isDemo}
                   />
                 );
-                const tagsNode = renderTagsNode({ omitKaitenColumnTag: true });
-                const mobileTagsNode = renderTagsNode({
+                const tagsNode = renderTagsNode({
                   omitKaitenColumnTag: true,
-                  addButtonClassName: ORDER_LIST_MOBILE_TAG_ADD_BTN,
+                  addButtonClassName: ORDER_LIST_TAG_ADD_BTN,
                 });
                 return (
                 <OrdersListTableRow
@@ -1193,7 +1195,6 @@ export default async function OrdersPage({
                   isDemoMode={isDemo}
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
-                  mobileTagsNode={mobileTagsNode}
                   mobileShippedNode={
                     <OrderShippedToggle
                       orderId={o.id}

@@ -18,6 +18,7 @@ import {
 import {
   readCrmModuleListHtml,
   rememberCrmModuleListHtml,
+  dropCrmModuleListHtmlMemory,
 } from "@/lib/crm-module-list-html";
 import { CrmModuleListLive } from "@/components/layout/CrmModuleListLive";
 import { CrmModuleListLoading } from "@/components/layout/CrmModuleListLoading";
@@ -63,8 +64,17 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
   pathRef.current = path;
   const liveRef = useRef(live);
   liveRef.current = live;
+  const prevPathRef = useRef<string | null>(null);
   const htmlSnap = !live && path ? readCrmModuleListHtml(path) : null;
   const [hydratedPath, setHydratedPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    const prev = prevPathRef.current;
+    prevPathRef.current = path;
+    if (prev && prev !== path) {
+      dropCrmModuleListHtmlMemory(prev);
+    }
+  }, [path]);
 
   useEffect(() => {
     if (!path) {

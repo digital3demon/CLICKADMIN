@@ -5,6 +5,7 @@ import {
   applyKanbanCardHeadsCache,
   collectKanbanCardHeadsCache,
   collectLinkedOrderIdsFromHeadsCache,
+  KANBAN_CARD_HEADS_CACHE_MAX_KEYS,
   membersForKanbanAggregateKeep,
   mergeKanbanCardHeadsCache,
   mergeStickyLinkedOrderIds,
@@ -186,5 +187,29 @@ describe("kanban card heads cache", () => {
       "ord-степанов",
       "ord-на-доске",
     ]);
+  });
+
+  it("merge обрезает кэш до потолка ключей", () => {
+    let cache = mergeKanbanCardHeadsCache(null, {
+      "id:0": {
+        assignees: ["u"],
+        participants: [],
+        fingerprint: null,
+        stageDue: "",
+      },
+    });
+    for (let i = 1; i <= KANBAN_CARD_HEADS_CACHE_MAX_KEYS + 5; i += 1) {
+      cache = mergeKanbanCardHeadsCache(cache, {
+        [`id:${i}`]: {
+          assignees: ["u"],
+          participants: [],
+          fingerprint: null,
+          stageDue: "",
+        },
+      });
+    }
+    expect(Object.keys(cache).length).toBe(KANBAN_CARD_HEADS_CACHE_MAX_KEYS);
+    expect(cache[`id:${KANBAN_CARD_HEADS_CACHE_MAX_KEYS + 5}`]).toBeDefined();
+    expect(cache["id:0"]).toBeUndefined();
   });
 });

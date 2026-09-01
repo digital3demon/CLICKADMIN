@@ -5,3 +5,7 @@ export const ORDER_LIST_MOBILE_ACTION_BTN =
 /** Круг «+» в блоке отметок на мобильной карточке. */
 export const ORDER_LIST_MOBILE_TAG_ADD_BTN =
   "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] text-sm font-semibold leading-none text-[var(--text-muted)] shadow-sm outline-none hover:border-[var(--sidebar-blue)]/45 hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none disabled:opacity-40";
+
+/** «+» в отметках: круг на мобильных, компактный квадрат на shell-laptop+. */
+export const ORDER_LIST_TAG_ADD_BTN =
+  `${ORDER_LIST_MOBILE_TAG_ADD_BTN} shell-laptop:h-5 shell-laptop:w-5 shell-laptop:rounded-md shell-laptop:text-xs sm:shell-laptop:h-6 sm:shell-laptop:w-6`;

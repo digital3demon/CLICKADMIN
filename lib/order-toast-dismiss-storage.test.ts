@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   collectToastDismissKeys,
+  capDismissedIds,
+  ORDER_TOAST_DISMISSED_MAX,
   orderToastDismissKey,
   parseDismissedIdList,
   shouldExpandToastStack,
@@ -35,6 +37,18 @@ describe("collectToastDismissKeys", () => {
       "personal:m1",
       "personal:m2",
     ]);
+  });
+});
+
+describe("capDismissedIds", () => {
+  it("keeps tail when over max", () => {
+    const ids = Array.from({ length: ORDER_TOAST_DISMISSED_MAX + 3 }, (_, i) =>
+      String(i),
+    );
+    const capped = capDismissedIds(ids);
+    expect(capped).toHaveLength(ORDER_TOAST_DISMISSED_MAX);
+    expect(capped[0]).toBe("3");
+    expect(capped[capped.length - 1]).toBe(String(ORDER_TOAST_DISMISSED_MAX + 2));
   });
 });
 
