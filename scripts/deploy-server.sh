@@ -85,13 +85,13 @@ for f in .env .env.production .env.local .env.production.local; do
   fi
 done
 
-ECOSYSTEM="$APP_ROOT/ecosystem.config.cjs"
+ECOSYSTEM="$APP_ROOT/scripts/ecosystem.config.cjs"
 if [[ ! -f "$ECOSYSTEM" ]]; then
   echo "Ошибка: нет $ECOSYSTEM" >&2
   exit 1
 fi
 
-echo "==> PM2: перезапуск из ecosystem.config.cjs"
+echo "==> PM2: перезапуск из scripts/ecosystem.config.cjs"
 if command -v pm2 >/dev/null 2>&1; then
   PM2_NAME="${PM2_APP_NAME:-dental-lab-crm}"
   if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then

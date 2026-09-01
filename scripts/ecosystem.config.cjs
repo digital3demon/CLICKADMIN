@@ -1,12 +1,16 @@
 /**
- * PM2 для Next.js в режиме `output: "standalone"` (см. next.config.ts).
- * Не используйте `next start` — иначе предупреждение в логах и возможные сбои со статикой.
+ * PM2 для VPS / архива, не для Timeweb App Platform.
+ * В корне репозитория файла нет: платформа иначе делает `npm install -g pm2`
+ * и падает на сети к registry.
  *
- * Имя процесса можно переопределить: PM2_APP_NAME=app pm2 start ecosystem.config.cjs
+ *   pm2 start scripts/ecosystem.config.cjs
+ *   PM2_APP_NAME=app pm2 start scripts/ecosystem.config.cjs
+ *
+ * Timeweb / Docker: `npm start` → node server.js, или `npm run start:platform`.
  */
 const path = require("path");
 
-const root = __dirname;
+const root = path.join(__dirname, "..");
 const standaloneDir = path.join(root, ".next", "standalone");
 
 module.exports = {

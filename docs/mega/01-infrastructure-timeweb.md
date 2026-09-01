@@ -43,7 +43,7 @@ npm run build
 
 ### Standalone
 
-Next.js собирается в `.next/standalone/`. На сервере запускается `node server.js` (см. `server.js`, `ecosystem.config.cjs` для PM2).
+Next.js собирается в `.next/standalone/`. На Timeweb / Docker — `node server.js` или `npm run start:platform`. PM2 только на VPS: `scripts/ecosystem.config.cjs` (не класть в корень — App Platform ставит `pm2` глобально).
 
 **Инвариант:** не полагаться на `node_modules` на проде — только standalone bundle + Prisma binary.
 

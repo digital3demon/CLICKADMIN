@@ -60,7 +60,6 @@ function watchWithChokidar() {
     "prisma.config.ts",
     "vitest.config.ts",
     "postcss.config.mjs",
-    "ecosystem.config.cjs",
   ].map((p) => path.join(ROOT, p));
 
   const watcher = chokidar.watch(patterns, {
@@ -125,7 +124,6 @@ function watchWithFs() {
     "prisma.config.ts",
     "vitest.config.ts",
     "postcss.config.mjs",
-    "ecosystem.config.cjs",
   ];
   for (const f of files) {
     const p = path.join(ROOT, f);

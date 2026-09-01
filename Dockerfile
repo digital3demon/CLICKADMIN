@@ -1,6 +1,6 @@
 # Timeweb: только инструкции образа. Без apt, без HEALTHCHECK
 # (платформа иначе ставит системный curl и ходит на deb.debian.org).
-# Тип приложения в панели — «Dockerfile». Не `npm install -g`.
+# Тип приложения в панели — «Dockerfile». Не Node.js/Express и не `npm install -g pm2`.
 # pg_dump/psql — копируем из официального postgres, не через apt.
 
 FROM postgres:16-bookworm AS pgclient
