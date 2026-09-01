@@ -20,7 +20,6 @@ import {
   applyBoardArchivePolicies,
   archiveCardByIdOnBoard,
   buildKanbanDisplayView,
-  countActiveKanbanFilters,
   createCard,
   findCard,
   findCardInAppState,
@@ -42,7 +41,6 @@ import {
   isKanbanAggregateBoardId,
   kanbanAggregateKeepsCard,
   kanbanAggregateMode,
-  listKanbanAggregateSourceBoards,
   KANBAN_BOARD_DISTRIBUTE_ID,
   KANBAN_BOARD_MY_CARDS_ID,
   KANBAN_BOARD_ORTHODONTICS_ID,
@@ -77,7 +75,7 @@ import {
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-disabled";
 import { showKanbanKaitenRefreshButton } from "@/lib/kaiten-integration/ui";
-import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
+import { collectSharedArchivedCards } from "@/lib/kanban/collect-shared-archived-cards";
 import { collectSharedStoppedCards } from "@/lib/kanban/collect-shared-stopped-cards";
 import {
   applyKanbanCardMembersOnBoard,
@@ -361,11 +359,13 @@ function clampStopHoverPreviewPosition(x: number, y: number) {
 function KanbanStopView({
   board,
   stoppedCards,
+  resolveHomeBoard,
   onOpenCard,
   onRestore,
 }: {
   board: KanbanBoard;
   stoppedCards: KanbanStoppedCard[];
+  resolveHomeBoard?: (row: KanbanStoppedCard) => KanbanBoard;
   onOpenCard: (cardId: string) => void;
   onRestore: (stoppedId: string) => void;
 }) {
@@ -391,7 +391,7 @@ function KanbanStopView({
             return (
               <StoppedKanbanCard
                 key={row.id}
-                board={board}
+                board={resolveHomeBoard?.(row) ?? board}
                 row={row}
                 onOpenCard={onOpenCard}
                 onRestore={onRestore}
@@ -1655,54 +1655,15 @@ export function KanbanApp({
   }, [isDemo, modalCardForBlockPerm, kanbanSessionUserId, kanbanSessionRole, kanbanModuleAccess]);
 
   const archivedCards = useMemo<KanbanArchivedCard[]>(() => {
-    if (!board || !appState) return [];
-    const uid = (kanbanSessionUserId || "").trim();
-    const agg = kanbanAggregateMode(appState.activeBoardId);
+    if (!appState) return [];
     const q = (appState.search || "").trim();
-    const homes = agg
-      ? listKanbanAggregateSourceBoards(appState)
-      : [board];
-    const seen = new Set<string>();
-    const rows: KanbanArchivedCard[] = [];
-    for (const home of homes) {
-      for (const row of home.archivedCards || []) {
-        if (!row?.card || seen.has(row.card.id)) continue;
-        if (
-          agg &&
-          uid &&
-          !kanbanAggregateKeepsCard(row.card, uid, agg, {
-            searchActive: Boolean(q),
-            stickyOrderIds: new Set(stickyLinkedOrderIds),
-            memberHeads: loadKanbanCardHeadsCache(),
-          })
-        ) {
-          continue;
-        }
-        if (q && !kanbanCardMatchesSearch(row.card, q, home)) continue;
-        seen.add(row.card.id);
-        rows.push(row);
-      }
-    }
-    return rows.sort((a, b) =>
-      String(b.archivedAt).localeCompare(String(a.archivedAt)),
-    );
-  }, [
-    board,
-    appState,
-    kanbanSessionUserId,
-    kanbanSessionRole,
-    stickyLinkedOrderIds,
-  ]);
+    return collectSharedArchivedCards(visibleBoards, q);
+  }, [appState, visibleBoards]);
   const stoppedCards = useMemo(() => {
-    if (!board || !appState) return [];
+    if (!appState) return [];
     const uid = (kanbanSessionUserId || "").trim();
     const agg = kanbanAggregateMode(appState.activeBoardId);
     const q = (appState.search || "").trim();
-    const homes = agg
-      ? listKanbanAggregateSourceBoards(appState)
-      : q && countActiveKanbanFilters(appState.filters) === 0
-        ? visibleBoards
-        : [board];
     const keep =
       agg && uid
         ? (card: KanbanCard) =>
@@ -1712,8 +1673,33 @@ export function KanbanApp({
               memberHeads: loadKanbanCardHeadsCache(),
             })
         : undefined;
-    return collectSharedStoppedCards(homes, q, keep);
-  }, [board, appState, visibleBoards, kanbanSessionUserId, stickyLinkedOrderIds]);
+    return collectSharedStoppedCards(visibleBoards, q, keep);
+  }, [appState, visibleBoards, kanbanSessionUserId, stickyLinkedOrderIds]);
+  const resolveStoppedCardHomeBoard = useCallback(
+    (row: KanbanStoppedCard) => {
+      if (!appState || !board) {
+        return board ?? ({} as KanbanBoard);
+      }
+      return (
+        appState.boards.find((b) =>
+          (b.stoppedCards || []).some(
+            (x) => x.id === row.id || x.card.id === row.card.id,
+          ),
+        ) ?? board
+      );
+    },
+    [appState, board],
+  );
+  const findArchivedCardHomeBoardId = useCallback(
+    (archivedRowId: string) => {
+      if (!appState) return board?.id ?? "";
+      const home = appState.boards.find((b) =>
+        (b.archivedCards || []).some((x) => x.id === archivedRowId),
+      );
+      return home?.id ?? board?.id ?? "";
+    },
+    [appState, board],
+  );
 
   const onStopHoverMove = useCallback(
     (event: MouseEvent) => {
@@ -3563,6 +3549,7 @@ export function KanbanApp({
             <KanbanStopView
               board={board}
               stoppedCards={stoppedCards}
+              resolveHomeBoard={resolveStoppedCardHomeBoard}
               onOpenCard={openKanbanCard}
               onRestore={restoreStoppedCard}
             />
@@ -4019,21 +4006,27 @@ export function KanbanApp({
               </button>
             </div>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Доска: {board.title}. Хранение:{" "}
-              {(() => {
-                const d = Number.isFinite(board.archiveRetentionDays)
-                  ? Number(board.archiveRetentionDays)
-                  : 365;
-                const y = d / 365;
-                const s =
-                  d % 365 === 0
-                    ? String(Math.round(y))
-                    : y.toLocaleString("ru-RU", {
-                        maximumFractionDigits: 3,
-                        minimumFractionDigits: 0,
-                      });
-                return `${s} г.`;
-              })()}
+              Общий архив со всех доступных досок ({visibleBoards.length}).
+              {board ? (
+                <>
+                  {" "}
+                  Срок хранения на доске «{board.title}»:{" "}
+                  {(() => {
+                    const d = Number.isFinite(board.archiveRetentionDays)
+                      ? Number(board.archiveRetentionDays)
+                      : 365;
+                    const y = d / 365;
+                    const s =
+                      d % 365 === 0
+                        ? String(Math.round(y))
+                        : y.toLocaleString("ru-RU", {
+                            maximumFractionDigits: 3,
+                            minimumFractionDigits: 0,
+                          });
+                    return `${s} г.`;
+                  })()}
+                </>
+              ) : null}
             </p>
             {archivedCards.length === 0 ? (
               <p className="mt-4 text-sm text-[var(--text-muted)]">
@@ -4084,14 +4077,18 @@ export function KanbanApp({
                               type="button"
                               className="rounded-md border border-[var(--card-border)] px-2.5 py-1 text-xs hover:bg-[var(--surface-hover)]"
                               onClick={() => {
+                                const homeId = findArchivedCardHomeBoardId(row.id);
                                 let restoredTitle = row.card.title;
                                 setAppState((s) => {
                                   if (!s) return s;
                                   const next = structuredClone(s);
-                                  const b = next.boards.find((x) => x.id === board.id);
+                                  const b = next.boards.find((x) => x.id === homeId);
                                   if (!b) return s;
                                   const ok = restoreArchivedCardOnBoard(b, row.id);
                                   if (!ok) return s;
+                                  if (!isDemo && canPersistTenantKanban(next)) {
+                                    void writePersistedKanbanStateNow(next, false);
+                                  }
                                   return next;
                                 });
                                 showToast(`Карточка «${restoredTitle}» восстановлена`);
@@ -4103,14 +4100,18 @@ export function KanbanApp({
                               type="button"
                               className="rounded-md border border-red-400/50 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
                               onClick={() => {
+                                const homeId = findArchivedCardHomeBoardId(row.id);
                                 setAppState((s) => {
                                   if (!s) return s;
                                   const next = structuredClone(s);
-                                  const b = next.boards.find((x) => x.id === board.id);
+                                  const b = next.boards.find((x) => x.id === homeId);
                                   if (!b) return s;
                                   b.archivedCards = (b.archivedCards || []).filter(
                                     (x) => x.id !== row.id,
                                   );
+                                  if (!isDemo && canPersistTenantKanban(next)) {
+                                    void writePersistedKanbanStateNow(next, false);
+                                  }
                                   return next;
                                 });
                                 showToast("Карточка удалена из архива");

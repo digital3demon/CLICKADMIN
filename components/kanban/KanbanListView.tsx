@@ -1103,7 +1103,7 @@ export function KanbanListView({
                   </div>
                   {expandedCardId === card.id ? (
                     <div
-                      className="border-t border-[var(--kanban-border)] sm:col-span-full"
+                      className="w-[70%] max-w-[70%] border-t border-[var(--kanban-border)] sm:col-span-full"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
                     >

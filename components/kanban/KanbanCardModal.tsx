@@ -420,7 +420,7 @@ function KanbanCardModalTabs({
     `-mb-px border-b-2 text-center font-semibold uppercase tracking-wide ${
       stretch
         ? "min-w-0 flex-1 px-0.5 pb-2 pt-2 text-[0.58rem] leading-tight"
-        : "shrink-0 pb-2.5 pt-2.5 text-[0.7rem] sm:text-[0.75rem]"
+        : "shrink-0 whitespace-nowrap pb-2.5 pt-2.5 text-[0.7rem] sm:text-[0.75rem]"
     } ${
       active
         ? "border-[var(--kaiten-accent)] text-[var(--kaiten-modal-text)]"
@@ -431,7 +431,7 @@ function KanbanCardModalTabs({
       className={`flex w-full border-b border-[var(--kaiten-modal-border)] ${
         stretch
           ? "items-stretch gap-0 px-1"
-          : "flex-nowrap gap-3 overflow-x-auto px-3 sm:gap-4"
+          : "flex-nowrap gap-3 overflow-x-auto overflow-y-hidden px-3 sm:gap-4"
       }`}
       role="tablist"
       aria-label="Панель карточки"
@@ -2014,7 +2014,7 @@ export function KanbanCardModal({
       <div
         className={
           embed
-            ? "flex w-full min-h-0 flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
+            ? "flex w-full min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
             : "flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         }
         onMouseDown={(e) => e.stopPropagation()}
@@ -2101,7 +2101,7 @@ export function KanbanCardModal({
         <div
           className={
             embed
-              ? "relative flex min-h-0 flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
+              ? "relative flex min-h-0 w-full max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
               : `relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
                   blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
                 }`
@@ -2404,7 +2404,7 @@ export function KanbanCardModal({
 
           <div
             className={`flex min-h-0 max-sm:flex-col sm:flex-row sm:items-stretch ${
-              embed ? "" : "flex-1"
+              embed ? "w-full min-w-0 max-w-full" : "flex-1"
             }`}
           >
             <div
@@ -2665,19 +2665,21 @@ export function KanbanCardModal({
                     : "max-sm:hidden"
                 }`}
               >
-              <div className="mb-3 hidden sm:block">
-                <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-amber-800/90 dark:text-amber-300/90">
-                  Срок
+              {!embed ? (
+                <div className="mb-3 hidden sm:block">
+                  <div className="mb-1 text-[0.625rem] font-medium uppercase tracking-wide text-amber-800/90 dark:text-amber-300/90">
+                    Срок
+                  </div>
+                  <KanbanDueUrgentControls
+                    stageDue={stageDue}
+                    canEditDueDate={canEditDueDate}
+                    urgent={Boolean(card.urgent)}
+                    onDueChange={persistStageDue}
+                    onToggleUrgent={toggleUrgent}
+                    inputClassName={baseInput}
+                  />
                 </div>
-                <KanbanDueUrgentControls
-                  stageDue={stageDue}
-                  canEditDueDate={canEditDueDate}
-                  urgent={Boolean(card.urgent)}
-                  onDueChange={persistStageDue}
-                  onToggleUrgent={toggleUrgent}
-                  inputClassName={baseInput}
-                />
-              </div>
+              ) : null}
 
               <div className="mb-3">
                 <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -3057,9 +3059,7 @@ export function KanbanCardModal({
             </div>
 
             <div
-              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
-                embed ? "overflow-visible" : "overflow-hidden"
-              } ${
+              className={`flex w-full min-h-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
                 rightTab === "card"
                   ? "max-sm:hidden"
                   : embed
@@ -3068,7 +3068,7 @@ export function KanbanCardModal({
               }`}
               style={{ backgroundColor: "var(--kaiten-modal-aside)" }}
             >
-              <div className="hidden sm:block">
+              <div className="hidden shrink-0 overflow-y-hidden sm:block">
                 <KanbanCardModalTabs
                   rightTab={rightTab === "card" ? "chat" : rightTab}
                   setRightTab={setRightTab}
@@ -3077,9 +3077,7 @@ export function KanbanCardModal({
                 />
               </div>
               {rightTab === "done" ? (
-                <div
-                  className={`min-h-0 flex-1 ${embed ? "overflow-visible" : "overflow-y-auto overscroll-contain"}`}
-                >
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                   <PayrollDonePanel
                     orderId={card.linkedOrderId ?? null}
                     kanbanCardId={card.id}
@@ -3087,9 +3085,7 @@ export function KanbanCardModal({
                   />
                 </div>
               ) : rightTab === "act" ? (
-                <div
-                  className={`min-h-0 flex-1 px-2 py-2 text-[0.8125rem] ${embed ? "overflow-visible" : "overflow-y-auto overscroll-contain"}`}
-                >
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 text-[0.8125rem]">
                   {(card.activity || []).length === 0 ? (
                     <p className="text-[var(--kaiten-modal-muted)]">
                       Журнал пуст. Дата создания — в шапке карточки. Переносы

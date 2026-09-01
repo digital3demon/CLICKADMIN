@@ -1,6 +1,6 @@
 /**
- * СТОП — общая парковка: на обычной доске видны все.
- * На «Мои» / «Ответственный» режет `keep` (как колонки), иначе кнопка «Мои» в СТОПе пустая.
+ * СТОП — общая парковка со всех доступных досок.
+ * На обычной доске видны все карточки; на «Мои» / «Ответственный» — только через `keep`.
  */
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
 import type { KanbanBoard, KanbanCard, KanbanStoppedCard } from "@/lib/kanban/types";
