@@ -62,6 +62,7 @@ import {
   kaitenStopLaneIdFromEnv,
 } from "@/lib/kaiten-stop-lane";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { restoreLinkedOrderFromStopIfParked } from "@/lib/kanban/advance-linked-order-column.server";
 
 const TRACK_LANES: KaitenTrackLane[] = ["ORTHOPEDICS", "ORTHODONTICS", "TEST"];
 const LEGACY_KAITEN_TYPE_NAME_BY_ID: Record<string, string> = {
@@ -1143,6 +1144,8 @@ export async function PATCH(
     : null;
   const canMove = moduleAccess?.KANBAN_MOVE_COLUMNS === true;
   const canStop = moduleAccess?.KANBAN_STOP === true || canMove;
+  const canRestoreFromStop =
+    moduleAccess?.KANBAN === true || canStop;
   const canOtherBoard =
     moduleAccess?.KANBAN_MOVE_TO_OTHER_BOARD === true || canMove;
   if (body.moveToStop === true && !canStop) {
@@ -1151,20 +1154,6 @@ export async function PATCH(
   if (body.kaitenTrackLane != null && !canOtherBoard) {
     return NextResponse.json(
       { error: "Нет права переносить на другую доску" },
-      { status: 403 },
-    );
-  }
-  if (
-    (body.columnTitle != null ||
-      body.columnId != null ||
-      body.sortOrder != null ||
-      body.laneId != null) &&
-    !canMove &&
-    body.moveToStop !== true &&
-    !(body.kaitenTrackLane != null && canOtherBoard)
-  ) {
-    return NextResponse.json(
-      { error: "Нет права перемещать по колонкам" },
       { status: 403 },
     );
   }
@@ -1200,6 +1189,34 @@ export async function PATCH(
   });
   if (!order) {
     return NextResponse.json({ error: "Наряд не найден" }, { status: 404 });
+  }
+  const leavingStop =
+    isKanbanStopColumnTitle(order.kaitenColumnTitle) &&
+    body.moveToStop !== true &&
+    (body.columnId != null ||
+      (typeof body.columnTitle === "string" &&
+        body.columnTitle.trim() !== "" &&
+        !isKanbanStopColumnTitle(body.columnTitle)));
+  if (
+    (body.columnTitle != null ||
+      body.columnId != null ||
+      body.sortOrder != null ||
+      body.laneId != null) &&
+    !canMove &&
+    body.moveToStop !== true &&
+    !(body.kaitenTrackLane != null && canOtherBoard) &&
+    !leavingStop
+  ) {
+    return NextResponse.json(
+      { error: "Нет права перемещать по колонкам" },
+      { status: 403 },
+    );
+  }
+  if (leavingStop && !canRestoreFromStop) {
+    return NextResponse.json(
+      { error: "Нет права вернуть карточку из СТОП" },
+      { status: 403 },
+    );
   }
   if (order.kaitenCardId == null) {
     return NextResponse.json({ error: "Нет карточки Kaiten" }, { status: 400 });
@@ -1722,6 +1739,25 @@ export async function PATCH(
     }
   } catch (e) {
     console.error("[kaiten PATCH] prisma", e);
+  }
+
+  const nextColumnTitle = titleUpdate?.kaitenColumnTitle ?? null;
+  if (
+    body.moveToStop !== true &&
+    nextColumnTitle &&
+    !isKanbanStopColumnTitle(nextColumnTitle)
+  ) {
+    try {
+      await restoreLinkedOrderFromStopIfParked({
+        tenantId,
+        orderId: order.id,
+        columnTitle: nextColumnTitle,
+        actorUserId: session?.sub ?? null,
+        actorLabel: session?.name ?? null,
+      });
+    } catch (stopErr) {
+      console.error("[kaiten PATCH] restore from stop", stopErr);
+    }
   }
 
   invalidateKaitenSnapshotCache(orderId.trim());

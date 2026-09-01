@@ -7,6 +7,14 @@ import {
   visibleIndexToFullInsertIndex,
 } from "@/lib/kanban/board-visible-cards";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
+import {
+  BOARD_COLUMN_SORT_MANUAL,
+  isListSort,
+  LIST_SORT_SELECT_OPTIONS,
+  sortKanbanColumnCards,
+  sortToSelectValue,
+  type ListSort,
+} from "@/lib/kanban/list-view-sort";
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "@/lib/kanban/kanban-card-move-preview";
 import { VirtualizedKanbanColumnCards } from "@/components/kanban/VirtualizedKanbanColumnCards";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
@@ -937,6 +945,54 @@ export function BoardCanvas({
   /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
   const coarsePointer = useKanbanCoarsePointer();
+  const [columnSort, setColumnSort] = useState<ListSort | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const remote = await readClientState<unknown>(
+        "user",
+        `kanbanBoardSort:${board.id}`,
+      );
+      if (cancelled) return;
+      if (remote === BOARD_COLUMN_SORT_MANUAL || remote == null) {
+        setColumnSort(null);
+        return;
+      }
+      if (isListSort(remote)) setColumnSort(remote);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [board.id]);
+
+  const onColumnSortChange = useCallback(
+    (next: ListSort | null) => {
+      setColumnSort(next);
+      void writeClientState(
+        "user",
+        `kanbanBoardSort:${board.id}`,
+        next ?? BOARD_COLUMN_SORT_MANUAL,
+      );
+    },
+    [board.id],
+  );
+
+  const cardsInColumn = useCallback(
+    (col: KanbanBoard["columns"][0], columnIndex: number) => {
+      const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
+      if (!columnSort) return vis;
+      return sortKanbanColumnCards(vis, columnSort, {
+        columnTitle: col.title,
+        columnId: col.id,
+        columnIndex,
+        board,
+        allBoards: appState.boards,
+        homeBoardId: (card) => resolveCardHomeBoard(card).id,
+      });
+    },
+    [appState, board, columnSort, resolveCardHomeBoard],
+  );
 
   /**
    * Laptop+: zoom и width/height в px от фактической ширины main,
@@ -1396,6 +1452,7 @@ export function BoardCanvas({
 
       let toColId = fromContainer;
       let newIndex = 0;
+      let dropOnColumn = overIsColumn;
 
       if (overIsColumn) {
         toColId = oid;
@@ -1409,6 +1466,18 @@ export function BoardCanvas({
         if (typeof overSortable?.index === "number") {
           newIndex = overSortable.index;
         }
+      }
+
+      if (columnSort) {
+        if (fromContainer === toColId) return;
+        const toColSorted = board.columns.find((c) => c.id === toColId);
+        if (!toColSorted) return;
+        dropOnColumn = true;
+        newIndex = visibleCardsInColumn(
+          toColSorted,
+          appState,
+          resolveCardHomeBoard,
+        ).length;
       }
 
       const sortOrderPreview =
@@ -1425,7 +1494,7 @@ export function BoardCanvas({
               toColId,
               cardId,
               newIndex,
-              overIsColumn,
+              dropOnColumn,
             )
           : null;
 
@@ -1435,8 +1504,8 @@ export function BoardCanvas({
           fromDisplayColId: fromContainer,
           toDisplayColId: toColId,
           newIndex,
-          overIsColumn,
-          overCardId: overIsColumn ? null : oid,
+          overIsColumn: dropOnColumn,
+          overCardId: dropOnColumn ? null : oid,
         });
         return;
       }
@@ -1541,11 +1610,55 @@ export function BoardCanvas({
       clearStopDropHot,
       setKanbanCardDraggingFlag,
       onCardColumnChanged,
+      columnSort,
     ],
   );
 
   return (
     <>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1 sm:px-3">
+      <label
+        htmlFor="kanban-board-column-sort"
+        className="text-[0.6rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)]"
+      >
+        Порядок в колонках
+      </label>
+      <select
+        id="kanban-board-column-sort"
+        className="min-w-0 max-w-full flex-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1 text-[0.75rem] text-[var(--kanban-text)] sm:max-w-[22rem] sm:flex-none sm:py-1.5"
+        value={columnSort ? sortToSelectValue(columnSort) : BOARD_COLUMN_SORT_MANUAL}
+        title={
+          columnSort
+            ? "Сортировка только для отображения. Перетаскивание внутри колонки отключено."
+            : "Порядок карточек, как сохранён на доске"
+        }
+        onChange={(e) => {
+          if (e.target.value === BOARD_COLUMN_SORT_MANUAL) {
+            onColumnSortChange(null);
+            return;
+          }
+          const opt = LIST_SORT_SELECT_OPTIONS.find((o) => o.value === e.target.value);
+          if (opt) onColumnSortChange(opt.sort);
+        }}
+      >
+        <option value={BOARD_COLUMN_SORT_MANUAL}>Порядок на доске</option>
+        {LIST_SORT_SELECT_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        disabled={!columnSort}
+        title="Вернуть сохранённый порядок карточек на доске"
+        className="shrink-0 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1 text-[0.68rem] font-medium text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-default disabled:opacity-45 dark:hover:bg-white/[0.08] sm:py-1.5"
+        onClick={() => onColumnSortChange(null)}
+      >
+        Сброс
+      </button>
+    </div>
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
@@ -1646,8 +1759,8 @@ export function BoardCanvas({
                 className="flex h-full min-h-0 items-stretch gap-1.5 sm:gap-2 kanban-columns-fit"
                 style={{ "--kanban-col-count": columnIds.length } as CSSProperties}
               >
-                {board.columns.map((col) => {
-                  const vis = visibleCardsInColumn(col, appState, resolveCardHomeBoard);
+                {board.columns.map((col, columnIndex) => {
+                  const vis = cardsInColumn(col, columnIndex);
                   return (
                     <SortableColumnSection
                       key={col.id}
@@ -1751,6 +1864,7 @@ export function BoardCanvas({
         ) : null}
       </DragOverlay>
     </DndContext>
+    </div>
     {previewNode}
     </>
   );

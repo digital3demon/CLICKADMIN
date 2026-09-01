@@ -1,4 +1,5 @@
 import type { CardComment, KanbanAppState, KanbanCard } from "@/lib/kanban/types";
+import { KANBAN_STOP_COLUMN_TITLE } from "@/lib/kanban/kanban-stop-column";
 import { positiveKaitenCardId } from "@/lib/kanban/kanban-linked-order-ids";
 
 export const KANBAN_CHAT_STATE_KEY = "kanbanAppStateV3";
@@ -93,6 +94,59 @@ export function findCardByLinkedOrderId(
     }
   }
   return null;
+}
+
+export type LinkedOrderKanbanPresence = {
+  hasCard: boolean;
+  boardId: string | null;
+  cardId: string | null;
+  columnTitle: string | null;
+  stopped: boolean;
+};
+
+/** Колонки и СТОП (не архив): заказ не должен писать «нет карточки», если она в СТОПе. */
+export function linkedOrderKanbanPresence(
+  state: KanbanAppState,
+  orderId: string,
+): LinkedOrderKanbanPresence {
+  const orderIdTrim = String(orderId || "").trim();
+  const empty: LinkedOrderKanbanPresence = {
+    hasCard: false,
+    boardId: null,
+    cardId: null,
+    columnTitle: null,
+    stopped: false,
+  };
+  if (!orderIdTrim) return empty;
+  const loc = findCardByLinkedOrderId(state, orderIdTrim);
+  if (loc) {
+    const board = state.boards[loc.boardIndex]!;
+    const col = board.columns[loc.columnIndex]!;
+    const card = col.cards[loc.cardIndex]!;
+    return {
+      hasCard: true,
+      boardId: board.id,
+      cardId: card.id || null,
+      columnTitle: (col.title || "").trim() || null,
+      stopped: false,
+    };
+  }
+  for (const board of state.boards) {
+    for (const row of board.stoppedCards || []) {
+      const card = row?.card;
+      if (!card) continue;
+      const oid = String(card.linkedOrderId || "").trim();
+      if (oid !== orderIdTrim) continue;
+      return {
+        hasCard: true,
+        boardId: board.id,
+        cardId: card.id || null,
+        columnTitle: KANBAN_STOP_COLUMN_TITLE,
+        stopped: true,
+      };
+    }
+  }
+  return empty;
 }
 
 /** Цель обновления с Kaiten: id на клиенте часто не совпадает со снимком tenant. */

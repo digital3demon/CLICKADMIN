@@ -3,6 +3,7 @@ import {
   buildKanbanListViewRows,
   DEFAULT_LIST_SORT,
   isDefaultListSort,
+  sortKanbanColumnCards,
 } from "@/lib/kanban/list-view-sort";
 import { defaultAppState } from "@/lib/kanban/model";
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
@@ -102,5 +103,39 @@ describe("buildKanbanListViewRows · фильтр участника", () => {
       },
     });
     expect(rows.map((r) => r.card.id)).toContain("old-a");
+  });
+});
+
+describe("sortKanbanColumnCards", () => {
+  it("кириллица до и после: название А → Я внутри колонки", () => {
+    const board = boardWithCards();
+    const яблоко = card("c-яблоко", "2026-07-01T10:00:00.000Z");
+    яблоко.title = "до Яблоко после";
+    const абрикос = card("c-абрикос", "2026-07-02T10:00:00.000Z");
+    абрикос.title = "до Абрикос после";
+    const sorted = sortKanbanColumnCards([яблоко, абрикос], { key: "title", dir: "asc" }, {
+      columnTitle: "К исполнению",
+      columnId: "col-a",
+      columnIndex: 0,
+      board,
+      allBoards: [board],
+      homeBoardId: () => board.id,
+    });
+    expect(sorted.map((c) => c.id)).toEqual(["c-абрикос", "c-яблоко"]);
+  });
+
+  it("создана: новые сверху, кириллица в id не ломает порядок", () => {
+    const board = boardWithCards();
+    const oldC = card("старая", "2026-07-01T10:00:00.000Z");
+    const newC = card("новая", "2026-07-10T10:00:00.000Z");
+    const sorted = sortKanbanColumnCards([oldC, newC], DEFAULT_LIST_SORT, {
+      columnTitle: "К исполнению",
+      columnId: "col-a",
+      columnIndex: 0,
+      board,
+      allBoards: [board],
+      homeBoardId: () => board.id,
+    });
+    expect(sorted.map((c) => c.id)).toEqual(["новая", "старая"]);
   });
 });

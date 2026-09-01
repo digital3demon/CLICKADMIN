@@ -787,6 +787,42 @@ export function stopCardByIdOnBoard(board: KanbanBoard, cardId: string): boolean
   return false;
 }
 
+/** Снять наряд из СТОП на указанную колонку (возврат из заказов / плитки). */
+export function restoreStoppedLinkedOrderToColumn(
+  board: KanbanBoard,
+  orderId: string,
+  targetColumn: KanbanColumn,
+  actorUserId?: string,
+  actorLabel?: string,
+): boolean {
+  const key = String(orderId || "").trim();
+  if (!key || !targetColumn) return false;
+  const list = board.stoppedCards || [];
+  const ix = list.findIndex(
+    (x) => String(x.card?.linkedOrderId || "").trim() === key,
+  );
+  if (ix < 0) return false;
+  const row = list[ix];
+  if (!row) return false;
+  list.splice(ix, 1);
+  const card = structuredClone(row.card);
+  card.lastMovedAt = new Date().toISOString();
+  for (const col of board.columns) {
+    col.cards = col.cards.filter(
+      (c) => c.id !== card.id && String(c.linkedOrderId || "").trim() !== key,
+    );
+  }
+  pushActivity(
+    card,
+    `Возвращена из «СТОП» в «${targetColumn.title}»`,
+    actorUserId,
+    board,
+    actorLabel,
+  );
+  targetColumn.cards.unshift(card);
+  return true;
+}
+
 export function restoreStoppedCardOnBoard(board: KanbanBoard, stoppedId: string): boolean {
   const list = board.stoppedCards || [];
   const ix = list.findIndex((x) => x.id === stoppedId || x.card.id === stoppedId);
@@ -3037,7 +3073,14 @@ export function mergeKaitenLinkedOrdersIntoAppState(
     );
     if (!targetBoard || !targetBoard.columns.length) continue;
     if (isLinkedOrderArchivedOnBoard(targetBoard, row.id)) continue;
-    if (isLinkedOrderStoppedOnBoard(targetBoard, row.id)) continue;
+    if (isLinkedOrderStoppedOnBoard(targetBoard, row.id)) {
+      if (
+        isKanbanStopColumnTitle(row.kaitenColumnTitle) ||
+        !(row.kaitenColumnTitle || "").trim()
+      ) {
+        continue;
+      }
+    }
     const reuseCard = reuseFromOtherBoard?.card ?? null;
     for (const b of next.boards) {
       if (b.id !== targetBoard.id) {
@@ -3073,6 +3116,9 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       targetBoard,
       row.kaitenColumnTitle,
     );
+    if (isLinkedOrderStoppedOnBoard(targetBoard, row.id)) {
+      restoreStoppedLinkedOrderToColumn(targetBoard, row.id, targetCol);
+    }
     const found = findLinkedCardOnBoard(targetBoard, row.id);
     let foundEff = found;
     if (!foundEff && reuseCard && reuseCard.linkedOrderId === row.id) {

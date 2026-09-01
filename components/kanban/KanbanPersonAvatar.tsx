@@ -212,7 +212,7 @@ export function KanbanPersonAvatar({
   }
 
   if (nameCaption) {
-    const dense = size === "sm" || size === "card" || size === "xs";
+    const dense = size === "sm" || size === "card" || size === "xs" || size === "list";
     return (
       <span
         title={title}

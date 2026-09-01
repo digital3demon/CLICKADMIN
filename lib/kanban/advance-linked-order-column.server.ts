@@ -12,12 +12,20 @@ import {
   type LinkedOrderColumnNeighbor,
 } from "@/lib/kanban/advance-linked-order-column";
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
+import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 import { labWorkStatusFromColumnTitle } from "@/lib/order-status-display";
 import {
   loadKanbanTenantState,
+  mutateKanbanTenantState,
   saveKanbanStateWithRetry,
 } from "@/lib/kanban/kanban-tenant-state-write.server";
-import { pushActivity } from "@/lib/kanban/model";
+import {
+  isKanbanAggregateBoardId,
+  isLinkedOrderStoppedOnBoard,
+  pushActivity,
+  resolveOrderKanbanColumnFromKaitenMirrorTitle,
+  restoreStoppedLinkedOrderToColumn,
+} from "@/lib/kanban/model";
 import type { KanbanAppState } from "@/lib/kanban/types";
 import { LAB_WORK_STATUS_LABELS } from "@/lib/lab-work-status";
 
@@ -539,4 +547,46 @@ export async function applyWorkUnsentKanbanSideEffects(opts: {
     });
   }
   return { restoredTitle };
+}
+
+/**
+ * Заказ вышел из СТОПа через CRM (PATCH колонки): снимаем tenant `stoppedCards`
+ * на всех досках, где карточка припаркована. Иначе UI канбана и overlay списков
+ * остаются в СТОПе, хотя в заказе уже «К исполнению».
+ */
+export async function restoreLinkedOrderFromStopIfParked(opts: {
+  tenantId: string;
+  orderId: string;
+  columnTitle: string;
+  actorUserId?: string | null;
+  actorLabel?: string | null;
+}): Promise<{ restored: boolean; boards: number }> {
+  const oid = opts.orderId.trim();
+  const title = opts.columnTitle.trim();
+  if (!oid || !title || isKanbanStopColumnTitle(title)) {
+    return { restored: false, boards: 0 };
+  }
+  let boards = 0;
+  const saved = await mutateKanbanTenantState(opts.tenantId, (state) => {
+    boards = 0;
+    for (const board of state.boards) {
+      if (isKanbanAggregateBoardId(board.id)) continue;
+      if (!isLinkedOrderStoppedOnBoard(board, oid)) continue;
+      const target = resolveOrderKanbanColumnFromKaitenMirrorTitle(board, title);
+      const ok = restoreStoppedLinkedOrderToColumn(
+        board,
+        oid,
+        target,
+        opts.actorUserId?.trim() || undefined,
+        opts.actorLabel?.trim() || undefined,
+      );
+      if (ok) boards += 1;
+    }
+    return boards > 0;
+  });
+  if (!saved.ok) {
+    console.warn("[kaiten-leave-stop] tenant restore failed", oid);
+    return { restored: false, boards: 0 };
+  }
+  return { restored: saved.changed, boards };
 }

@@ -10,6 +10,7 @@ import {
   KANBAN_BOARD_PRODUCTION_ID,
   parkLinkedCardInStop,
   resolveOrderKanbanColumnFromKaitenMirrorTitle,
+  restoreStoppedLinkedOrderToColumn,
 } from "@/lib/kanban/model";
 import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 import {
@@ -159,9 +160,34 @@ export function applyCrmBoardTilesToAppState(
   for (const tile of tiles) {
     const board = next.boards.find((b) => b.id === tile.boardId);
     if (!board?.columns.length) continue;
-    if (parkedByBoard.get(board.id)?.has(tile.orderId)) continue;
     const columnTitle =
       pendingColumnTitleForOrder(tile.orderId, pending) || tile.columnTitle;
+    if (parkedByBoard.get(board.id)?.has(tile.orderId)) {
+      if (isKanbanStopColumnTitle(columnTitle) || !(columnTitle || "").trim()) {
+        continue;
+      }
+      const targetCol = resolveOrderKanbanColumnFromKaitenMirrorTitle(
+        board,
+        columnTitle,
+      );
+      const unparked = restoreStoppedLinkedOrderToColumn(
+        board,
+        tile.orderId,
+        targetCol,
+      );
+      if (!unparked) continue;
+      parkedByBoard.get(board.id)?.delete(tile.orderId);
+      const foundAfter = findLinkedOnBoard(next, board.id, tile.orderId);
+      if (foundAfter) {
+        const card =
+          board.columns[foundAfter.colIndex]!.cards[foundAfter.cardIndex]!;
+        applyTileToCard(card, tile, board);
+      }
+      const set = seenOnBoard.get(board.id) ?? new Set<string>();
+      set.add(tile.orderId);
+      seenOnBoard.set(board.id, set);
+      continue;
+    }
     if (isKanbanStopColumnTitle(columnTitle)) {
       const found = findLinkedOnBoard(next, board.id, tile.orderId);
       let card: KanbanCard | null = null;

@@ -303,6 +303,8 @@ type KanbanCardModalProps = {
   canManageKanbanBlock?: boolean;
   onOpenLinkedCard?: (cardId: string) => void;
   onParentProductionFilesUpdated?: (cardId: string) => void;
+  /** Раскрытие в списке: без оверлея, карточка растёт вниз. */
+  embed?: boolean;
 };
 
 const KANBAN_BLOCK_PERM_HINT =
@@ -606,6 +608,7 @@ export function KanbanCardModal({
   canManageKanbanBlock = false,
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
+  embed = false,
 }: KanbanCardModalProps) {
   const [rightTab, setRightTab] = useState<KanbanCardModalTab>("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
@@ -1804,12 +1807,20 @@ export function KanbanCardModal({
   return (
     <div
       ref={overlayRef}
-      className="kanban-root fixed inset-0 z-[200] flex overflow-hidden bg-black/55 max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
-      role="dialog"
-      aria-modal
-      onMouseDown={(ev) => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      className={
+        embed
+          ? "kanban-root relative z-0 flex min-h-0 w-full flex-col overflow-hidden bg-transparent p-0"
+          : "kanban-root fixed inset-0 z-[200] flex overflow-hidden bg-black/55 max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
+      }
+      role={embed ? "region" : "dialog"}
+      aria-modal={embed ? undefined : true}
+      onMouseDown={
+        embed
+          ? undefined
+          : (ev) => {
+              if (ev.target === ev.currentTarget) onClose();
+            }
+      }
     >
       {blockPopupOpen && (
         <div
@@ -1975,7 +1986,11 @@ export function KanbanCardModal({
       ) : null}
 
       <div
-        className="flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
+        className={
+          embed
+            ? "flex max-h-[min(85dvh,44rem)] w-full min-h-0 flex-col overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)]"
+            : "flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
+        }
         onMouseDown={(e) => e.stopPropagation()}
       >
         {blocked && (

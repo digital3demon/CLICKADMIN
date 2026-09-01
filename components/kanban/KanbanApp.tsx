@@ -492,6 +492,9 @@ export function KanbanApp({
   /** Настоящая доска до «Мои» / «Ответственный» — не ортопедия по умолчанию. */
   const lastRealBoardIdRef = useRef("");
   const [cardModalId, setCardModalId] = useState<string | null>(null);
+  const [listExpandedCardId, setListExpandedCardId] = useState<string | null>(
+    null,
+  );
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirm, setConfirm] = useState<{
     message: string;
@@ -1448,6 +1451,7 @@ export function KanbanApp({
   }, [isDemo, pullCatalogCardTypes]);
 
   const openKanbanCard = useCallback((cardId: string) => {
+    setListExpandedCardId(null);
     setCardModalId(cardId);
   }, []);
 
@@ -1565,14 +1569,17 @@ export function KanbanApp({
 
   const modalBoard = useMemo(() => {
     if (!appState || !board) return null;
-    if (!cardModalId) return board;
-    return findCardInAppState(appState, cardModalId)?.board ?? board;
-  }, [cardModalId, appState, board]);
+    const id = cardModalId ?? listExpandedCardId;
+    if (!id) return board;
+    return findCardInAppState(appState, id)?.board ?? board;
+  }, [cardModalId, listExpandedCardId, appState, board]);
 
   const modalCardForBlockPerm = useMemo(() => {
-    if (!appState || !cardModalId) return null;
-    return findCardInAppState(appState, cardModalId)?.card ?? null;
-  }, [appState, cardModalId]);
+    if (!appState) return null;
+    const id = cardModalId ?? listExpandedCardId;
+    if (!id) return null;
+    return findCardInAppState(appState, id)?.card ?? null;
+  }, [appState, cardModalId, listExpandedCardId]);
 
   const canManageKanbanBlock = useMemo(() => {
     if (isDemo) return true;
@@ -1700,11 +1707,12 @@ export function KanbanApp({
 
   const applyModalBoard = useCallback(
     (fn: (b: KanbanBoard) => void) => {
-      if (!cardModalId) return;
+      const id = cardModalId ?? listExpandedCardId;
+      if (!id) return;
       setAppState((s) => {
         if (!s) return s;
         const next = structuredClone(s);
-        const loc = findCardInAppState(next, cardModalId);
+        const loc = findCardInAppState(next, id);
         if (!loc) return s;
         const b = next.boards.find((x) => x.id === loc.board.id);
         if (!b) return s;
@@ -1713,7 +1721,7 @@ export function KanbanApp({
         return next;
       });
     },
-    [cardModalId],
+    [cardModalId, listExpandedCardId],
   );
 
   const applyCardMembersFromList = useCallback(
@@ -3726,6 +3734,76 @@ export function KanbanApp({
               canEditDueDate={kanbanCardPerms.editDueDate}
               onUpdateStageDue={applyCardStageDueFromList}
               onToggleUrgent={applyCardUrgentFromList}
+              expandedCardId={listExpandedCardId}
+              onExpandedCardIdChange={setListExpandedCardId}
+              renderExpandedCard={(cardId) => (
+                <KanbanCardModal
+                  embed
+                  cardId={cardId}
+                  board={
+                    findCardInAppState(appState, cardId)?.board ??
+                    modalBoard ??
+                    board
+                  }
+                  allBoards={appState.boards}
+                  activityActorLabel={activityActorLabel}
+                  commentAuthorUserId={kanbanSessionUserId ?? undefined}
+                  sessionUserRole={kanbanSessionRole}
+                  onClose={() => setListExpandedCardId(null)}
+                  onApply={applyModalBoard}
+                  toast={showToast}
+                  onMovePrevStage={(id) => {
+                    moveCardToPrevStage(id);
+                    setListExpandedCardId(id);
+                  }}
+                  onMoveNextStage={(id) => {
+                    moveCardToNextStage(id);
+                    setListExpandedCardId(id);
+                  }}
+                  onMoveToColumn={
+                    kanbanCardPerms.moveColumns
+                      ? (id, targetColumnId) => {
+                          moveCardToColumn(id, targetColumnId);
+                          setListExpandedCardId(id);
+                        }
+                      : undefined
+                  }
+                  onRequestStopCard={
+                    kanbanCardPerms.stop
+                      ? (id) => {
+                          stopCard(id);
+                        }
+                      : undefined
+                  }
+                  onChangeTrackLane={
+                    isDemo
+                      ? undefined
+                      : (id, lane) => {
+                          moveCardToTrackLane(id, lane);
+                          setListExpandedCardId(id);
+                        }
+                  }
+                  onCopyCardLink={copyCardLink}
+                  canMoveColumns={kanbanCardPerms.moveColumns}
+                  canEditTitle={kanbanCardPerms.editTitle}
+                  canEditDueDate={kanbanCardPerms.editDueDate}
+                  canEditTrack={kanbanCardPerms.editTrack}
+                  canManageAssignees={kanbanCardPerms.manageAssignees}
+                  canManageParticipants={kanbanCardPerms.manageParticipants}
+                  canManageKanbanChecklist={kanbanCardPerms.manageKanbanChecklist}
+                  canManageKanbanTimer={kanbanCardPerms.manageKanbanTimer}
+                  canAttachFiles={kanbanCardPerms.attachFiles}
+                  canManageKanbanBlock={canManageKanbanBlock}
+                  onOpenLinkedCard={(id) => {
+                    setListExpandedCardId(null);
+                    setCardModalId(id);
+                  }}
+                  onParentProductionFilesUpdated={
+                    syncParentProductionChildrenAfterFilesAttach
+                  }
+                  isDemo={isDemo}
+                />
+              )}
             />
           )}
       </div>

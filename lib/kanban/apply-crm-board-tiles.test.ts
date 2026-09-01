@@ -311,7 +311,7 @@ describe("applyCrmBoardTilesToAppState", () => {
     expect(card.stageDueDate || "").toContain("2026-09-10");
   });
 
-  it("не возвращает на доску карточку из СТОП", () => {
+  it("плитка СТОП не снимает карточку с парковки (кириллица в id)", () => {
     let state = defaultAppState();
     const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
     odon.stoppedCards = [
@@ -323,21 +323,56 @@ describe("applyCrmBoardTilesToAppState", () => {
         card: createCard({
           id: "stopped",
           title: "на стопе",
-          linkedOrderId: "ord-stop",
+          linkedOrderId: "наряд-стоп",
           assignees: ["u-я"],
         }),
       },
     ];
     state = applyCrmBoardTilesToAppState(
       state,
-      [tile({ orderId: "ord-stop" })],
+      [tile({ orderId: "наряд-стоп", columnTitle: "СТОП" })],
       { replaceBoardId: KANBAN_BOARD_ORTHODONTICS_ID },
     );
-    expect(findCardByLinkedOrderId(state, "ord-stop")).toBeNull();
+    expect(findCardByLinkedOrderId(state, "наряд-стоп")).toBeNull();
     expect(
       state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!.stoppedCards?.[0]
         ?.card.linkedOrderId,
-    ).toBe("ord-stop");
+    ).toBe("наряд-стоп");
+  });
+
+  it("плитка с колонкой снимает карточку из СТОП на выбранную доску", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    const target = odon.columns.find((c) => c.title === "К исполнению") ?? odon.columns[0]!;
+    odon.stoppedCards = [
+      {
+        id: "stop-2",
+        stoppedAt: "2026-08-28T10:00:00.000Z",
+        sourceColumnId: odon.columns[0]!.id,
+        sourceColumnTitle: odon.columns[0]!.title,
+        card: createCard({
+          id: "stopped-back",
+          title: "вернуть из стопа",
+          linkedOrderId: "наряд-возврат",
+          assignees: ["u-я"],
+        }),
+      },
+    ];
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [tile({ orderId: "наряд-возврат", columnTitle: target.title })],
+      { replaceBoardId: KANBAN_BOARD_ORTHODONTICS_ID },
+    );
+    const loc = findCardByLinkedOrderId(state, "наряд-возврат");
+    expect(loc).not.toBeNull();
+    expect(state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.title).toBe(
+      target.title,
+    );
+    expect(
+      state.boards
+        .find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!
+        .stoppedCards?.some((r) => r.card.linkedOrderId === "наряд-возврат"),
+    ).toBe(false);
   });
 
   it("колонка СТОП в плитке восстанавливает парковку после F5 (кириллица)", () => {

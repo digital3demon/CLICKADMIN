@@ -20,6 +20,59 @@ export type ListSort = { key: ListSortKey; dir: ListSortDir };
 
 export const DEFAULT_LIST_SORT: ListSort = { key: "created", dir: "desc" };
 
+/** Те же пункты, что в select списка (и на доске внутри колонок). */
+export const LIST_SORT_SELECT_OPTIONS: {
+  value: string;
+  label: string;
+  sort: ListSort;
+}[] = [
+  { value: "created-desc", label: "Создана: новые сверху", sort: { key: "created", dir: "desc" } },
+  { value: "created-asc", label: "Создана: старые сверху", sort: { key: "created", dir: "asc" } },
+  { value: "title-asc", label: "Название: А → Я", sort: { key: "title", dir: "asc" } },
+  { value: "title-desc", label: "Название: Я → А", sort: { key: "title", dir: "desc" } },
+  { value: "column-asc", label: "Колонка: слева направо", sort: { key: "column", dir: "asc" } },
+  { value: "column-desc", label: "Колонка: справа налево", sort: { key: "column", dir: "desc" } },
+  { value: "due-asc", label: "Срок: раньше сверху", sort: { key: "due", dir: "asc" } },
+  { value: "due-desc", label: "Срок: позже сверху", sort: { key: "due", dir: "desc" } },
+  { value: "assignee-desc", label: "Ответственные: больше сверху", sort: { key: "assignee", dir: "desc" } },
+  { value: "assignee-asc", label: "Ответственные: меньше сверху", sort: { key: "assignee", dir: "asc" } },
+  {
+    value: "participants-desc",
+    label: "Участники: больше сверху",
+    sort: { key: "participants", dir: "desc" },
+  },
+  {
+    value: "participants-asc",
+    label: "Участники: меньше сверху",
+    sort: { key: "participants", dir: "asc" },
+  },
+];
+
+/** На доске: не трогать сохранённый порядок колонки. */
+export const BOARD_COLUMN_SORT_MANUAL = "board";
+
+const LIST_SORT_KEYS: readonly ListSortKey[] = [
+  "title",
+  "created",
+  "column",
+  "due",
+  "assignee",
+  "participants",
+];
+
+export function isListSort(value: unknown): value is ListSort {
+  if (!value || typeof value !== "object") return false;
+  const v = value as { key?: unknown; dir?: unknown };
+  return (
+    LIST_SORT_KEYS.includes(v.key as ListSortKey) &&
+    (v.dir === "asc" || v.dir === "desc")
+  );
+}
+
+export function sortToSelectValue(s: ListSort): string {
+  return `${s.key}-${s.dir}`;
+}
+
 export function isDefaultListSort(sort: ListSort): boolean {
   return sort.key === DEFAULT_LIST_SORT.key && sort.dir === DEFAULT_LIST_SORT.dir;
 }
@@ -178,6 +231,30 @@ export function buildKanbanListViewRows(
   });
   out.sort((x, y) => compareRows(x, y, sort, board, allBoards));
   return out;
+}
+
+/** Сортировка видимых карточек одной колонки доски (тот же компаратор, что у списка). */
+export function sortKanbanColumnCards(
+  cards: readonly KanbanCard[],
+  sort: ListSort,
+  opts: {
+    columnTitle: string;
+    columnId: string;
+    columnIndex: number;
+    board: KanbanBoard;
+    allBoards: KanbanBoard[];
+    homeBoardId: (card: KanbanCard) => string;
+  },
+): KanbanCard[] {
+  const rows: ListViewRow[] = cards.map((card) => ({
+    card,
+    columnTitle: opts.columnTitle,
+    columnId: opts.columnId,
+    columnIndex: opts.columnIndex,
+    homeBoardId: opts.homeBoardId(card),
+  }));
+  rows.sort((a, b) => compareRows(a, b, sort, opts.board, opts.allBoards));
+  return rows.map((r) => r.card);
 }
 
 const STORAGE_PREFIX = "kanban-list-sort:";

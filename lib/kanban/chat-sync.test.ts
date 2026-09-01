@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   compactCardComments,
+  findCardByLinkedOrderId,
   findKanbanCardsForKaitenRefresh,
+  linkedOrderKanbanPresence,
   mergeKaitenSnapshotIntoCardComments,
   upsertKaitenCommentsToCard,
 } from "./chat-sync";
+import { KANBAN_STOP_COLUMN_TITLE } from "./kanban-stop-column";
 import type { CardComment, KanbanAppState, KanbanCard } from "./types";
 
 describe("kanban chat sync", () => {
@@ -438,5 +441,67 @@ describe("findKanbanCardsForKaitenRefresh", () => {
         kaitenCardId: 8,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("linkedOrderKanbanPresence", () => {
+  it("карточка в СТОП считается присутствующей (кириллица до и после id)", () => {
+    const state = {
+      activeBoardId: "odon",
+      boards: [
+        {
+          id: "odon",
+          title: "Ортодонтия",
+          columns: [{ id: "c", title: "К исполнению", cards: [] }],
+          stoppedCards: [
+            {
+              id: "stop-1",
+              card: {
+                id: "card-стоп",
+                linkedOrderId: "наряд-178",
+                title: "заказ 178 от 10.02.2026 Смирнов",
+              } as KanbanCard,
+            },
+          ],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const hit = linkedOrderKanbanPresence(state, "наряд-178");
+    expect(hit.hasCard).toBe(true);
+    expect(hit.stopped).toBe(true);
+    expect(hit.columnTitle).toBe(KANBAN_STOP_COLUMN_TITLE);
+    expect(hit.cardId).toBe("card-стоп");
+    expect(hit.boardId).toBe("odon");
+    expect(findCardByLinkedOrderId(state, "наряд-178")).toBeNull();
+  });
+
+  it("колонка на доске — hasCard без stopped", () => {
+    const state = {
+      activeBoardId: "odon",
+      boards: [
+        {
+          id: "odon",
+          title: "Ортодонтия",
+          columns: [
+            {
+              id: "c",
+              title: "К исполнению",
+              cards: [
+                {
+                  id: "card-жив",
+                  linkedOrderId: "наряд-жив",
+                  title: "живой наряд",
+                } as KanbanCard,
+              ],
+            },
+          ],
+          stoppedCards: [],
+        },
+      ],
+    } as unknown as KanbanAppState;
+    const hit = linkedOrderKanbanPresence(state, "наряд-жив");
+    expect(hit.hasCard).toBe(true);
+    expect(hit.stopped).toBe(false);
+    expect(hit.columnTitle).toBe("К исполнению");
   });
 });

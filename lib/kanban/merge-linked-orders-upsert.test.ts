@@ -354,4 +354,44 @@ describe("removeLinkedOrderCardsFromAppState", () => {
     );
     expect(parked).toBe(true);
   });
+
+  it("kaitenColumnTitle не СТОП снимает наряд с парковки (кириллица)", () => {
+    const parked = mergeKaitenLinkedOrdersIntoAppState(
+      defaultAppState(),
+      [
+        sampleRow("наряд-возврат-стоп", {
+          kaitenColumnTitle: "СТОП",
+          kaitenCardId: 91,
+          orderNumber: "2608-091",
+          patientName: "Смирнова",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    expect(findCardByLinkedOrderId(parked, "наряд-возврат-стоп")).toBeNull();
+    const next = mergeKaitenLinkedOrdersIntoAppState(
+      parked,
+      [
+        sampleRow("наряд-возврат-стоп", {
+          kaitenColumnTitle: "К исполнению",
+          kaitenCardId: 91,
+          orderNumber: "2608-091",
+          patientName: "Смирнова",
+        }),
+      ],
+      { mode: "upsertOnly" },
+    );
+    const loc = findCardByLinkedOrderId(next, "наряд-возврат-стоп");
+    expect(loc).not.toBeNull();
+    expect(next.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.title).toBe(
+      "К исполнению",
+    );
+    expect(
+      next.boards.some((b) =>
+        (b.stoppedCards || []).some(
+          (r) => r.card.linkedOrderId === "наряд-возврат-стоп",
+        ),
+      ),
+    ).toBe(false);
+  });
 });

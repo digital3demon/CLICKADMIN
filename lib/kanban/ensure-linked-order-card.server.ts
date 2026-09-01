@@ -6,7 +6,7 @@ import {
   getOrdersPrisma,
   getPricingPrisma,
 } from "@/lib/get-domain-prisma";
-import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
+import { linkedOrderKanbanPresence } from "@/lib/kanban/chat-sync";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import { bestKaitenDescriptionMirrorForKanban } from "@/lib/kanban/kaiten-description-mirror";
 import {
@@ -51,18 +51,15 @@ function presenceFromState(
   EnsureCrmKanbanLinkedCardResult,
   "hasCard" | "boardId" | "cardId" | "columnTitle"
 > {
-  const loc = findCardByLinkedOrderId(state, orderId);
-  if (!loc) {
+  const hit = linkedOrderKanbanPresence(state, orderId);
+  if (!hit.hasCard) {
     return { hasCard: false, boardId: null, cardId: null, columnTitle: null };
   }
-  const board = state.boards[loc.boardIndex]!;
-  const col = board.columns[loc.columnIndex]!;
-  const card = col.cards[loc.cardIndex]!;
   return {
     hasCard: true,
-    boardId: board.id,
-    cardId: card.id || crmKanbanLinkedCardId(orderId),
-    columnTitle: (col.title || "").trim() || null,
+    boardId: hit.boardId,
+    cardId: hit.cardId || crmKanbanLinkedCardId(orderId),
+    columnTitle: hit.columnTitle,
   };
 }
 
