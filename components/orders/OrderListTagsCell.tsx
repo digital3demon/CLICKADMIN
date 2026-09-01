@@ -72,9 +72,23 @@ import {
   URGENT_UNSET,
   urgentSelectionFromOrder,
 } from "@/lib/order-urgency";
+import dynamic from "next/dynamic";
 import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
-import { OrderPaymentModalAccountingUpload } from "@/components/orders/OrderPaymentModalAccountingUpload";
-import { OrderDocumentMailPanel } from "@/components/orders/OrderDocumentMailPanel";
+
+const OrderPaymentModalAccountingUpload = dynamic(
+  () =>
+    import("@/components/orders/OrderPaymentModalAccountingUpload").then(
+      (m) => m.OrderPaymentModalAccountingUpload,
+    ),
+  { ssr: false, loading: () => null },
+);
+const OrderDocumentMailPanel = dynamic(
+  () =>
+    import("@/components/orders/OrderDocumentMailPanel").then(
+      (m) => m.OrderDocumentMailPanel,
+    ),
+  { ssr: false, loading: () => null },
+);
 import {
   formatDocumentCopyCompositionText,
   formatDocumentCopyMoneyRu,

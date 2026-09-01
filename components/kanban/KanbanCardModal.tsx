@@ -92,8 +92,9 @@ import {
   seedKanbanCreatedActivity,
 } from "@/lib/kanban/kanban-order-activity";
 import {
+  mergeOrderAttachmentsIntoLinkedCard,
   ensureKanbanCardFilesFromChatImages,
-  findCard,
+  findCardIncludingStopped as findCard,
   formatBlockedAt,
   formatDate,
   formatDateTimeRu,
@@ -109,6 +110,8 @@ import {
   updateKanbanBlockReason,
   userNameById,
 } from "@/lib/kanban/model";
+import { resolveLinkedOrderKanbanDescription } from "@/lib/kanban/kaiten-linked-order";
+import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
 import {
   KANBAN_CARD_MODAL_ANIM_MS,
   kanbanCardModalClosedTransform,
@@ -658,7 +661,15 @@ export function KanbanCardModal({
   const [manualRouteRows, setManualRouteRows] = useState<ManualRouteDraftRow[]>([]);
   const [orderMailOpen, setOrderMailOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const found = cardId ? findCard(board, cardId) : null;
+  const found = useMemo(() => {
+    if (!cardId) return null;
+    const boards = allBoards?.length ? allBoards : [board];
+    for (const b of boards) {
+      const hit = findCard(b, cardId);
+      if (hit) return hit;
+    }
+    return null;
+  }, [allBoards, board, cardId]);
   const card = found?.card;
   const showOrderMailButton = Boolean(card?.linkedOrderId);
   const act = (activityActorLabel ?? "").trim() || undefined;
@@ -950,6 +961,32 @@ export function KanbanCardModal({
     if (alreadyLinked) setKaitenChatLoading(true);
 
     void (async () => {
+      try {
+        const detailRes = await fetch(
+          `/api/kanban/linked-orders?ids=${encodeURIComponent(linkedOrderId)}&detail=1`,
+          { credentials: "include" },
+        );
+        if (!cancelled && detailRes.ok) {
+          const detailJson = (await detailRes.json()) as {
+            orders?: KaitenLinkedOrderForKanban[];
+          };
+          const row = detailJson.orders?.[0];
+          if (row) {
+            onApply((b) => {
+              const fc = findCard(b, cardId);
+              if (!fc) return;
+              mergeOrderAttachmentsIntoLinkedCard(fc.card, linkedOrderId, row);
+              const desc = resolveLinkedOrderKanbanDescription(row, isDemo);
+              if (desc.trim() && !(fc.card.description || "").trim()) {
+                fc.card.description = desc;
+              }
+            });
+          }
+        }
+      } catch {
+        /* offline */
+      }
+
       const storedAct = await readClientState("tenant", kanbanOrderActivityStateKey(linkedOrderId));
       if (!cancelled) {
         const fromStore = parseStoredKanbanOrderActivity(storedAct);
@@ -1043,7 +1080,7 @@ export function KanbanCardModal({
     return () => {
       cancelled = true;
     };
-  }, [cardId, linkedOrderId, onApply, chatActorUserId, kaitenCardIdForChat]);
+  }, [cardId, linkedOrderId, onApply, chatActorUserId, kaitenCardIdForChat, isDemo]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(
@@ -1064,79 +1101,53 @@ export function KanbanCardModal({
     [crmList],
   );
 
-  if (!cardId || !card) return null;
+  const blocked = card ? isCardBlocked(card) : false;
 
-  const blocked = isCardBlocked(card);
-  const stageDue = getKanbanStageDue(card);
-  const currentColumnIndex = board.columns.findIndex((col) => col.id === found.col.id);
-  const prevColumnTitle =
-    currentColumnIndex > 0 ? board.columns[currentColumnIndex - 1]?.title || "" : "";
-  const nextColumnTitle =
-    currentColumnIndex >= 0 && currentColumnIndex + 1 < board.columns.length
-      ? board.columns[currentColumnIndex + 1]?.title || ""
-      : "";
-  const movePrevTitle = prevColumnTitle
-    ? `Перенести в "${prevColumnTitle}"`
-    : "Карточка уже в первом столбце";
-  const moveNextTitle = nextColumnTitle
-    ? `Перенести в "${nextColumnTitle}"`
-    : "Карточка уже в последнем столбце";
-  const canUsePayrollDone =
-    sessionUserRole === "USER" ||
-    sessionUserRole === "SENIOR_TECHNICIAN" ||
-    sessionUserRole === "OWNER";
-
-  const openBlockPopup = () => {
-    if (!canManageKanbanBlock) {
-      toast(KANBAN_BLOCK_PERM_HINT, true);
-      return;
-    }
-    setBlockReasonDraft("");
-    setBlockPopupOpen(true);
-  };
-
-  const persistLinkedOrderBlock = (
-    orderId: string,
-    body: { blocked: boolean; blockReason?: string },
-    blockedAt?: string | null,
-    syncKaiten = true,
-  ) => {
-    persistCrmBoardFieldsClient({
-      orderId,
-      blocked: body.blocked,
-      blockReason: body.blockReason ?? "",
-      blockedAt: blockedAt ?? null,
-    });
-    rememberOptimisticKaitenBlock(orderId, {
-      blocked: body.blocked,
-      blockReason: body.blockReason ?? "",
-      blockedAt: blockedAt ?? null,
-    });
-    if (!syncKaiten) return;
-    void patchOrderKaitenCard(orderId, body).then((r) => {
-      if (!r.ok) {
-        forgetOptimisticKaitenBlock(orderId);
-        toast(r.error, true);
-        return;
-      }
-      rememberOptimisticKaitenBlock(
+  const persistLinkedOrderBlock = useCallback(
+    (
+      orderId: string,
+      body: { blocked: boolean; blockReason?: string },
+      blockedAt?: string | null,
+      syncKaiten = true,
+    ) => {
+      persistCrmBoardFieldsClient({
         orderId,
-        {
-          blocked: body.blocked,
-          blockReason: body.blockReason ?? "",
-          blockedAt: blockedAt ?? null,
-        },
-        OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
-      );
-    });
-  };
+        blocked: body.blocked,
+        blockReason: body.blockReason ?? "",
+        blockedAt: blockedAt ?? null,
+      });
+      rememberOptimisticKaitenBlock(orderId, {
+        blocked: body.blocked,
+        blockReason: body.blockReason ?? "",
+        blockedAt: blockedAt ?? null,
+      });
+      if (!syncKaiten) return;
+      void patchOrderKaitenCard(orderId, body).then((r) => {
+        if (!r.ok) {
+          forgetOptimisticKaitenBlock(orderId);
+          toast(r.error, true);
+          return;
+        }
+        rememberOptimisticKaitenBlock(
+          orderId,
+          {
+            blocked: body.blocked,
+            blockReason: body.blockReason ?? "",
+            blockedAt: blockedAt ?? null,
+          },
+          OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
+        );
+      });
+    },
+    [toast],
+  );
 
   const handleKanbanBlockToggle = useCallback(() => {
     if (!canManageKanbanBlock) {
       toast(KANBAN_BLOCK_PERM_HINT, true);
       return;
     }
-    if (!card) return;
+    if (!cardId || !card) return;
     if (blocked) {
       const oid = card.linkedOrderId?.trim() || "";
       const hasKaiten =
@@ -1190,8 +1201,39 @@ export function KanbanCardModal({
     card,
     cardId,
     onApply,
+    persistLinkedOrderBlock,
     toast,
   ]);
+
+  if (!cardId || !card) return null;
+
+  const stageDue = getKanbanStageDue(card);
+  const currentColumnIndex = board.columns.findIndex((col) => col.id === found.col.id);
+  const prevColumnTitle =
+    currentColumnIndex > 0 ? board.columns[currentColumnIndex - 1]?.title || "" : "";
+  const nextColumnTitle =
+    currentColumnIndex >= 0 && currentColumnIndex + 1 < board.columns.length
+      ? board.columns[currentColumnIndex + 1]?.title || ""
+      : "";
+  const movePrevTitle = prevColumnTitle
+    ? `Перенести в "${prevColumnTitle}"`
+    : "Карточка уже в первом столбце";
+  const moveNextTitle = nextColumnTitle
+    ? `Перенести в "${nextColumnTitle}"`
+    : "Карточка уже в последнем столбце";
+  const canUsePayrollDone =
+    sessionUserRole === "USER" ||
+    sessionUserRole === "SENIOR_TECHNICIAN" ||
+    sessionUserRole === "OWNER";
+
+  const openBlockPopup = () => {
+    if (!canManageKanbanBlock) {
+      toast(KANBAN_BLOCK_PERM_HINT, true);
+      return;
+    }
+    setBlockReasonDraft("");
+    setBlockPopupOpen(true);
+  };
 
   const confirmBlock = () => {
     if (!canManageKanbanBlock) return;

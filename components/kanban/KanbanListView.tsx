@@ -21,9 +21,10 @@ import {
   kanbanCardHoverPreviewBody,
 } from "@/lib/kanban/kanban-card-hover-preview";
 import type { KanbanMemberPickerMode } from "@/lib/kanban/kanban-card-members-client";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 const LIST_ROW_PX = 68;
+const LIST_ROW_PX_MOBILE = 132;
 const LIST_OVERSCAN = 10;
 import { IconBrick, IconLink, IconListCheck, IconMail, IconPlus, IconUnlock } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
@@ -562,6 +563,7 @@ export function KanbanListView({
   );
   const [listRange, setListRange] = useState({ start: 0, end: 40 });
   const [mobileListScroll, setMobileListScroll] = useState(false);
+  const mobileListRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
     const sync = () => setMobileListScroll(mq.matches);
@@ -569,31 +571,59 @@ export function KanbanListView({
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
+  const listRowPx = mobileListScroll ? LIST_ROW_PX_MOBILE : LIST_ROW_PX;
   const onListScroll = useCallback(
     (el: HTMLDivElement | null) => {
       if (!el) return;
       const start = Math.max(
         0,
-        Math.floor(el.scrollTop / LIST_ROW_PX) - LIST_OVERSCAN,
+        Math.floor(el.scrollTop / listRowPx) - LIST_OVERSCAN,
       );
       const visible =
-        Math.ceil((el.clientHeight || 480) / LIST_ROW_PX) + LIST_OVERSCAN * 2;
+        Math.ceil((el.clientHeight || 480) / listRowPx) + LIST_OVERSCAN * 2;
       const end = Math.min(rows.length, start + visible);
       setListRange((prev) =>
         prev.start === start && prev.end === end ? prev : { start, end },
       );
     },
-    [rows.length],
+    [rows.length, listRowPx],
   );
-  const windowing = !expandedCardId && !mobileListScroll;
+  const updateMobileListRange = useCallback(() => {
+    const el = mobileListRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const relativeScroll = Math.max(0, -rect.top);
+    const start = Math.max(
+      0,
+      Math.floor(relativeScroll / listRowPx) - LIST_OVERSCAN,
+    );
+    const visible =
+      Math.ceil(window.innerHeight / listRowPx) + LIST_OVERSCAN * 2;
+    const end = Math.min(rows.length, start + visible);
+    setListRange((prev) =>
+      prev.start === start && prev.end === end ? prev : { start, end },
+    );
+  }, [rows.length, listRowPx]);
+  useEffect(() => {
+    if (!mobileListScroll || expandedCardId) return;
+    updateMobileListRange();
+    const onScroll = () => updateMobileListRange();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [mobileListScroll, expandedCardId, updateMobileListRange, rows.length]);
+  const windowing = !expandedCardId;
   const listStart = windowing ? Math.min(listRange.start, rows.length) : 0;
   const listEnd = windowing
     ? Math.min(Math.max(listRange.end, listStart), rows.length)
     : rows.length;
   const listSlice = rows.slice(listStart, listEnd);
-  const listPadTop = windowing ? listStart * LIST_ROW_PX : 0;
+  const listPadTop = windowing ? listStart * listRowPx : 0;
   const listPadBottom = windowing
-    ? Math.max(0, (rows.length - listEnd) * LIST_ROW_PX)
+    ? Math.max(0, (rows.length - listEnd) * listRowPx)
     : 0;
 
   const pickerBoard = useMemo(() => {
@@ -621,9 +651,17 @@ export function KanbanListView({
       <div className="flex w-full min-h-0 max-w-full flex-1 flex-col max-sm:flex-none">
         <div
           className="min-h-0 flex-1 overflow-y-auto max-sm:overflow-visible max-sm:flex-none"
-          ref={mobileListScroll ? undefined : onListScroll}
+          ref={(el) => {
+            if (mobileListScroll) {
+              mobileListRef.current = el;
+            } else {
+              onListScroll(el);
+            }
+          }}
           onScroll={
-            mobileListScroll ? undefined : (e) => onListScroll(e.currentTarget)
+            mobileListScroll
+              ? undefined
+              : (e) => onListScroll(e.currentTarget)
           }
         >
         <div className={LIST_TABLE}>

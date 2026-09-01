@@ -76,6 +76,7 @@ export function FinanceOfficeOrdersTable({
   invFrom = null,
   invTo = null,
   toolbar = null,
+  children,
 }: {
   orders: FinanceOfficeOrderTableRow[];
   /** Всего по фильтру (все страницы). Пилюли считают тот же объём отдельно. */
@@ -92,6 +93,8 @@ export function FinanceOfficeOrdersTable({
   invFrom?: string | null;
   invTo?: string | null;
   toolbar?: ReactNode;
+  /** C4 pilot: server-rendered tbody (островки интерактива внутри строк). */
+  children?: ReactNode;
 }) {
   const { user } = useSessionUser();
   const canSeeAdminIndicators = canSeeOrderNotificationKind(
@@ -223,24 +226,25 @@ export function FinanceOfficeOrdersTable({
             />
           </thead>
           <tbody className="[&>tr:first-child>td]:pt-2">
-            {orders.map((o) => (
-              <FinanceOfficeOrderRow
-                key={o.id}
-                o={o}
-                isSelected={selected.has(o.id)}
-                onToggle={toggleOne}
-                tab={tab}
-                periodFrom={periodFrom}
-                periodTo={periodTo}
-                q={q}
-                shipMode={shipMode}
-                shipFrom={shipFrom}
-                shipTo={shipTo}
-                invFrom={invFrom}
-                invTo={invTo}
-                canSeeAdminIndicators={canSeeAdminIndicators}
-              />
-            ))}
+            {children ??
+              orders.map((o) => (
+                <FinanceOfficeOrderRow
+                  key={o.id}
+                  o={o}
+                  isSelected={selected.has(o.id)}
+                  onToggle={toggleOne}
+                  tab={tab}
+                  periodFrom={periodFrom}
+                  periodTo={periodTo}
+                  q={q}
+                  shipMode={shipMode}
+                  shipFrom={shipFrom}
+                  shipTo={shipTo}
+                  invFrom={invFrom}
+                  invTo={invTo}
+                  canSeeAdminIndicators={canSeeAdminIndicators}
+                />
+              ))}
           </tbody>
         </table>
       </div>

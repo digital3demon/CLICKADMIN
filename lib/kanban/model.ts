@@ -69,6 +69,7 @@ export const STORAGE_KEY_V1_LEGACY = "kanban-app-state-v1";
 export const STORAGE_KEY_DEMO = "kanban-app-state-v4-demo";
 let memoryStateRawLive: string | null = null;
 let memoryStateRawDemo: string | null = null;
+let memoryStateLiveObj: KanbanAppState | null = null;
 
 export function kanbanPersistenceKey(isDemo: boolean): string {
   return isDemo ? STORAGE_KEY_DEMO : STORAGE_KEY;
@@ -81,6 +82,7 @@ export function clearKanbanBrowserStorage(isDemo: boolean): void {
     return;
   }
   memoryStateRawLive = null;
+  memoryStateLiveObj = null;
 }
 /** Максимальный размер файла во вложениях карточки Kanban. */
 export const MAX_FILE_BYTES = 300 * 1024 * 1024;
@@ -1862,6 +1864,9 @@ export function demoKanbanDefaultState(): KanbanAppState {
 export function loadKanbanState(isDemo = false): KanbanAppState {
   if (typeof window === "undefined") return defaultAppState();
   try {
+    if (!isDemo && memoryStateLiveObj) {
+      return memoryStateLiveObj;
+    }
     let raw = isDemo ? memoryStateRawDemo : memoryStateRawLive;
     if (!raw) return defaultAppState();
     const data = JSON.parse(raw) as Record<string, unknown>;
@@ -1933,12 +1938,12 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
 }
 
 export function saveKanbanState(state: KanbanAppState, isDemo = false) {
-  const raw = JSON.stringify(state);
   if (isDemo) {
-    memoryStateRawDemo = raw;
+    memoryStateRawDemo = JSON.stringify(state);
     return;
   }
-  memoryStateRawLive = raw;
+  memoryStateLiveObj = state;
+  memoryStateRawLive = null;
   persistKanbanCardHeadsCache(state);
 }
 
@@ -2054,6 +2059,25 @@ export function findCard(
     if (c) return { col, card: c };
   }
   return null;
+}
+
+/** Карточка на доске или в СТОП (для модалки и правок без возврата на дорожку). */
+export function findCardIncludingStopped(
+  board: KanbanBoard,
+  cardId: string,
+): { col: KanbanColumn; card: KanbanCard } | null {
+  const onBoard = findCard(board, cardId);
+  if (onBoard) return onBoard;
+  const row = (board.stoppedCards || []).find((x) => x.card.id === cardId);
+  if (!row) return null;
+  return {
+    col: {
+      id: row.sourceColumnId || "stop",
+      title: row.sourceColumnTitle || "СТОП",
+      cards: [],
+    },
+    card: row.card,
+  };
 }
 
 /** Карточка на любой доске в состоянии приложения. */

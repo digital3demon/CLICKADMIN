@@ -4,6 +4,7 @@ import {
   type KaitenTrackLane,
   OrderStatus,
   Prisma,
+  type OrderAttachmentScope,
 } from "@prisma/client";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
@@ -102,6 +103,59 @@ const LINKED_ORDER_SELECT = {
   },
 } as const;
 
+/** List-hydrate: без вложений, длинных текстов и зеркала описания — detail=1 в модалке. */
+const LINKED_ORDER_SELECT_SLIM = {
+  id: true,
+  orderNumber: true,
+  doctorId: true,
+  patientName: true,
+  dueDate: true,
+  appointmentDate: true,
+  dueToAdminsAt: true,
+  kaitenAdminDueHasTime: true,
+  kaitenCardTitleLabel: true,
+  kaitenCardTypeId: true,
+  kaitenTrackLane: true,
+  isUrgent: true,
+  urgentCoefficient: true,
+  kaitenCardId: true,
+  kaitenColumnTitle: true,
+  kaitenCardSortOrder: true,
+  kaitenCardTitleMirror: true,
+  kaitenBlocked: true,
+  kaitenBlockReason: true,
+  kaitenBlockedAt: true,
+  demoKanbanColumn: true,
+  _count: {
+    select: { sourceEmailLinks: true },
+  },
+  continuesFromOrder: {
+    select: {
+      id: true,
+      orderNumber: true,
+      kaitenCardId: true,
+    },
+  },
+  continuationOrders: {
+    where: activeContinuationChildrenWhere,
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      id: true,
+      orderNumber: true,
+      kaitenCardId: true,
+    },
+  },
+  invoiceAttachmentId: true,
+  constructions: {
+    where: { category: ConstructionCategory.PRICE_LIST },
+    orderBy: { sortOrder: "asc" as const },
+    take: 1,
+    select: {
+      priceListItemId: true,
+    },
+  },
+} as const;
+
 function parseLinkedOrderIdsParam(raw: string | null): string[] {
   if (!raw?.trim()) return [];
   const seen = new Set<string>();
@@ -132,6 +186,8 @@ export async function GET(request: Request) {
     const boardOrderIds = parseLinkedOrderIdsParam(url.searchParams.get("ids"));
     const searchQ = url.searchParams.get("q")?.replace(/\s+/g, " ").trim() ?? "";
     const hydrateLanes = parseKanbanHydrateLanesParam(url.searchParams.get("lanes"));
+    const detailHydrate = url.searchParams.get("detail") === "1";
+    const rowSelect = detailHydrate ? LINKED_ORDER_SELECT : LINKED_ORDER_SELECT_SLIM;
     const [ordersPrisma, clientsPrisma, pricingPrisma] = await Promise.all([
       getOrdersPrisma(),
       getClientsPrisma(),
@@ -170,7 +226,7 @@ export async function GET(request: Request) {
           where: linkedOrdersWhere,
           orderBy: { createdAt: "desc" },
           take: 200,
-          select: LINKED_ORDER_SELECT,
+          select: rowSelect,
         });
     const recentIds = new Set(recentRows.map((r) => r.id));
     const missingBoardIds = boardOrderIds.filter((id) => !recentIds.has(id));
@@ -178,7 +234,7 @@ export async function GET(request: Request) {
       missingBoardIds.length > 0
         ? await ordersPrisma.order.findMany({
             where: { ...hydrateWhere, id: { in: missingBoardIds } },
-            select: LINKED_ORDER_SELECT,
+            select: rowSelect,
           })
         : [];
     /**
@@ -197,7 +253,7 @@ export async function GET(request: Request) {
                   },
                   orderBy: { createdAt: "desc" },
                   take: KANBAN_LANE_HYDRATE_TAKE,
-                  select: LINKED_ORDER_SELECT,
+                  select: rowSelect,
                 }),
               ),
             )
@@ -217,7 +273,7 @@ export async function GET(request: Request) {
             },
             orderBy: { createdAt: "desc" },
             take: 80,
-            select: LINKED_ORDER_SELECT,
+            select: rowSelect,
           });
         }
         const searchTextWhere = await ordersSearchWhere(searchQ, tenantId);
@@ -228,7 +284,7 @@ export async function GET(request: Request) {
           },
           orderBy: { createdAt: "desc" },
           take: 120,
-          select: LINKED_ORDER_SELECT,
+          select: rowSelect,
         });
       } catch (e) {
         console.error("[kanban/linked-orders] search extra", e);
@@ -286,15 +342,33 @@ export async function GET(request: Request) {
 
     const orders: KaitenLinkedOrderForKanban[] = rows.map((o) => {
       const invId = o.invoiceAttachmentId;
-      const attachments = o.attachments
-        .filter((a) => isOrderWorkAttachment(a, invId))
-        .map((a) => ({
-          id: a.id,
-          fileName: a.fileName,
-          mimeType: a.mimeType,
-          size: a.size,
-          createdAt: a.createdAt.toISOString(),
-        }));
+      const fullRow = detailHydrate && "attachments" in o;
+      const full = fullRow
+        ? (o as (typeof rows)[number] & {
+            attachments: Array<{
+              id: string;
+              fileName: string;
+              mimeType: string | null;
+              size: number;
+              createdAt: Date;
+              scope: OrderAttachmentScope;
+            }>;
+            clientOrderText: string | null;
+            notes: string | null;
+            kaitenCardDescriptionMirror: string | null;
+          })
+        : null;
+      const attachments = full
+        ? full.attachments
+            .filter((a) => isOrderWorkAttachment(a, invId))
+            .map((a) => ({
+              id: a.id,
+              fileName: a.fileName,
+              mimeType: a.mimeType,
+              size: a.size,
+              createdAt: a.createdAt.toISOString(),
+            }))
+        : undefined;
       return {
         id: o.id,
         orderNumber: o.orderNumber,
@@ -319,11 +393,13 @@ export async function GET(request: Request) {
             ? o.kaitenCardSortOrder
             : null,
         kaitenCardTitleMirror: o.kaitenCardTitleMirror ?? null,
-        kaitenCardDescriptionMirror: bestKaitenDescriptionMirrorForKanban(
-          o.id,
-          o.kaitenCardId ?? null,
-          o.kaitenCardDescriptionMirror,
-        ),
+        kaitenCardDescriptionMirror: full
+          ? bestKaitenDescriptionMirrorForKanban(
+              o.id,
+              o.kaitenCardId ?? null,
+              full.kaitenCardDescriptionMirror,
+            )
+          : null,
         kaitenBlocked: o.kaitenBlocked,
         kaitenBlockReason: o.kaitenBlockReason,
         kaitenBlockedAt: o.kaitenBlockedAt
@@ -334,8 +410,8 @@ export async function GET(request: Request) {
           o.constructions[0]?.priceListItemId
             ? (priceItemById.get(o.constructions[0].priceListItemId)?.name?.trim() || null)
             : null,
-        clientOrderText: o.clientOrderText ?? null,
-        notes: o.notes ?? null,
+        clientOrderText: full ? (full.clientOrderText ?? null) : null,
+        notes: full ? (full.notes ?? null) : null,
         continuesFromOrder: o.continuesFromOrder
           ? {
               id: o.continuesFromOrder.id,
@@ -353,14 +429,19 @@ export async function GET(request: Request) {
       };
     });
 
+    if (detailHydrate) {
     void (async () => {
       try {
         const auth = getKaitenRestAuth();
         if (!auth) return;
         const missingMirror = rows
-          .filter(
-            (o) => o.kaitenCardId != null && !o.kaitenCardDescriptionMirror?.trim(),
-          )
+          .filter((row) => {
+            if (row.kaitenCardId == null || !("kaitenCardDescriptionMirror" in row)) {
+              return false;
+            }
+            const mirror = row.kaitenCardDescriptionMirror;
+            return typeof mirror !== "string" || !mirror.trim();
+          })
           .map((o) => o.id)
           .slice(0, 5);
         if (missingMirror.length > 0) {
@@ -386,6 +467,7 @@ export async function GET(request: Request) {
         console.error("[kanban/linked-orders] kaiten file import", e);
       }
     })();
+    }
 
     void (async () => {
       try {

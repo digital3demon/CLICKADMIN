@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useKanbanTimerNow } from "@/lib/kanban/use-kanban-timer-now";
 import type { KanbanCard } from "@/lib/kanban/types";
 import {
   formatKanbanTimerCountdown,
@@ -44,13 +45,8 @@ export function KanbanTimerIcon({
       Number.isFinite(card.timerDurationMs) &&
       card.timerDurationMs > 0,
   );
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!started || card.timerFrozenAt) return;
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [started, card.timerFrozenAt]);
+  const ticking = started && !card.timerFrozenAt;
+  const now = useKanbanTimerNow(ticking);
 
   const displayNow = useMemo(
     () => kanbanCardTimerDisplayNowMs(card.timerFrozenAt, now),

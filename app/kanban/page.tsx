@@ -1,6 +1,6 @@
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
-import { KanbanApp } from "@/components/kanban/KanbanApp";
+import { KanbanPageClient } from "@/components/kanban/KanbanPageClient";
 import { getPrisma } from "@/lib/get-prisma";
 import { loadKaitenIntegrationTenantState } from "@/lib/kaiten-integration/settings";
 
@@ -32,7 +32,7 @@ export default async function KanbanPage() {
   }
   return (
     <div className="kanban-root kanban-board-scale h-dvh min-h-0 w-full overflow-hidden">
-      <KanbanApp
+      <KanbanPageClient
         isDemo={isDemo}
         kaitenIntegrationActive={kaitenIntegrationActive}
       />

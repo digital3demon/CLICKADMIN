@@ -130,6 +130,7 @@ import {
 } from "@/lib/kanban/aggregate-card-drag";
 import { applyKanbanCardTrackLaneChange } from "@/lib/kanban/apply-card-track-lane";
 import { kanbanLinkedOrdersPullIntervalMs } from "@/lib/kanban-linked-pull-ms";
+import { useVisibleIntervalPolls } from "@/lib/kanban/use-visible-interval-polls";
 import { canUseKanbanActualAppointmentFilter } from "@/lib/auth/permissions";
 import {
   applyKanbanActualAppointmentView,
@@ -967,103 +968,83 @@ export function KanbanApp({
   }, [isDemo]);
 
   useEffect(() => {
-    if (isDemo) {
-      archiveSettingsReadyRef.current = true;
-      return;
-    }
-    let cancelled = false;
-    const pullArchiveSettings = async () => {
-      const remote = await readClientState<unknown>("tenant", KANBAN_ARCHIVE_SETTINGS_KEY);
-      if (cancelled) return;
-      if (remote) {
-        lastArchiveSettingsSigRef.current = JSON.stringify(remote);
-        setAppState((prev) => (prev ? applyKanbanArchiveSettings(prev, remote) : prev));
-      }
-      if (!archiveSettingsReadyRef.current) {
+    if (!isDemo) return;
+    archiveSettingsReadyRef.current = true;
+    setCardTypeLanesReady(true);
+  }, [isDemo]);
+
+  useVisibleIntervalPolls([
+    {
+      id: "kanban-archive-settings",
+      intervalMs: 15_000,
+      enabled: !isDemo,
+      run: async () => {
+        const remote = await readClientState<unknown>(
+          "tenant",
+          KANBAN_ARCHIVE_SETTINGS_KEY,
+        );
+        if (remote) {
+          lastArchiveSettingsSigRef.current = JSON.stringify(remote);
+          setAppState((prev) =>
+            prev ? applyKanbanArchiveSettings(prev, remote) : prev,
+          );
+        }
         archiveSettingsReadyRef.current = true;
-      }
-    };
-    void pullArchiveSettings();
-    const onVisibleOrFocus = () => {
-      if (document.visibilityState !== "visible") return;
-      void pullArchiveSettings();
-    };
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void pullArchiveSettings();
-    }, 15_000);
-    document.addEventListener("visibilitychange", onVisibleOrFocus);
-    window.addEventListener("focus", onVisibleOrFocus);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", onVisibleOrFocus);
-      window.removeEventListener("focus", onVisibleOrFocus);
-    };
-  }, [isDemo]);
-
-  useEffect(() => {
-    if (isDemo) return;
-    let cancelled = false;
-    const pullAutomations = async () => {
-      const remote = await readClientState<unknown>("tenant", KANBAN_AUTOMATIONS_KEY);
-      if (cancelled || !remote) return;
-      setAppState((prev) => (prev ? applyKanbanAutomations(prev, remote) : prev));
-    };
-    void pullAutomations();
-    const onVisibleOrFocus = () => {
-      if (document.visibilityState !== "visible") return;
-      void pullAutomations();
-    };
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void pullAutomations();
-    }, 15_000);
-    document.addEventListener("visibilitychange", onVisibleOrFocus);
-    window.addEventListener("focus", onVisibleOrFocus);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", onVisibleOrFocus);
-      window.removeEventListener("focus", onVisibleOrFocus);
-    };
-  }, [isDemo]);
-
-  useEffect(() => {
-    if (isDemo) {
-      setCardTypeLanesReady(true);
-      return;
-    }
-    let cancelled = false;
-    const pullCardTypeLanes = async () => {
-      const remote = await readClientState<unknown>("tenant", KANBAN_CARD_TYPE_LANES_KEY);
-      if (cancelled) return;
-      const merged = mergeCardTypeLaneSnapshots(remote, lastCardTypeLanesRef.current);
-      lastCardTypeLanesRef.current = merged;
-      lastCardTypeLanesSigRef.current = JSON.stringify(merged);
-      if (merged.types.length > 0) {
-        setAppState((prev) => (prev ? applyKanbanCardTypeLanes(prev, merged) : prev));
-      }
-      setCardTypeLanesReady(true);
-    };
-    void pullCardTypeLanes();
-    const onVisibleOrFocus = () => {
-      if (document.visibilityState !== "visible") return;
-      void pullCardTypeLanes();
-    };
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void pullCardTypeLanes();
-    }, 15_000);
-    document.addEventListener("visibilitychange", onVisibleOrFocus);
-    window.addEventListener("focus", onVisibleOrFocus);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", onVisibleOrFocus);
-      window.removeEventListener("focus", onVisibleOrFocus);
-    };
-  }, [isDemo]);
+      },
+    },
+    {
+      id: "kanban-automations",
+      intervalMs: 15_000,
+      enabled: !isDemo,
+      run: async () => {
+        const remote = await readClientState<unknown>(
+          "tenant",
+          KANBAN_AUTOMATIONS_KEY,
+        );
+        if (!remote) return;
+        setAppState((prev) => (prev ? applyKanbanAutomations(prev, remote) : prev));
+      },
+    },
+    {
+      id: "kanban-card-type-lanes",
+      intervalMs: 15_000,
+      enabled: !isDemo,
+      run: async () => {
+        const remote = await readClientState<unknown>(
+          "tenant",
+          KANBAN_CARD_TYPE_LANES_KEY,
+        );
+        const merged = mergeCardTypeLaneSnapshots(
+          remote,
+          lastCardTypeLanesRef.current,
+        );
+        lastCardTypeLanesRef.current = merged;
+        lastCardTypeLanesSigRef.current = JSON.stringify(merged);
+        if (merged.types.length > 0) {
+          setAppState((prev) =>
+            prev ? applyKanbanCardTypeLanes(prev, merged) : prev,
+          );
+        }
+        setCardTypeLanesReady(true);
+      },
+    },
+    {
+      id: "kanban-mirror",
+      intervalMs: kanbanLinkedOrdersPullIntervalMs(),
+      enabled: kanbanStateReady,
+      run: () => {
+        void syncKanbanMirrorFromApi();
+      },
+    },
+    {
+      id: "kanban-crm-tiles",
+      intervalMs: kanbanLinkedOrdersPullIntervalMs(),
+      enabled: !isDemo && kanbanStateReady,
+      run: () => {
+        void syncCrmBoardTiles();
+      },
+    },
+  ]);
 
   useEffect(() => {
     if (!appState || !kanbanStateReady || kanbanPersistPausedRef.current) return;
@@ -1200,24 +1181,6 @@ export function KanbanApp({
   }, [appState, syncKanbanMirrorFromApi]);
 
   useEffect(() => {
-    if (!kanbanStateReady) return;
-    const pullIfVisible = () => {
-      if (document.visibilityState === "visible") void syncKanbanMirrorFromApi();
-    };
-    const iv = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void syncKanbanMirrorFromApi();
-    }, kanbanLinkedOrdersPullIntervalMs());
-    document.addEventListener("visibilitychange", pullIfVisible);
-    window.addEventListener("focus", pullIfVisible);
-    return () => {
-      window.clearInterval(iv);
-      document.removeEventListener("visibilitychange", pullIfVisible);
-      window.removeEventListener("focus", pullIfVisible);
-    };
-  }, [kanbanStateReady, syncKanbanMirrorFromApi]);
-
-  useEffect(() => {
     if (isDemo || !appState) return;
     const bid = appState.activeBoardId;
     if (boardTilesBoardRef.current !== bid) {
@@ -1242,21 +1205,6 @@ export function KanbanApp({
       void syncCrmBoardTiles({ full: true });
     }
   }, [appState?.activeBoardId, appState, isDemo, syncCrmBoardTiles]);
-
-  useEffect(() => {
-    if (isDemo || !kanbanStateReady) return;
-    const pull = () => {
-      if (document.visibilityState === "visible") void syncCrmBoardTiles();
-    };
-    const iv = window.setInterval(pull, kanbanLinkedOrdersPullIntervalMs());
-    document.addEventListener("visibilitychange", pull);
-    window.addEventListener("focus", pull);
-    return () => {
-      window.clearInterval(iv);
-      document.removeEventListener("visibilitychange", pull);
-      window.removeEventListener("focus", pull);
-    };
-  }, [isDemo, kanbanStateReady, syncCrmBoardTiles]);
 
   useEffect(() => {
     if (!kanbanStateReady) return;
@@ -3838,6 +3786,7 @@ export function KanbanApp({
           </div>
       </div>
 
+      {cardModalId ? (
       <KanbanCardModal
         cardId={cardModalId}
         board={modalBoard ?? board}
@@ -3898,6 +3847,7 @@ export function KanbanApp({
         onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}
         isDemo={isDemo}
       />
+      ) : null}
 
       {moveCardId && appState.boards.length > 1 && (
         <div

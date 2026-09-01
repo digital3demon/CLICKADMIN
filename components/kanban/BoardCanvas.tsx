@@ -19,6 +19,7 @@ import {
 } from "@/lib/kanban/card-modal-animation";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import { isKanbanCardTimerExpired } from "@/lib/kanban/kanban-card-timer";
+import { useKanbanTimerNow } from "@/lib/kanban/use-kanban-timer-now";
 import {
   annulKanbanStageTimerOnMemberAdvance,
   cardMatchesFilters,
@@ -136,7 +137,7 @@ const CARD_MENU_WIDTH = 220;
  * Соотношение сторон width/height = √2.
  */
 const KANBAN_BOARD_CARD_FRAME_CLASS =
-  "w-full min-w-0 shrink-0 touch-pan-x touch-pan-y";
+  "w-full min-w-0 shrink-0 touch-pan-x touch-pan-y [content-visibility:auto] [contain-intrinsic-size:auto_88px]";
 /** Тело карточки без надстройки (стоп). Надстройка — плюс к высоте, не внутри пропорции. */
 const KANBAN_BOARD_CARD_BODY_ASPECT_CLASS =
   "flex min-h-0 w-full flex-col overflow-hidden aspect-[1414/1000]";
@@ -211,13 +212,8 @@ function scrollContainerAncestors(start: HTMLElement | null): HTMLElement[] {
 }
 
 function useKanbanCardTimerExpired(card: KanbanCard): boolean {
-  const [now, setNow] = useState(() => Date.now());
   const live = Boolean(card.timerStartedAt && card.timerDurationMs && !card.timerFrozenAt);
-  useEffect(() => {
-    if (!live) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [live, card.timerStartedAt, card.timerDurationMs]);
+  const now = useKanbanTimerNow(live);
   return isKanbanCardTimerExpired(card, now);
 }
 
