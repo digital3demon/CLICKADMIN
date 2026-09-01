@@ -691,6 +691,13 @@ label {
     min-height: 44px;
     min-width: 44px;
   }
+
+  /* Список канбана: компактные контролы без раздувания до 44px */
+  .kanban-list-view [data-list-row-control] button,
+  .kanban-list-view [data-list-row-control] input {
+    min-height: 0;
+    min-width: 0;
+  }
 }
 
 /* Плавный скролл везде */

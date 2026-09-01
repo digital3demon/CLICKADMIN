@@ -3,10 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, memo, type MouseEvent } from "react";
+import { OrderKaitenQrModal } from "@/components/orders/OrderKaitenQrModal";
+import { OrderListCardTypeTag } from "@/components/orders/OrderListCardTypeTag";
+import { OrderListKaitenColumnTag } from "@/components/orders/OrderListKaitenColumnTag";
 import { OrderListOrderChatCell } from "@/components/orders/OrderListOrderChatCell";
+import { OrderNarjadPrintTrigger } from "@/components/orders/OrderNarjadPrintTrigger";
 import { OrderShippedToggle } from "@/components/orders/OrderShippedToggle";
+import { OrderStickerPrintLink } from "@/components/orders/OrderStickerPrintLink";
 import { FinanceOfficeInvoiceIssuedCell } from "@/components/finance-office/FinanceOfficeInvoiceIssuedCell";
 import { OrderListTagsCell } from "@/components/orders/OrderListTagsCell";
+import {
+  ORDER_LIST_MOBILE_ACTION_BTN,
+  ORDER_LIST_MOBILE_TAG_ADD_BTN,
+} from "@/lib/order-list-mobile-ui";
 import {
   mergeOrderListRowClass,
   orderListMobileCardAccentClass,
@@ -40,6 +49,59 @@ function targetInsideInteractive(target: EventTarget | null) {
     el.closest(
       "a, button, input, select, textarea, label, [role='button'], [role='combobox'], [data-row-click-ignore]",
     ),
+  );
+}
+
+function formatFinanceCardDateTime(iso: string | null): {
+  date: string;
+  time: string;
+} | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    date: d.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+    }),
+    time: d.toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+  };
+}
+
+function FinanceMobileReadonlyDate({
+  label,
+  iso,
+  tone,
+}: {
+  label: string;
+  iso: string | null;
+  tone: "lab" | "appointment";
+}) {
+  const parts = formatFinanceCardDateTime(iso);
+  const borderClass =
+    tone === "lab"
+      ? "border-teal-500/45 text-teal-800 dark:text-teal-200"
+      : "border-amber-500/45 text-amber-800 dark:text-amber-200";
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <span className="w-6 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+        {label}
+      </span>
+      <div
+        className={`min-w-[3.1rem] rounded-md border px-1 py-0.5 text-center leading-tight ${borderClass}`}
+      >
+        <div className="text-[10px] font-semibold tabular-nums">
+          {parts?.date ?? "—"}
+        </div>
+        {parts?.time ? (
+          <div className="text-[9px] tabular-nums opacity-85">{parts.time}</div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -135,6 +197,7 @@ const TagsCell = memo(function TagsCell({
   shipTo,
   invFrom,
   invTo,
+  addButtonClassName,
 }: {
   o: FinanceOfficeOrderTableRow;
   tab: string;
@@ -146,6 +209,7 @@ const TagsCell = memo(function TagsCell({
   shipTo: string | null;
   invFrom: string | null;
   invTo: string | null;
+  addButtonClassName?: string;
 }) {
   return (
     <OrderListTagsCell
@@ -199,6 +263,7 @@ const TagsCell = memo(function TagsCell({
       clinicWorksWithEdo={o.clinicWorksWithEdo}
       clinicUsesPaperDocs={o.clinicUsesPaperDocs}
       omitKaitenColumnTag
+      addButtonClassName={addButtonClassName}
     />
   );
 });
@@ -353,8 +418,9 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
     canSeeAdminIndicators,
   };
   const d = deriveRowChrome(chrome);
-  const { workSent, clinicName, doctorName, patientName, labDueLabel, appointmentLabel } =
-    d;
+  const { workSent, clinicName, doctorName, patientName } = d;
+  const clinicAddress = o.clinic?.address?.trim() || undefined;
+  const cardTypeName = o.kaitenCardType?.name ?? null;
 
   return (
     <Fragment>
@@ -375,7 +441,7 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
       <tr className="border-b border-[var(--card-border)] shell-laptop:hidden print:hidden">
         <td colSpan={99} className="p-0">
           <div
-            className={["cursor-pointer px-2.5 py-2", d.mobileCardAccent]
+            className={["cursor-pointer p-3", d.mobileCardAccent]
               .filter(Boolean)
               .join(" ")}
             role="link"
@@ -398,84 +464,72 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
               router.push(orderPathById(o.id));
             }}
           >
-            <div className="mb-1 flex min-w-0 items-center gap-1.5">
+            <div className="mb-2 flex min-w-0 items-center gap-2">
               <Link
                 prefetch={false}
                 href={orderPathById(o.id)}
-                className="shrink-0 font-mono text-[0.95rem] font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
+                className="shrink-0 font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
                 title={`${o.orderNumber} — открыть наряд`}
               >
                 № {o.orderNumber}
               </Link>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden">
+                <OrderListKaitenColumnTag
+                  kaitenCardId={o.kaitenCardId}
+                  demoKanbanColumn={o.demoKanbanColumn}
+                  demoCardTypeName={cardTypeName}
+                  kaitenColumnTitle={o.kaitenColumnTitle}
+                  kaitenTrackLane={o.kaitenTrackLane}
+                  kaitenBlocked={o.kaitenBlocked === true}
+                  kaitenBlockReason={o.kaitenBlockReason}
+                  placement="underOrderNumber"
+                  boardLayout="inline"
+                  includeCardType={false}
+                />
+                <OrderListCardTypeTag
+                  name={cardTypeName}
+                  placement="underOrderNumber"
+                />
+              </div>
+            </div>
+
+            <div className="mb-2.5 space-y-0.5">
+              <div className="truncate text-sm font-semibold text-[var(--app-text)]">
+                {[patientName, doctorName].filter(Boolean).join(" · ")}
+              </div>
+              {clinicName ? (
+                <div className="truncate text-xs font-normal text-[var(--text-muted)]">
+                  {clinicName}
+                </div>
+              ) : null}
+              {clinicAddress ? (
+                <div
+                  className={`truncate text-xs ${crmCityAddressTextClass(clinicAddress)}`}
+                  title={clinicAddress}
+                >
+                  {clinicAddress}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex min-w-0 items-center gap-1.5">
               <div
-                className="ms-auto flex shrink-0 items-center gap-1.5"
+                className="flex shrink-0 items-center gap-1"
                 data-row-click-ignore
                 onClick={(e) => e.stopPropagation()}
               >
-                <label className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
+                <label
+                  className={`${ORDER_LIST_MOBILE_ACTION_BTN} cursor-pointer`}
+                  title={`Выбрать наряд ${o.orderNumber}`}
+                >
                   <input
                     type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
+                    className="h-4 w-4 rounded border-[var(--input-border)]"
                     checked={isSelected}
                     onChange={(e) => onToggle(o.id, e.target.checked)}
                     aria-label={`Выбрать наряд ${o.orderNumber}`}
                   />
                 </label>
-                <div className="[&_button]:h-8 [&_button]:min-h-8 [&_button]:min-w-8 [&_button]:w-8">
-                  <OrderShippedToggle
-                    orderId={o.id}
-                    shipped={workSent}
-                    shippedAtIso={o.adminShippedAt}
-                    readOnly
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={`break-words text-xs ${
-                o.clinic
-                  ? financeOfficeClinicNameClass(o.clinic.address)
-                  : "text-[var(--text-secondary)]"
-              }`}
-              title={o.clinic?.address?.trim() || undefined}
-            >
-              {clinicName}
-            </div>
-
-            <div className="mb-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 text-sm font-semibold leading-snug text-[var(--app-text)]">
-              {doctorName ? <span>{doctorName}</span> : null}
-              {doctorName && patientName ? (
-                <span className="font-normal text-[var(--text-muted)]">·</span>
-              ) : null}
-              {patientName ? <span>{patientName}</span> : null}
-              {labDueLabel || appointmentLabel || o.invoiceIssuedAt ? (
-                <span className="ms-auto text-[11px] font-normal text-[var(--text-muted)]">
-                  {labDueLabel ? `Лаб ${labDueLabel}` : null}
-                  {labDueLabel && appointmentLabel ? " · " : null}
-                  {appointmentLabel ? `Зап. ${appointmentLabel}` : null}
-                  {(labDueLabel || appointmentLabel) && o.invoiceIssuedAt
-                    ? " · "
-                    : null}
-                  {o.invoiceIssuedAt
-                    ? `Счёт ${formatFinanceCardDate(o.invoiceIssuedAt)}`
-                    : null}
-                </span>
-              ) : null}
-            </div>
-
-            {o.counterpartyRequisitesText?.trim() ? (
-              <div className="mb-1 break-words text-[11px] leading-snug text-[var(--text-muted)]">
-                {o.counterpartyRequisitesText.trim()}
-              </div>
-            ) : null}
-
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div
-                className="shrink-0 [&_button]:h-8 [&_button]:min-h-8 [&_button]:min-w-8"
-                data-row-click-ignore
-                onClick={(e) => e.stopPropagation()}
-              >
                 <OrderListOrderChatCell
                   orderId={o.id}
                   orderNumber={o.orderNumber}
@@ -485,27 +539,97 @@ export const FinanceOfficeOrderRow = memo(function FinanceOfficeOrderRow({
                     canSeeAdminIndicators && o.listKaitenLabMentionHighlight
                   }
                   embedded
+                  buttonClassName={`${ORDER_LIST_MOBILE_ACTION_BTN}${
+                    canSeeAdminIndicators && o.listKaitenLabMentionHighlight
+                      ? " animate-pulse text-amber-500 dark:text-amber-400"
+                      : ""
+                  }`}
+                />
+                {!workSent ? (
+                  <OrderNarjadPrintTrigger
+                    orderId={o.id}
+                    variant="icon"
+                    className={ORDER_LIST_MOBILE_ACTION_BTN}
+                    title="Печать наряда (PDF) — диалог печати"
+                  />
+                ) : null}
+                <OrderStickerPrintLink
+                  orderId={o.id}
+                  className={ORDER_LIST_MOBILE_ACTION_BTN}
+                />
+                <OrderKaitenQrModal
+                  orderId={o.id}
+                  compact
+                  buttonClassName={ORDER_LIST_MOBILE_ACTION_BTN}
                 />
               </div>
               <div
-                className="min-w-0 flex-1 text-xs text-[var(--text-secondary)] [&_.order-list-tags-pack]:items-center"
+                className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-x-auto"
                 data-row-click-ignore
                 onClick={(e) => e.stopPropagation()}
               >
-                <TagsCell
-                  o={o}
-                  tab={tab}
-                  periodFrom={periodFrom}
-                  periodTo={periodTo}
-                  q={q}
-                  shipMode={shipMode}
-                  shipFrom={shipFrom}
-                  shipTo={shipTo}
-                  invFrom={invFrom}
-                  invTo={invTo}
+                <FinanceMobileReadonlyDate
+                  label="Лаб"
+                  iso={o.dueDate}
+                  tone="lab"
+                />
+                <FinanceMobileReadonlyDate
+                  label="Зап"
+                  iso={o.appointmentDate ?? o.dueToAdminsAt}
+                  tone="appointment"
+                />
+                <div className="flex min-w-0 items-center gap-1">
+                  <span className="w-6 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Сч
+                  </span>
+                  <div className="min-w-[3.75rem]">
+                    <FinanceOfficeInvoiceIssuedCell
+                      orderId={o.id}
+                      issuedAtIso={o.invoiceIssuedAt}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div
+                className="shrink-0"
+                data-row-click-ignore
+                onClick={(e) => e.stopPropagation()}
+              >
+                <OrderShippedToggle
+                  orderId={o.id}
+                  shipped={workSent}
+                  shippedAtIso={o.adminShippedAt}
+                  readOnly
+                  layout="mobile"
                 />
               </div>
             </div>
+
+            <div
+              className="mt-2.5 text-xs text-[var(--text-secondary)]"
+              data-row-click-ignore
+              onClick={(e) => e.stopPropagation()}
+            >
+              <TagsCell
+                o={o}
+                tab={tab}
+                periodFrom={periodFrom}
+                periodTo={periodTo}
+                q={q}
+                shipMode={shipMode}
+                shipFrom={shipFrom}
+                shipTo={shipTo}
+                invFrom={invFrom}
+                invTo={invTo}
+                addButtonClassName={ORDER_LIST_MOBILE_TAG_ADD_BTN}
+              />
+            </div>
+
+            {o.counterpartyRequisitesText?.trim() ? (
+              <div className="mt-2 break-words text-[11px] leading-snug text-[var(--text-muted)]">
+                {o.counterpartyRequisitesText.trim()}
+              </div>
+            ) : null}
           </div>
         </td>
       </tr>

@@ -50,7 +50,7 @@ export function OrderNarjadPrintTrigger({
       type="button"
       className={
         variant === "icon"
-          ? [ICON_TABLE_CLASS, className].filter(Boolean).join(" ")
+          ? className ?? ICON_TABLE_CLASS
           : className
       }
       title={title}
@@ -58,7 +58,7 @@ export function OrderNarjadPrintTrigger({
       onClick={() => void printOrderNarjadPdf(orderId)}
     >
       {variant === "icon" ? (
-        <PrintNarjadPdfIcon className="h-3.5 w-3.5" />
+        <PrintNarjadPdfIcon className={className ? "h-4 w-4" : "h-3.5 w-3.5"} />
       ) : (
         children
       )}

@@ -142,7 +142,7 @@ function ListMemberAddButton({
       aria-label={title}
       className={`box-border inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-dashed border-[var(--kanban-text-muted)] p-0 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40 ${
         compact
-          ? "!h-6 !w-6 !min-h-6 !min-w-6 !max-h-6 !max-w-6"
+          ? "!h-3 !w-3 !min-h-3 !min-w-3 !max-h-3 !max-w-3"
           : "h-6 w-6 min-h-6 min-w-6 max-h-6 max-w-6"
       }`}
       onPointerDown={(e) => e.stopPropagation()}
@@ -151,7 +151,7 @@ function ListMemberAddButton({
         onClick();
       }}
     >
-      <IconPlus className={compact ? "h-2 w-2" : "h-2.5 w-2.5"} />
+      <IconPlus className={compact ? "h-1.5 w-1.5" : "h-2.5 w-2.5"} />
     </button>
   );
 }
@@ -202,7 +202,7 @@ function ListMembersCell({
             <span
               className={`inline-flex shrink-0 items-center justify-center rounded-full bg-black/[0.08] px-1 font-semibold text-[var(--kanban-text-muted)] dark:bg-white/[0.1] ${
                 isMobileList
-                  ? "h-5 min-w-5 text-[0.45rem]"
+                  ? "h-2.5 min-w-2.5 text-[0.4rem]"
                   : "h-7 min-w-7 text-[0.5rem]"
               }`}
               title={`Ещё ${overflow}`}
@@ -350,6 +350,7 @@ function ListStageDueCell({
     >
       <input
         type="date"
+        data-no-touch-expand
         disabled={!canEditDueDate || !onDueChange}
         value={stageDue}
         onChange={(e) => onDueChange?.(e.target.value)}
@@ -360,7 +361,7 @@ function ListStageDueCell({
         }
         className={`${
           compact
-            ? "h-7 min-h-7 w-[6.75rem] min-w-0 px-1.5 py-0 text-[0.65rem] font-semibold"
+            ? "h-3.5 min-h-3.5 w-[3.4rem] min-w-0 px-1 py-0 text-[0.58rem] font-semibold"
             : "h-7 min-h-7 w-[7.1rem] px-1.5 py-0.5 text-[0.65rem]"
         } max-w-full shrink-0 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] leading-tight text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-50 ${
           dueUrgentRed ? "font-semibold text-red-500 dark:text-red-400" : ""
@@ -369,6 +370,7 @@ function ListStageDueCell({
       {hideUrgent ? null : (
         <button
           type="button"
+          data-no-touch-expand
           disabled={!onUrgentChange}
           title={
             urgent
@@ -377,7 +379,7 @@ function ListStageDueCell({
           }
           className={`shrink-0 rounded border font-bold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             compact
-              ? "h-7 min-h-7 px-1.5 py-0 text-[0.5rem] leading-none"
+              ? "h-3.5 min-h-3.5 px-1 py-0 text-[0.45rem] leading-none"
               : "h-7 min-h-7 w-fit max-w-full px-2 py-0.5 text-[0.58rem]"
           } ${
             urgent
@@ -411,7 +413,7 @@ function ListUrgentPillButton({
           ? "Снять метку «Срочно» для следующего отдела (только канбан)"
           : "Срочно для следующего отдела (только канбан, наряд не меняется)"
       }
-      className={`inline-flex h-7 min-h-7 min-w-0 shrink-0 items-center whitespace-nowrap rounded-md border px-2.5 text-[0.5rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex h-3.5 min-h-3.5 min-w-0 shrink-0 items-center whitespace-nowrap rounded-md border px-1.5 text-[0.45rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
         urgent
           ? "border-orange-600 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
           : "border-[var(--kanban-text-muted)] bg-transparent text-[var(--kanban-text)]"
@@ -446,7 +448,7 @@ function ListMobileIconButton({
       disabled={disabled}
       title={title}
       aria-label={title}
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.08]"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.08]"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
@@ -614,7 +616,7 @@ export function KanbanListView({
   );
 
   return (
-    <div className="relative z-0 flex w-full min-h-0 flex-1 flex-col overflow-hidden py-2 pl-2 pr-1 max-sm:flex-none max-sm:overflow-visible sm:pl-3 sm:pr-2">
+    <div className="kanban-list-view relative z-0 flex w-full min-h-0 flex-1 flex-col overflow-hidden py-2 pl-2 pr-1 max-sm:flex-none max-sm:overflow-visible max-sm:px-0 sm:pl-3 sm:pr-2">
       <div className="flex w-full min-h-0 max-w-full flex-1 flex-col max-sm:flex-none">
         <div
           className="min-h-0 flex-1 overflow-y-auto max-sm:overflow-visible max-sm:flex-none"
@@ -864,8 +866,9 @@ export function KanbanListView({
                                 {onAdvanceCardColumn ? (
                                   <button
                                     type="button"
+                                    data-no-touch-expand
                                     data-list-row-control
-                                    className="shrink-0 rounded p-1.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
+                                    className="shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
                                     title="Следующая колонка"
                                     aria-label="Переместить в следующую колонку"
                                     disabled={!canAdvance}
@@ -939,7 +942,7 @@ export function KanbanListView({
                                 disabled={!onCopyCardLink}
                                 onClick={() => onCopyCardLink?.(card.id)}
                               >
-                                <IconLink className="h-3.5 w-3.5" />
+                                <IconLink className="h-3 w-3" />
                               </ListMobileIconButton>
                               <ListMobileIconButton
                                 title={
@@ -962,7 +965,7 @@ export function KanbanListView({
                                   });
                                 }}
                               >
-                                <IconMail className="h-3.5 w-3.5" />
+                                <IconMail className="h-3 w-3" />
                               </ListMobileIconButton>
                               <ListMobileIconButton
                                 title={
@@ -976,9 +979,9 @@ export function KanbanListView({
                                 onClick={() => onRequestKanbanBlock?.(card.id)}
                               >
                                 {blocked ? (
-                                  <IconUnlock className="h-3.5 w-3.5" />
+                                  <IconUnlock className="h-3 w-3" />
                                 ) : (
-                                  <IconBrick className="h-3.5 w-3.5" />
+                                  <IconBrick className="h-3 w-3" />
                                 )}
                               </ListMobileIconButton>
                             </div>
@@ -1076,7 +1079,7 @@ export function KanbanListView({
                   </div>
                   {expandedCardId === card.id ? (
                     <div
-                      className="w-[70%] max-w-[70%] border-t border-[var(--kanban-border)] sm:col-span-full"
+                      className="w-full max-w-full border-t border-[var(--kanban-border)] shell-laptop:w-[70%] shell-laptop:max-w-[70%] sm:col-span-full"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
                     >

@@ -104,16 +104,25 @@ function StatusPillLabel({ label }: { label: string }) {
 function wrapStatusAndBoard(
   statusNode: ReactNode,
   boardLabel: string | null,
-  isHarmony: boolean,
   underOrder: boolean,
   boardFilterHref: string | null,
+  boardLayout: "stacked" | "inline",
 ) {
+  const boardNode = boardLabel
+    ? boardLanePill(boardLabel, underOrder, boardFilterHref)
+    : null;
+  if (boardLayout === "inline") {
+    return (
+      <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+        {statusNode}
+        {boardNode}
+      </span>
+    );
+  }
   return (
     <span className="flex w-full min-w-0 flex-col items-center justify-center gap-1.5 -translate-y-0.5">
       {statusNode}
-      {boardLabel
-        ? boardLanePill(boardLabel, underOrder, boardFilterHref)
-        : null}
+      {boardNode}
     </span>
   );
 }
@@ -138,6 +147,8 @@ type Props = {
   isDemoMode?: boolean;
   /** false — не клеить тип в пилюлю статуса (отдельная колонка «Тип»). */
   includeCardType?: boolean;
+  /** inline — доска в одной строке со статусом (мобильная шапка). */
+  boardLayout?: "stacked" | "inline";
 };
 
 export function OrderListKaitenColumnTag({
@@ -153,6 +164,7 @@ export function OrderListKaitenColumnTag({
   placement = "tags",
   isDemoMode = false,
   includeCardType = true,
+  boardLayout = "stacked",
 }: Props) {
   const isHarmony = useUiDesign() === "harmony";
   const underOrder = placement === "underOrderNumber";
@@ -162,9 +174,12 @@ export function OrderListKaitenColumnTag({
     ? "px-2 py-0.5 text-[11px] leading-tight sm:px-2.5 sm:text-[12px]"
     : "order-list-tag-pill";
 
-  const wrapClass = underOrder
-    ? "flex w-full min-w-0 justify-center"
-    : "inline-flex min-w-0 max-w-full items-center text-center";
+  const wrapClass =
+    underOrder && boardLayout === "inline"
+      ? "inline-flex min-w-0 max-w-full items-center"
+      : underOrder
+        ? "flex w-full min-w-0 justify-center"
+        : "inline-flex min-w-0 max-w-full items-center text-center";
 
   if (!isDemoMode && isKanbanStopColumnTitle(kaitenColumnTitle)) {
     const reason = String(kaitenBlockReason || "").trim();
@@ -193,9 +208,9 @@ export function OrderListKaitenColumnTag({
         {stopPill}
       </Link>,
       boardLabel,
-      isHarmony,
       underOrder,
       boardFilterHref,
+      boardLayout,
     );
   }
   return wrapStatusAndBoard(
@@ -203,9 +218,9 @@ export function OrderListKaitenColumnTag({
       {stopPill}
     </span>,
     boardLabel,
-    isHarmony,
     underOrder,
     boardFilterHref,
+    boardLayout,
   );
 }
 
@@ -295,9 +310,9 @@ export function OrderListKaitenColumnTag({
         {pill}
       </Link>,
       boardLabel,
-      isHarmony,
       underOrder,
       effectiveBoardFilterHref,
+      boardLayout,
     );
   }
 
@@ -313,8 +328,8 @@ export function OrderListKaitenColumnTag({
       {pill}
     </span>,
     boardLabel,
-    isHarmony,
     underOrder,
     effectiveBoardFilterHref,
+    boardLayout,
   );
 }

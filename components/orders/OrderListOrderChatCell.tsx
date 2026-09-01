@@ -31,6 +31,7 @@ export function OrderListOrderChatCell({
   doctorName,
   labMentionHighlight,
   embedded = false,
+  buttonClassName,
 }: {
   orderId: string;
   orderNumber: string;
@@ -40,6 +41,8 @@ export function OrderListOrderChatCell({
   labMentionHighlight: boolean;
   /** Встроенный режим — без обёртки `<td>` (объединённая колонка таблицы). */
   embedded?: boolean;
+  /** Класс кнопки (мобильная карточка — общий стиль с печатью/QR). */
+  buttonClassName?: string;
 }) {
   const { user } = useSessionUser();
   const chatAllowed =
@@ -61,11 +64,14 @@ export function OrderListOrderChatCell({
     <>
       <button
         type="button"
-        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-6 sm:w-6 ${
-          showLabMention
-            ? "animate-pulse text-amber-500 dark:text-amber-400"
-            : "text-[var(--text-secondary)] hover:text-[var(--app-text)]"
-        }`}
+        className={
+          buttonClassName ??
+          `inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors hover:bg-[var(--table-row-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sidebar-blue)] sm:h-6 sm:w-6 ${
+            showLabMention
+              ? "animate-pulse text-amber-500 dark:text-amber-400"
+              : "text-[var(--text-secondary)] hover:text-[var(--app-text)]"
+          }`
+        }
         title={
           showLabMention
             ? `В чате упомянули @${adminMentionTag}`
@@ -74,7 +80,7 @@ export function OrderListOrderChatCell({
         aria-label="Чат Канбан/Кайтен"
         onClick={() => setOpen(true)}
       >
-        <ChatBubbleIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        <ChatBubbleIcon className={buttonClassName ? "h-4 w-4" : "h-3.5 w-3.5 sm:h-4 sm:w-4"} />
       </button>
       <OrderListKaitenChatModal
         orderId={orderId}

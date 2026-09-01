@@ -60,6 +60,7 @@ export function OrdersListTableRow({
   mobileShippedNode,
   mobileDatesNode,
   tagsNode,
+  mobileTagsNode,
 }: {
   orderId: string;
   orderNumber: string;
@@ -91,6 +92,8 @@ export function OrdersListTableRow({
   /** Пикеры ЛАБ / Запись справа от иконок. */
   mobileDatesNode?: ReactNode;
   tagsNode?: ReactNode;
+  /** Отметки на mobile-карточке (если нужен другой стиль «+»). */
+  mobileTagsNode?: ReactNode;
 }) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
@@ -170,15 +173,15 @@ export function OrdersListTableRow({
               router.push(href);
             }}
           >
-            <div className="mb-1.5 flex items-start justify-between gap-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                <Link prefetch={false}
-                  href={href}
-                  className="font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
-                  title={`${orderNumber} — открыть наряд`}
-                >
-                  № {orderNumber}
-                </Link>
+            <div className="mb-2 flex min-w-0 items-center gap-2">
+              <Link prefetch={false}
+                href={href}
+                className="shrink-0 font-mono text-base font-bold leading-none text-[var(--sidebar-blue)] hover:underline"
+                title={`${orderNumber} — открыть наряд`}
+              >
+                № {orderNumber}
+              </Link>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden">
                 <OrderListKaitenColumnTag
                   kaitenCardId={kaitenCardId}
                   demoKanbanColumn={demoKanbanColumn}
@@ -190,6 +193,7 @@ export function OrdersListTableRow({
                   filterHref={kaitenFilterHref}
                   boardFilterHref={boardFilterHref}
                   placement="underOrderNumber"
+                  boardLayout="inline"
                   isDemoMode={isDemoMode}
                   includeCardType={false}
                 />
@@ -198,27 +202,14 @@ export function OrdersListTableRow({
                   placement="underOrderNumber"
                 />
               </div>
-              {mobileShippedNode ? (
-                <div
-                  className="mt-0.5 shrink-0"
-                  data-row-click-ignore
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {mobileShippedNode}
-                </div>
-              ) : null}
             </div>
 
-            <div className="mb-2 space-y-0.5">
-              <div className="flex flex-wrap gap-1.5 text-sm font-semibold text-[var(--app-text)]">
-                {patientName ? <span>{patientName}</span> : null}
-                {patientName && doctorName ? (
-                  <span className="text-[var(--text-muted)]">·</span>
-                ) : null}
-                {doctorName ? <span>{doctorName}</span> : null}
+            <div className="mb-2.5 space-y-0.5">
+              <div className="truncate text-sm font-semibold text-[var(--app-text)]">
+                {[patientName, doctorName].filter(Boolean).join(" · ")}
               </div>
               {clinicName ? (
-                <div className="truncate text-xs font-normal text-[var(--text-secondary)]">
+                <div className="truncate text-xs font-normal text-[var(--text-muted)]">
                   {clinicName}
                 </div>
               ) : null}
@@ -232,38 +223,45 @@ export function OrdersListTableRow({
               ) : null}
             </div>
 
-            {(mobileActionsNode || mobileDatesNode) ? (
-              <div className="flex min-w-0 items-center justify-between gap-2">
+            {(mobileActionsNode || mobileDatesNode || mobileShippedNode) ? (
+              <div className="flex min-w-0 items-center gap-1.5">
                 {mobileActionsNode ? (
                   <div
-                    className="flex shrink-0 flex-wrap items-center gap-1 [&_a]:inline-flex [&_a]:h-8 [&_a]:min-h-8 [&_a]:min-w-8 [&_a]:w-8 [&_a]:items-center [&_a]:justify-center [&_button]:h-8 [&_button]:min-h-8 [&_button]:min-w-8"
+                    className="flex shrink-0 items-center gap-1"
                     data-row-click-ignore
                     onClick={(e) => e.stopPropagation()}
                   >
                     {mobileActionsNode}
                   </div>
-                ) : (
-                  <span />
-                )}
+                ) : null}
                 {mobileDatesNode ? (
                   <div
-                    className="flex min-w-0 flex-1 flex-col items-end gap-0.5"
+                    className="flex min-w-0 flex-1 items-center justify-end gap-2"
                     data-row-click-ignore
                     onClick={(e) => e.stopPropagation()}
                   >
                     {mobileDatesNode}
                   </div>
                 ) : null}
+                {mobileShippedNode ? (
+                  <div
+                    className="shrink-0"
+                    data-row-click-ignore
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {mobileShippedNode}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
-            {tagsNode && isNarrow ? (
+            {(mobileTagsNode ?? tagsNode) && isNarrow ? (
               <div
-                className="mt-2 text-xs text-[var(--text-secondary)]"
+                className="mt-2.5 text-xs text-[var(--text-secondary)]"
                 data-row-click-ignore
                 onClick={(e) => e.stopPropagation()}
               >
-                {tagsNode}
+                {mobileTagsNode ?? tagsNode}
               </div>
             ) : null}
           </div>

@@ -27,6 +27,10 @@ import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
 import { OrdersListTableHeaderRow } from "@/components/orders/OrdersListTableHeaderRow";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
+import {
+  ORDER_LIST_MOBILE_ACTION_BTN,
+  ORDER_LIST_MOBILE_TAG_ADD_BTN,
+} from "@/lib/order-list-mobile-ui";
 import { getKaitenCardWebUrl } from "@/lib/kaiten-card-web-url";
 import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import { getSiteOrigin } from "@/lib/site-origin-server";
@@ -676,18 +680,7 @@ export default async function OrdersPage({
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-        <OrdersListHeaderActionCards
-          initialInTransitCount={prostheticsInTransitCount}
-          initialToOrderCount={prostheticsToOrderCount}
-          initialCorrectionsPendingCount={attentionCount}
-          initialTasksPendingCount={labTasksPendingCount}
-          initialPickupsPendingCount={labPickupsPendingCount}
-          canMarkArrived={canMarkProstheticsArrived}
-          canResolveTasks={canMarkProstheticsArrived}
-          canAcceptCorrections={canMarkProstheticsArrived}
-          showProstheticsBlock={canSeeProstheticsChip}
-        />
-        <div className="min-w-0 flex-1">
+        <div className="order-1 min-w-0 lg:order-2 lg:flex-1">
           <OrderPostingMonthBar
             toolbarEnd={
               <OrdersListShippedToolbar
@@ -705,6 +698,19 @@ export default async function OrdersPage({
                 hideShippedActive={hideShippedActive}
               />
             }
+          />
+        </div>
+        <div className="order-2 min-w-0 lg:order-1 lg:shrink-0">
+          <OrdersListHeaderActionCards
+            initialInTransitCount={prostheticsInTransitCount}
+            initialToOrderCount={prostheticsToOrderCount}
+            initialCorrectionsPendingCount={attentionCount}
+            initialTasksPendingCount={labTasksPendingCount}
+            initialPickupsPendingCount={labPickupsPendingCount}
+            canMarkArrived={canMarkProstheticsArrived}
+            canResolveTasks={canMarkProstheticsArrived}
+            canAcceptCorrections={canMarkProstheticsArrived}
+            showProstheticsBlock={canSeeProstheticsChip}
           />
         </div>
       </div>
@@ -803,24 +809,25 @@ export default async function OrdersPage({
             Показаны не все: первые 5000 неотгруженных нарядов по фильтру — уточните период или поиск.
           </div>
         ) : null}
-        <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-          <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
-            <Suspense
-              fallback={
-                <div className="h-8 w-[10rem] shrink-0 rounded-md bg-[var(--surface-subtle)]" />
-              }
-            >
-              <OrdersListSearch
-                initialValue={listSearchQ}
-                pageSize={pageSize}
-                tag={rawTag ?? undefined}
-                hideShipped={hideShippedActive}
-                onlyShipped={onlyShippedActive}
-                dense
-                className="min-w-0 max-w-[12rem] basis-[8rem] shrink grow sm:max-w-[14rem] sm:basis-[9rem]"
-                idSuffix="chips"
-              />
-            </Suspense>
+        <div className="sticky top-0 z-50 -mx-2 bg-[var(--app-bg)] py-2 pe-2 ps-[var(--app-mobile-menu-inset,0px)] shadow-[0_4px_12px_-8px_rgba(0,0,0,0.45)] shell-laptop:static shell-laptop:z-auto shell-laptop:mx-0 shell-laptop:bg-transparent shell-laptop:p-0 shell-laptop:shadow-none">
+          <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
+              <Suspense
+                fallback={
+                  <div className="h-8 w-[10rem] shrink-0 rounded-md bg-[var(--surface-subtle)]" />
+                }
+              >
+                <OrdersListSearch
+                  initialValue={listSearchQ}
+                  pageSize={pageSize}
+                  tag={rawTag ?? undefined}
+                  hideShipped={hideShippedActive}
+                  onlyShipped={onlyShippedActive}
+                  dense
+                  className="min-w-0 max-w-[12rem] basis-[8rem] shrink grow sm:max-w-[14rem] sm:basis-[9rem]"
+                  idSuffix="chips"
+                />
+              </Suspense>
           {showCorrectionsChip ? (
             <Link
               href={ordersListHref({
@@ -958,6 +965,7 @@ export default async function OrdersPage({
               })
             : null}
           </div>
+        </div>
         </div>
         {rawTag && !activeFilter ? (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
@@ -1097,7 +1105,10 @@ export default async function OrdersPage({
                   shipped: workSent,
                   accent: rowAccent,
                 });
-                const renderTagsNode = (opts?: { omitKaitenColumnTag?: boolean }) => (
+                const renderTagsNode = (opts?: {
+                  omitKaitenColumnTag?: boolean;
+                  addButtonClassName?: string;
+                }) => (
                   <OrderListTagsCell
                     orderId={o.id}
                     pageSize={pageSize}
@@ -1143,10 +1154,15 @@ export default async function OrdersPage({
                     periodFrom={fromUrl}
                     periodTo={toUrl}
                     omitKaitenColumnTag={opts?.omitKaitenColumnTag}
+                    addButtonClassName={opts?.addButtonClassName}
                     isDemoMode={isDemo}
                   />
                 );
                 const tagsNode = renderTagsNode({ omitKaitenColumnTag: true });
+                const mobileTagsNode = renderTagsNode({
+                  omitKaitenColumnTag: true,
+                  addButtonClassName: ORDER_LIST_MOBILE_TAG_ADD_BTN,
+                });
                 return (
                 <OrdersListTableRow
                   key={o.id}
@@ -1177,20 +1193,22 @@ export default async function OrdersPage({
                   isDemoMode={isDemo}
                   isLabOverdue={isLabOverdue}
                   tagsNode={tagsNode}
+                  mobileTagsNode={mobileTagsNode}
                   mobileShippedNode={
                     <OrderShippedToggle
                       orderId={o.id}
                       shipped={workSent}
                       shippedAtIso={o.adminShippedAt?.toISOString() ?? null}
+                      layout="mobile"
                     />
                   }
                   mobileDatesNode={
-                    <div className="flex w-full max-w-[9.5rem] flex-col gap-0.5">
-                      <div className="flex items-center gap-1">
-                        <span className="w-7 shrink-0 text-[9px] font-semibold uppercase text-[var(--text-muted)]">
+                    <>
+                      <div className="flex min-w-0 items-center gap-1">
+                        <span className="w-6 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                           Лаб
                         </span>
-                        <div className="min-w-0 flex-1 scale-90 origin-right">
+                        <div className="min-w-0">
                           <OrderListDueCell
                             orderId={o.id}
                             dueIso={o.dueDate?.toISOString() ?? null}
@@ -1200,11 +1218,11 @@ export default async function OrdersPage({
                           />
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span className="w-7 shrink-0 text-[9px] font-semibold uppercase text-[var(--text-muted)]">
+                      <div className="flex min-w-0 items-center gap-1">
+                        <span className="w-6 shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                           Зап
                         </span>
-                        <div className="min-w-0 flex-1 scale-90 origin-right">
+                        <div className="min-w-0">
                           <OrderListDueCell
                             variant="appointment"
                             orderId={o.id}
@@ -1219,42 +1237,48 @@ export default async function OrdersPage({
                           />
                         </div>
                       </div>
-                    </div>
+                    </>
                   }
                   mobileActionsNode={
                     <>
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--card-border)] bg-[var(--card-bg)]">
-                        <OrderListOrderChatCell
+                      <OrderListOrderChatCell
+                        orderId={o.id}
+                        orderNumber={o.orderNumber}
+                        patientName={
+                          o.patientName
+                            ? personNameSurnameInitials(o.patientName)
+                            : undefined
+                        }
+                        doctorName={personNameSurnameInitials(o.doctor.fullName)}
+                        labMentionHighlight={
+                          canSeeAdminChip && o.listKaitenLabMentionHighlight
+                        }
+                        embedded
+                        buttonClassName={`${ORDER_LIST_MOBILE_ACTION_BTN}${
+                          canSeeAdminChip && o.listKaitenLabMentionHighlight
+                            ? " animate-pulse text-amber-500 dark:text-amber-400"
+                            : ""
+                        }`}
+                      />
+                      {!workSent ? (
+                        <OrderNarjadPrintTrigger
                           orderId={o.id}
-                          orderNumber={o.orderNumber}
-                          patientName={
-                            o.patientName
-                              ? personNameSurnameInitials(o.patientName)
-                              : undefined
-                          }
-                          doctorName={personNameSurnameInitials(o.doctor.fullName)}
-                          labMentionHighlight={
-                            canSeeAdminChip && o.listKaitenLabMentionHighlight
-                          }
-                          embedded
+                          variant="icon"
+                          className={ORDER_LIST_MOBILE_ACTION_BTN}
+                          title="Печать наряда (PDF) — диалог печати"
                         />
-                      </div>
-                      <div className="flex h-8 items-center gap-0.5 rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-0.5">
-                        {!workSent ? (
-                          <OrderNarjadPrintTrigger
-                            orderId={o.id}
-                            variant="icon"
-                            title="Печать наряда (PDF) — диалог печати"
-                          />
-                        ) : null}
-                        <OrderStickerPrintLink orderId={o.id} />
-                        <OrderKaitenQrModal
-                          orderId={o.id}
-                          kaitenUrl={kaitenWebUrl}
-                          kanbanUrl={kanbanWebUrl}
-                          compact
-                        />
-                      </div>
+                      ) : null}
+                      <OrderStickerPrintLink
+                        orderId={o.id}
+                        className={ORDER_LIST_MOBILE_ACTION_BTN}
+                      />
+                      <OrderKaitenQrModal
+                        orderId={o.id}
+                        kaitenUrl={kaitenWebUrl}
+                        kanbanUrl={kanbanWebUrl}
+                        compact
+                        buttonClassName={ORDER_LIST_MOBILE_ACTION_BTN}
+                      />
                     </>
                   }
                 >

@@ -30,6 +30,7 @@ export function OrderShippedToggle({
   shipped,
   shippedAtIso = null,
   readOnly = false,
+  layout = "default",
 }: {
   orderId: string;
   shipped: boolean;
@@ -37,6 +38,8 @@ export function OrderShippedToggle({
   shippedAtIso?: string | null;
   /** Только дата отгрузки, без постановки/снятия отметки. */
   readOnly?: boolean;
+  /** mobile — круглая кнопка в строке действий карточки. */
+  layout?: "default" | "mobile";
 }) {
   const router = useRouter();
   const [value, setValue] = useState(shipped);
@@ -83,8 +86,24 @@ export function OrderShippedToggle({
   if (value) {
     const compact = formatShippedCompact(localAt);
     const badgeClass =
-      "mx-auto inline-flex min-w-[3.25rem] max-w-[4.5rem] flex-col items-center justify-center gap-0 rounded-md border border-emerald-500/70 bg-emerald-600/20 px-1 py-0.5 text-center leading-none shadow-sm dark:border-emerald-500/55 dark:bg-emerald-500/15";
-    const badgeInner = (
+      layout === "mobile"
+        ? "inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-0 rounded-full border border-emerald-500/70 bg-emerald-600/20 text-center leading-none shadow-sm dark:border-emerald-500/55 dark:bg-emerald-500/15"
+        : "mx-auto inline-flex min-w-[3.25rem] max-w-[4.5rem] flex-col items-center justify-center gap-0 rounded-md border border-emerald-500/70 bg-emerald-600/20 px-1 py-0.5 text-center leading-none shadow-sm dark:border-emerald-500/55 dark:bg-emerald-500/15";
+    const badgeInner =
+      layout === "mobile" ? (
+        <svg
+          viewBox="0 0 20 20"
+          className="h-4 w-4 text-emerald-700 dark:text-emerald-200"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M4.5 10.5 8 14l7.5-8" />
+        </svg>
+      ) : (
       <>
         <span className="text-[10px] font-semibold tabular-nums text-emerald-950 dark:text-emerald-100 sm:text-[11px]">
           {compact?.date ?? "—"}
@@ -128,6 +147,15 @@ export function OrderShippedToggle({
   }
 
   if (readOnly) {
+    if (layout === "mobile") {
+      return (
+        <span
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--input-border)] bg-[var(--card-bg)] opacity-70"
+          title="Не отправлено"
+          aria-label="Не отправлено"
+        />
+      );
+    }
     return (
       <span className="text-[11px] text-[var(--text-muted)]" title="Не отправлено">
         —
@@ -143,7 +171,11 @@ export function OrderShippedToggle({
       aria-label="Отметить работу отправленной"
       title="Отметить работу отправленной"
       onClick={() => void toggle()}
-      className="inline-flex h-[1.125rem] w-[1.125rem] items-center justify-center rounded-full border border-[var(--input-border)] bg-[var(--card-bg)] text-transparent transition-colors hover:border-emerald-500 hover:bg-emerald-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sidebar-blue)] disabled:opacity-55 sm:h-5 sm:w-5"
+      className={
+        layout === "mobile"
+          ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--input-border)] bg-[var(--card-bg)] text-transparent transition-colors hover:border-emerald-500 hover:bg-emerald-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sidebar-blue)] disabled:opacity-55"
+          : "inline-flex h-[1.125rem] w-[1.125rem] items-center justify-center rounded-full border border-[var(--input-border)] bg-[var(--card-bg)] text-transparent transition-colors hover:border-emerald-500 hover:bg-emerald-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sidebar-blue)] disabled:opacity-55 sm:h-5 sm:w-5"
+      }
     >
       <svg
         viewBox="0 0 20 20"

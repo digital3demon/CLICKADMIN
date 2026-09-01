@@ -305,10 +305,10 @@ export default async function FinanceOfficePage({
     .filter((o) => o.invoiceAttachmentId)
     .map((o) => o.id);
   const searchControls = (
-    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+    <div className="flex min-w-0 flex-col gap-2">
       <form
         action="/finance-office"
-        className="flex min-w-0 max-w-xl flex-1 flex-col gap-2 sm:min-w-[220px] sm:flex-row"
+        className="flex min-w-0 w-full flex-col gap-2"
       >
         <input type="hidden" name="tab" value={mode} />
         {fromRaw ? <input type="hidden" name="from" value={fromRaw} /> : null}
@@ -334,21 +334,23 @@ export default async function FinanceOfficePage({
         {pageSize !== FINANCE_OFFICE_DEFAULT_PAGE_SIZE ? (
           <input type="hidden" name="limit" value={String(pageSize)} />
         ) : null}
-        <input
-          name="q"
-          defaultValue={q}
-          placeholder="Поиск по номеру наряда или пациенту"
-          className="min-w-0 w-full max-w-md flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
-        />
+        <div className="flex min-w-0 items-stretch gap-2">
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder="Поиск по номеру наряда или пациенту"
+            className="min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
+          />
+          <FinanceOfficeExportButton className="self-stretch" />
+        </div>
         <button
           type="submit"
-          className="rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90 sm:shrink-0"
+          className="w-full rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90 sm:w-auto sm:self-start"
         >
           Найти
         </button>
       </form>
       <div className="flex flex-wrap items-center gap-2">
-        <FinanceOfficeExportButton />
         <FinanceOfficePrintInvoicesButton
           orderIdsWithInvoice={orderIdsWithInvoice}
         />
@@ -387,7 +389,7 @@ export default async function FinanceOfficePage({
         </p>
       </div>
       {/* Режим · долги · корректировки · выписка */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(16rem,22rem)] xl:items-stretch">
+      <div className="flex flex-col gap-3 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(16rem,22rem)] xl:items-stretch">
         <FinanceOfficeModePanel
           mode={mode}
           appliedFrom={fromRaw}
@@ -396,20 +398,22 @@ export default async function FinanceOfficePage({
           q={q}
           listSummaryLine={listSummaryLine}
         />
-        <FinanceOfficeDebtsCard
-          className="h-full w-full max-w-[13rem] justify-self-stretch"
-          initialCount={debtsCount}
-        />
-        <FinanceOfficeReconciliationsCard
-          className="h-full w-full max-w-[13rem] justify-self-stretch"
-          initialHighlightCount={reconHighlightCount}
-        />
-        <CorrectionsHistoryActionCard
-          dense
-          className="h-full w-full max-w-[13rem] justify-self-stretch"
-          initialPendingCount={correctionsPendingCount}
-          canAcceptCorrections={canAcceptCorrections}
-        />
+        <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2 xl:contents">
+          <FinanceOfficeDebtsCard
+            className="h-full min-w-0 w-full max-w-none justify-self-stretch xl:max-w-[13rem]"
+            initialCount={debtsCount}
+          />
+          <FinanceOfficeReconciliationsCard
+            className="h-full min-w-0 w-full max-w-none justify-self-stretch xl:max-w-[13rem]"
+            initialHighlightCount={reconHighlightCount}
+          />
+          <CorrectionsHistoryActionCard
+            dense
+            className="h-full min-w-0 w-full max-w-none justify-self-stretch xl:max-w-[13rem]"
+            initialPendingCount={correctionsPendingCount}
+            canAcceptCorrections={canAcceptCorrections}
+          />
+        </div>
         <FinanceOfficeBankImportPanel compact className="h-full w-full" />
       </div>
       <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">

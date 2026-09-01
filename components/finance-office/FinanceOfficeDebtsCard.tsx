@@ -52,8 +52,8 @@ function debtPaymentClassicClass(payment: string): string {
 
 function cardShell(isHarmony: boolean): string {
   return isHarmony
-    ? "flex h-full min-h-[3.25rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-1.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
-    : "flex h-full min-h-[3.25rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-1.5 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
+    ? "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5"
+    : "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5";
 }
 
 export function FinanceOfficeDebtsCard({
@@ -214,15 +214,15 @@ export function FinanceOfficeDebtsCard({
         className={`${cardShell(isHarmony)} ${className}`.trim()}
         onClick={() => setOpen(true)}
       >
-        <span className="text-[10px] font-bold uppercase leading-tight tracking-wide text-rose-600 dark:text-rose-400 sm:text-[11px]">
+        <span className="text-[9px] font-bold uppercase leading-tight tracking-wide text-rose-600 dark:text-rose-400 sm:text-[11px]">
           Долги
         </span>
-        <span className="flex items-center justify-center gap-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs">
+        <span className="flex items-center justify-center gap-1 sm:gap-1.5">
+          <span className="hidden text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:inline sm:text-xs">
             Просрочено
           </span>
           <span
-            className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+            className="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-rose-600 px-1 py-0.5 text-[10px] font-bold tabular-nums text-white sm:min-w-[1.5rem] sm:px-1.5 sm:text-xs"
             aria-label={`Долгов: ${count}`}
           >
             {count}

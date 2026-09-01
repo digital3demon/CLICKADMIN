@@ -12,6 +12,7 @@ type Props = {
   labelFull?: string;
   /** Компактный режим: только иконка в таблице */
   compact?: boolean;
+  buttonClassName?: string;
 };
 
 /**
@@ -23,6 +24,7 @@ export function OrderKaitenQrModal({
   kanbanUrl = null,
   labelFull = "QR витрины",
   compact = false,
+  buttonClassName,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [hubUrl, setHubUrl] = useState<string | null>(null);
@@ -98,9 +100,11 @@ export function OrderKaitenQrModal({
   const kaitenHref = kaitenUrl?.trim() || null;
   const kanbanHref = kanbanUrl?.trim() || null;
 
-  const btnClass = compact
-    ? "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-6 sm:w-6"
-    : "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-9 sm:px-2.5 sm:text-sm";
+  const btnClass =
+    buttonClassName ??
+    (compact
+      ? "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--text-body)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-6 sm:w-6"
+      : "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-1.5 text-xs font-medium text-[var(--text-strong)] shadow-sm hover:bg-[var(--table-row-hover)] sm:h-9 sm:px-2.5 sm:text-sm");
 
   return (
     <>
@@ -113,7 +117,15 @@ export function OrderKaitenQrModal({
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
-        <QrIcon className={compact ? "h-3.5 w-3.5" : "h-4 w-4 sm:h-[1.1rem] sm:w-[1.1rem]"} />
+        <QrIcon
+          className={
+            buttonClassName
+              ? "h-4 w-4"
+              : compact
+                ? "h-3.5 w-3.5"
+                : "h-4 w-4 sm:h-[1.1rem] sm:w-[1.1rem]"
+          }
+        />
       </button>
 
       {open ? (

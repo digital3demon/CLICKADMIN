@@ -185,6 +185,8 @@ type Props = {
   omitKaitenColumnTag?: boolean;
   /** Демо: без брендинга Kaiten в пилюле статуса. */
   isDemoMode?: boolean;
+  /** Переопределение стиля кнопки «+» (мобильная карточка — круг). */
+  addButtonClassName?: string;
 };
 
 const padTable =
@@ -443,6 +445,7 @@ export function OrderListTagsCell({
   isDemoMode = false,
   clinicId = null,
   doctorId = null,
+  addButtonClassName,
 }: Props) {
   const router = useRouter();
   const isHarmony = useUiDesign() === "harmony";
@@ -1630,7 +1633,7 @@ export function OrderListTagsCell({
     <button
       type="button"
       disabled={busy}
-      className={TAG_ADD_BUTTON_CLASS}
+      className={addButtonClassName ?? TAG_ADD_BUTTON_CLASS}
       title="Добавить свой тег к наряду"
       aria-label="Добавить тег"
       onClick={() => setAddOpen(true)}

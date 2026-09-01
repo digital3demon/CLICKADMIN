@@ -35,12 +35,12 @@ export function OrderStickerPrintLink({
   return (
     <button
       type="button"
-      className={[ICON_TABLE_CLASS, className].filter(Boolean).join(" ")}
+      className={className ?? ICON_TABLE_CLASS}
       title="Печать этикетки"
       aria-label="Печать этикетки"
       onClick={() => printOrderSticker(orderId)}
     >
-      <StickerIcon className="h-3.5 w-3.5" />
+      <StickerIcon className={className ? "h-4 w-4" : "h-3.5 w-3.5"} />
     </button>
   );
 }

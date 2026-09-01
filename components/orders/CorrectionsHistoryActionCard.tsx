@@ -31,8 +31,8 @@ function correctionStatusClass(
 function cardShell(isHarmony: boolean, dense = false): string {
   if (dense) {
     return isHarmony
-      ? "flex h-full min-h-[3.25rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-1.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
-      : "flex h-full min-h-[3.25rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1.5 py-1.5 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06]";
+      ? "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50 sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5"
+      : "flex h-full min-h-[2.65rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-1 py-1 text-center shadow-sm ring-1 ring-black/[0.04] transition hover:border-[var(--sidebar-blue)]/40 dark:ring-white/[0.06] sm:min-h-[3.25rem] sm:px-1.5 sm:py-1.5";
   }
   return isHarmony
     ? "flex min-h-[4.75rem] w-full min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-2.5 text-center card-shadow transition hover:border-[var(--sidebar-blue)]/50"
@@ -288,24 +288,25 @@ export function CorrectionsHistoryActionCard({
         <span
           className={
             dense
-              ? "text-[10px] font-bold uppercase leading-tight tracking-wide text-orange-500 dark:text-orange-400 sm:text-[11px]"
+              ? "text-[9px] font-bold uppercase leading-tight tracking-wide text-orange-500 dark:text-orange-400 sm:text-[11px]"
               : "text-[11px] font-bold uppercase leading-tight tracking-wide text-orange-500 dark:text-orange-400 sm:text-xs"
           }
         >
-          Корректировки
+          <span className="sm:hidden">Корр.</span>
+          <span className="hidden sm:inline">Корректировки</span>
         </span>
-        <span className="flex items-center justify-center gap-1.5 sm:gap-2">
+        <span className="flex items-center justify-center gap-1 sm:gap-1.5">
           <span
             className={
               dense
-                ? "text-[10px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:text-xs"
+                ? "hidden text-[9px] font-semibold uppercase tracking-wide text-[var(--text-secondary)] sm:inline sm:text-xs"
                 : "text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
             }
           >
             Непринятые
           </span>
           <span
-            className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white"
+            className="inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-red-600 px-1 py-0.5 text-[10px] font-bold tabular-nums text-white sm:min-w-[1.5rem] sm:px-1.5 sm:text-xs"
             aria-label={`Непринятые: ${pendingCount}`}
           >
             {pendingCount}

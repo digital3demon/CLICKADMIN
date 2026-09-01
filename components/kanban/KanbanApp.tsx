@@ -3225,7 +3225,7 @@ export function KanbanApp({
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
       <header className="flex max-w-full shrink-0 flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
         <div className="flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2">
-          <div className="relative max-md:ms-[max(2.75rem,calc(env(safe-area-inset-left,0px)+2.35rem+0.2rem))] md:ms-0">
+          <div className="relative max-md:ms-[var(--app-mobile-menu-inset,3.875rem)] md:ms-0">
             <select
               className="inline-flex min-h-[2.25rem] max-w-[min(42vw,11rem)] appearance-none truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-1 pl-1.5 pr-6 text-[0.68rem] font-semibold leading-tight text-[var(--kanban-text)] sm:min-h-[2.75rem] sm:max-w-[14rem] sm:py-2 sm:pl-3 sm:pr-7 sm:text-[0.8125rem] md:max-w-[16rem] md:text-[0.875rem]"
               value={
