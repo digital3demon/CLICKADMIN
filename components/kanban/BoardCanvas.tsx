@@ -8,11 +8,7 @@ import {
 } from "@/lib/kanban/board-visible-cards";
 import { readClientState, writeClientState } from "@/lib/client-state-client";
 import {
-  BOARD_COLUMN_SORT_MANUAL,
-  isListSort,
-  LIST_SORT_SELECT_OPTIONS,
   sortKanbanColumnCards,
-  sortToSelectValue,
   type ListSort,
 } from "@/lib/kanban/list-view-sort";
 import { previewLinkedCardKaitenSortOrderAfterDrag } from "@/lib/kanban/kanban-card-move-preview";
@@ -126,6 +122,8 @@ type BoardCanvasProps = {
     sortOrder: number;
   }) => void;
   onCardColumnChanged?: (args: { cardId: string; fromColumnId: string; toColumnId: string }) => void;
+  /** Сортировка колонок из шапки; null — порядок на доске. */
+  columnSort?: ListSort | null;
 };
 
 const CARD_MENU_WIDTH = 220;
@@ -914,6 +912,7 @@ export function BoardCanvas({
   allowMoveToOtherBoard = true,
   onLinkedOrderMovedToKaitenMirror,
   onCardColumnChanged,
+  columnSort = null,
 }: BoardCanvasProps) {
   const columnIds = board.columns.map((c) => c.id);
   const laneGroups = useMemo(() => buildLaneGroups(board.columns), [board.columns]);
@@ -945,38 +944,6 @@ export function BoardCanvas({
   /** Горизонтальная полоса колонок: wheel без passive — только горизонтальный жест / Shift+колесо. */
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
   const coarsePointer = useKanbanCoarsePointer();
-  const [columnSort, setColumnSort] = useState<ListSort | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const remote = await readClientState<unknown>(
-        "user",
-        `kanbanBoardSort:${board.id}`,
-      );
-      if (cancelled) return;
-      if (remote === BOARD_COLUMN_SORT_MANUAL || remote == null) {
-        setColumnSort(null);
-        return;
-      }
-      if (isListSort(remote)) setColumnSort(remote);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [board.id]);
-
-  const onColumnSortChange = useCallback(
-    (next: ListSort | null) => {
-      setColumnSort(next);
-      void writeClientState(
-        "user",
-        `kanbanBoardSort:${board.id}`,
-        next ?? BOARD_COLUMN_SORT_MANUAL,
-      );
-    },
-    [board.id],
-  );
 
   const cardsInColumn = useCallback(
     (col: KanbanBoard["columns"][0], columnIndex: number) => {
@@ -1617,48 +1584,6 @@ export function BoardCanvas({
   return (
     <>
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1 sm:px-3">
-      <label
-        htmlFor="kanban-board-column-sort"
-        className="text-[0.6rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)]"
-      >
-        Порядок в колонках
-      </label>
-      <select
-        id="kanban-board-column-sort"
-        className="min-w-0 max-w-full flex-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1 text-[0.75rem] text-[var(--kanban-text)] sm:max-w-[22rem] sm:flex-none sm:py-1.5"
-        value={columnSort ? sortToSelectValue(columnSort) : BOARD_COLUMN_SORT_MANUAL}
-        title={
-          columnSort
-            ? "Сортировка только для отображения. Перетаскивание внутри колонки отключено."
-            : "Порядок карточек, как сохранён на доске"
-        }
-        onChange={(e) => {
-          if (e.target.value === BOARD_COLUMN_SORT_MANUAL) {
-            onColumnSortChange(null);
-            return;
-          }
-          const opt = LIST_SORT_SELECT_OPTIONS.find((o) => o.value === e.target.value);
-          if (opt) onColumnSortChange(opt.sort);
-        }}
-      >
-        <option value={BOARD_COLUMN_SORT_MANUAL}>Порядок на доске</option>
-        {LIST_SORT_SELECT_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        disabled={!columnSort}
-        title="Вернуть сохранённый порядок карточек на доске"
-        className="shrink-0 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1 text-[0.68rem] font-medium text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-default disabled:opacity-45 dark:hover:bg-white/[0.08] sm:py-1.5"
-        onClick={() => onColumnSortChange(null)}
-      >
-        Сброс
-      </button>
-    </div>
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}

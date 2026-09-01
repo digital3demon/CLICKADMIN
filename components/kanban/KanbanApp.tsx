@@ -78,6 +78,7 @@ import {
 import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-disabled";
 import { showKanbanKaitenRefreshButton } from "@/lib/kaiten-integration/ui";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
+import { collectSharedStoppedCards } from "@/lib/kanban/collect-shared-stopped-cards";
 import {
   applyKanbanCardMembersOnBoard,
   notifyKanbanCardDueChange,
@@ -203,7 +204,18 @@ import { BoardCanvas } from "./BoardCanvas";
 import { KanbanFilterQuickAccess } from "./KanbanFilterQuickAccess";
 import { KanbanFiltersButton } from "./KanbanFiltersButton";
 import { KanbanViewModePicker } from "./KanbanViewModePicker";
+import { KanbanViewSortSelect } from "./KanbanViewSortSelect";
 import { IconArchiveBox } from "./kanban-icons";
+import {
+  BOARD_COLUMN_SORT_MANUAL,
+  boardColumnSortFromViewPref,
+  kanbanViewSortRemoteKey,
+  listSortFromViewPref,
+  loadKanbanViewSortPrefLocal,
+  parseKanbanViewSortPref,
+  saveKanbanViewSortPrefLocal,
+  type KanbanViewSortPref,
+} from "@/lib/kanban/list-view-sort";
 
 const KanbanCalendar = dynamic(
   () => import("./KanbanCalendar").then((m) => m.KanbanCalendar),
@@ -495,6 +507,7 @@ export function KanbanApp({
   const [listExpandedCardId, setListExpandedCardId] = useState<string | null>(
     null,
   );
+  const [listAutoOpenBlock, setListAutoOpenBlock] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirm, setConfirm] = useState<{
     message: string;
@@ -504,6 +517,9 @@ export function KanbanApp({
   const [moveTargetBoardId, setMoveTargetBoardId] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
+  const [viewSort, setViewSort] = useState<KanbanViewSortPref>(
+    BOARD_COLUMN_SORT_MANUAL,
+  );
   const [actualAppointmentBoardId, setActualAppointmentBoardId] = useState<
     string | null
   >(null);
@@ -1478,7 +1494,7 @@ export function KanbanApp({
           manageKanbanChecklist: access.KANBAN_MANAGE_CHECKLIST === true,
           manageKanbanTimer: access.KANBAN_MANAGE_TIMER === true,
           attachFiles: access.KANBAN_ATTACH_FILES === true,
-          stop: access.KANBAN_STOP === true,
+          stop: access.KANBAN === true || access.KANBAN_STOP === true,
           deleteCard: access.KANBAN_DELETE_CARD === true,
           manageBlock: access.KANBAN_MANAGE_BLOCK === true,
         });
@@ -1515,6 +1531,52 @@ export function KanbanApp({
     () => (appState ? getActiveBoard(appState) : null),
     [appState],
   );
+  const persistViewSort = useCallback(
+    (next: KanbanViewSortPref) => {
+      setViewSort(next);
+      const bid = String(appStateRef.current?.activeBoardId || "").trim();
+      const uid = kanbanSessionUserIdRef.current || "";
+      if (!bid) return;
+      saveKanbanViewSortPrefLocal(uid, bid, next);
+      if (!isDemo) {
+        void writeClientState("user", kanbanViewSortRemoteKey(bid), next);
+      }
+    },
+    [isDemo],
+  );
+  useEffect(() => {
+    const bid = String(appState?.activeBoardId || board?.id || "").trim();
+    if (!bid) return;
+    const uid = kanbanSessionUserId || "";
+    const local = loadKanbanViewSortPrefLocal(uid, bid);
+    setViewSort(local ?? BOARD_COLUMN_SORT_MANUAL);
+    if (isDemo) return;
+    let cancelled = false;
+    void (async () => {
+      const remote = await readClientState<unknown>(
+        "user",
+        kanbanViewSortRemoteKey(bid),
+      );
+      const legacyBoard = await readClientState<unknown>(
+        "user",
+        `kanbanBoardSort:${bid}`,
+      );
+      const legacyList = await readClientState<unknown>(
+        "user",
+        `kanbanListSort:${bid}`,
+      );
+      const parsed =
+        parseKanbanViewSortPref(remote) ??
+        parseKanbanViewSortPref(legacyBoard) ??
+        parseKanbanViewSortPref(legacyList);
+      if (cancelled || !parsed) return;
+      setViewSort(parsed);
+      saveKanbanViewSortPrefLocal(uid, bid, parsed);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo, kanbanSessionUserId, appState?.activeBoardId, board?.id]);
   const visibleBoards = useMemo(() => {
     if (!appState) return [];
     return appState.boards.filter((b) =>
@@ -1641,38 +1703,17 @@ export function KanbanApp({
       : q && countActiveKanbanFilters(appState.filters) === 0
         ? visibleBoards
         : [board];
-    const seen = new Set<string>();
-    const rows: KanbanStoppedCard[] = [];
-    for (const home of homes) {
-      for (const row of home.stoppedCards || []) {
-        if (!row?.card || seen.has(row.card.id)) continue;
-        if (
-          agg &&
-          uid &&
-          !kanbanAggregateKeepsCard(row.card, uid, agg, {
-            searchActive: Boolean(q),
-            stickyOrderIds: new Set(stickyLinkedOrderIds),
-            memberHeads: loadKanbanCardHeadsCache(),
-          })
-        ) {
-          continue;
-        }
-        if (q && !kanbanCardMatchesSearch(row.card, q, home)) continue;
-        seen.add(row.card.id);
-        rows.push(row);
-      }
-    }
-    return rows.sort((a, b) =>
-      String(b.stoppedAt).localeCompare(String(a.stoppedAt)),
-    );
-  }, [
-    board,
-    appState,
-    visibleBoards,
-    kanbanSessionUserId,
-    kanbanSessionRole,
-    stickyLinkedOrderIds,
-  ]);
+    const keep =
+      agg && uid
+        ? (card: KanbanCard) =>
+            kanbanAggregateKeepsCard(card, uid, agg, {
+              searchActive: Boolean(q),
+              stickyOrderIds: new Set(stickyLinkedOrderIds),
+              memberHeads: loadKanbanCardHeadsCache(),
+            })
+        : undefined;
+    return collectSharedStoppedCards(homes, q, keep);
+  }, [board, appState, visibleBoards, kanbanSessionUserId, stickyLinkedOrderIds]);
 
   const onStopHoverMove = useCallback(
     (event: MouseEvent) => {
@@ -3308,6 +3349,14 @@ export function KanbanApp({
               patchApp={patchApp}
               showToast={showToast}
             />
+            {!stopOpen &&
+            (appState.viewMode === "board" || appState.viewMode === "list") ? (
+              <KanbanViewSortSelect
+                pref={viewSort}
+                showBoardManual={appState.viewMode === "board"}
+                onChange={persistViewSort}
+              />
+            ) : null}
             <div className="contents">
             {actualFilterAvailable ? (
               <button
@@ -3513,6 +3562,7 @@ export function KanbanApp({
             <BoardCanvas
               appState={appState}
               board={viewBoard}
+              columnSort={boardColumnSortFromViewPref(viewSort)}
               resolveCardHomeBoard={resolveCardHomeBoard}
               activityActorLabel={activityActorLabel}
               sessionUserId={kanbanSessionUserId}
@@ -3723,6 +3773,8 @@ export function KanbanApp({
             <KanbanListView
               appState={appState}
               board={viewBoard}
+              sort={listSortFromViewPref(viewSort)}
+              onSortChange={persistViewSort}
               cardHomeBoardId={cardHomeBoardId}
               onOpenCard={openKanbanCard}
               onAdvanceCardColumn={
@@ -3734,6 +3786,15 @@ export function KanbanApp({
               canEditDueDate={kanbanCardPerms.editDueDate}
               onUpdateStageDue={applyCardStageDueFromList}
               onToggleUrgent={applyCardUrgentFromList}
+              onCopyCardLink={copyCardLink}
+              canManageKanbanBlock={canManageKanbanBlock}
+              onRequestKanbanBlock={(cardId) => {
+                setListExpandedCardId(cardId);
+                const loc = findCardInAppState(appState, cardId);
+                if (loc && !loc.card.blocked) {
+                  setListAutoOpenBlock(true);
+                }
+              }}
               expandedCardId={listExpandedCardId}
               onExpandedCardIdChange={setListExpandedCardId}
               renderExpandedCard={(cardId) => (
@@ -3794,6 +3855,8 @@ export function KanbanApp({
                   canManageKanbanTimer={kanbanCardPerms.manageKanbanTimer}
                   canAttachFiles={kanbanCardPerms.attachFiles}
                   canManageKanbanBlock={canManageKanbanBlock}
+                  autoOpenBlock={listAutoOpenBlock}
+                  onAutoOpenBlockConsumed={() => setListAutoOpenBlock(false)}
                   onOpenLinkedCard={(id) => {
                     setListExpandedCardId(null);
                     setCardModalId(id);

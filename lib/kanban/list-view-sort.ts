@@ -51,6 +51,56 @@ export const LIST_SORT_SELECT_OPTIONS: {
 /** На доске: не трогать сохранённый порядок колонки. */
 export const BOARD_COLUMN_SORT_MANUAL = "board";
 
+export type KanbanViewSortPref = ListSort | typeof BOARD_COLUMN_SORT_MANUAL;
+
+/** localStorage: свой ключ на пользователя, иначе на общем ПК чужой выбор. */
+export function kanbanViewSortLocalKey(userId: string, boardId: string): string {
+  const uid = String(userId || "").trim() || "anon";
+  const bid = String(boardId || "").trim() || "board";
+  return `kanbanViewSort:${uid}:${bid}`;
+}
+
+/** user client-state уже per-user; в ключе только доска. */
+export function kanbanViewSortRemoteKey(boardId: string): string {
+  return `kanbanViewSort:${String(boardId || "").trim() || "board"}`;
+}
+
+export function parseKanbanViewSortPref(raw: unknown): KanbanViewSortPref | null {
+  if (raw === BOARD_COLUMN_SORT_MANUAL) return BOARD_COLUMN_SORT_MANUAL;
+  if (isListSort(raw)) return raw;
+  return null;
+}
+
+export function loadKanbanViewSortPrefLocal(
+  userId: string,
+  boardId: string,
+): KanbanViewSortPref | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(kanbanViewSortLocalKey(userId, boardId));
+    if (!raw) return null;
+    return parseKanbanViewSortPref(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+export function saveKanbanViewSortPrefLocal(
+  userId: string,
+  boardId: string,
+  pref: KanbanViewSortPref,
+): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(
+      kanbanViewSortLocalKey(userId, boardId),
+      JSON.stringify(pref),
+    );
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 const LIST_SORT_KEYS: readonly ListSortKey[] = [
   "title",
   "created",
@@ -257,13 +307,12 @@ export function sortKanbanColumnCards(
   return rows.map((r) => r.card);
 }
 
-const STORAGE_PREFIX = "kanban-list-sort:";
-const memorySort = new Map<string, ListSort>();
-
-export function loadListSort(boardId: string): ListSort {
-  return memorySort.get(STORAGE_PREFIX + boardId) ?? DEFAULT_LIST_SORT;
+export function listSortFromViewPref(pref: KanbanViewSortPref): ListSort {
+  return pref === BOARD_COLUMN_SORT_MANUAL ? DEFAULT_LIST_SORT : pref;
 }
 
-export function saveListSort(boardId: string, sort: ListSort): void {
-  memorySort.set(STORAGE_PREFIX + boardId, sort);
+export function boardColumnSortFromViewPref(
+  pref: KanbanViewSortPref,
+): ListSort | null {
+  return pref === BOARD_COLUMN_SORT_MANUAL ? null : pref;
 }

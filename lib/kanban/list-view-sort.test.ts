@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOARD_COLUMN_SORT_MANUAL,
   buildKanbanListViewRows,
   DEFAULT_LIST_SORT,
   isDefaultListSort,
+  kanbanViewSortLocalKey,
+  parseKanbanViewSortPref,
   sortKanbanColumnCards,
 } from "@/lib/kanban/list-view-sort";
 import { defaultAppState } from "@/lib/kanban/model";
@@ -53,6 +56,28 @@ function boardWithCards(): KanbanBoard {
   ];
   return base;
 }
+
+describe("kanbanViewSortPref persist", () => {
+  it("ключ уникален по пользователю и доске (кириллица)", () => {
+    expect(kanbanViewSortLocalKey("u-я", "доска-орто")).toBe(
+      "kanbanViewSort:u-я:доска-орто",
+    );
+    expect(kanbanViewSortLocalKey("u-коллега", "доска-орто")).not.toBe(
+      kanbanViewSortLocalKey("u-я", "доска-орто"),
+    );
+  });
+
+  it("парсит сохранённую сортировку и ручной порядок", () => {
+    expect(parseKanbanViewSortPref(BOARD_COLUMN_SORT_MANUAL)).toBe(
+      BOARD_COLUMN_SORT_MANUAL,
+    );
+    expect(parseKanbanViewSortPref({ key: "due", dir: "asc" })).toEqual({
+      key: "due",
+      dir: "asc",
+    });
+    expect(parseKanbanViewSortPref({ key: "нет", dir: "asc" })).toBeNull();
+  });
+});
 
 describe("isDefaultListSort", () => {
   it("распознаёт стандартную сортировку", () => {

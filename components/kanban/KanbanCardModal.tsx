@@ -305,6 +305,9 @@ type KanbanCardModalProps = {
   onParentProductionFilesUpdated?: (cardId: string) => void;
   /** Раскрытие в списке: без оверлея, карточка растёт вниз. */
   embed?: boolean;
+  /** Список: сразу открыть попап причины блокировки. */
+  autoOpenBlock?: boolean;
+  onAutoOpenBlockConsumed?: () => void;
 };
 
 const KANBAN_BLOCK_PERM_HINT =
@@ -544,9 +547,10 @@ function KanbanDueUrgentControls({
       )}
       <button
         type="button"
+        data-no-touch-expand
         className={
           compact
-            ? `inline-flex h-6 shrink-0 items-center justify-center rounded-full border px-2.5 text-[0.68rem] font-bold uppercase leading-none tracking-wide ${
+            ? `inline-flex h-6 min-h-0 min-w-0 shrink-0 items-center justify-center rounded-md border px-2.5 text-[0.68rem] font-bold uppercase leading-none tracking-wide ${
                 urgent
                   ? "border-orange-600/80 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
                   : "border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)]"
@@ -609,6 +613,8 @@ export function KanbanCardModal({
   onOpenLinkedCard,
   onParentProductionFilesUpdated,
   embed = false,
+  autoOpenBlock = false,
+  onAutoOpenBlockConsumed,
 }: KanbanCardModalProps) {
   const [rightTab, setRightTab] = useState<KanbanCardModalTab>("chat");
   const [blockPopupOpen, setBlockPopupOpen] = useState(false);
@@ -643,6 +649,26 @@ export function KanbanCardModal({
   const card = found?.card;
   const showOrderMailButton = Boolean(card?.linkedOrderId);
   const act = (activityActorLabel ?? "").trim() || undefined;
+
+  useEffect(() => {
+    if (!autoOpenBlock) return;
+    if (!cardId || !card) {
+      onAutoOpenBlockConsumed?.();
+      return;
+    }
+    if (!canManageKanbanBlock) {
+      toast(KANBAN_BLOCK_PERM_HINT, true);
+      onAutoOpenBlockConsumed?.();
+      return;
+    }
+    if (isCardBlocked(card)) {
+      onAutoOpenBlockConsumed?.();
+      return;
+    }
+    setBlockReasonDraft("");
+    setBlockPopupOpen(true);
+    onAutoOpenBlockConsumed?.();
+  }, [autoOpenBlock, cardId]);
 
   const closeFileViewer = useCallback(() => setFileViewer(null), []);
 
@@ -1988,12 +2014,12 @@ export function KanbanCardModal({
       <div
         className={
           embed
-            ? "flex max-h-[min(85dvh,44rem)] w-full min-h-0 flex-col overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)]"
+            ? "flex w-full min-h-0 flex-col overflow-hidden bg-[var(--kaiten-modal-bg)]"
             : "flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         }
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {blocked && (
+        {blocked && !embed && (
           <div className="flex shrink-0 items-stretch gap-2 rounded-t-[10px] border border-b-0 border-red-900/50 bg-gradient-to-b from-[#dc2626] to-[#b91c1c] px-3 py-2.5 text-white shadow-md max-sm:rounded-none max-sm:ps-[var(--app-mobile-menu-inset,3.5rem)] dark:from-[#991b1b] dark:to-[#7f1d1d]">
             <IconBrick className="h-5 w-5 shrink-0 text-white" />
             <div className="min-w-0 flex-1">
@@ -2073,11 +2099,17 @@ export function KanbanCardModal({
         )}
 
         <div
-          className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
-            blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
-          }`}
+          className={
+            embed
+              ? "relative flex min-h-0 flex-col overflow-hidden bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
+              : `relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
+                  blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
+                }`
+          }
           style={{ backgroundColor: "var(--kaiten-modal-bg)" }}
         >
+          {!embed ? (
+          <>
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--kaiten-modal-border)] px-4 py-5 max-sm:ps-[var(--app-mobile-menu-inset,3.5rem)] sm:gap-4 sm:px-6 sm:py-6">
             <div className="min-w-0 flex-1 pr-1">
               <h2
@@ -2362,18 +2394,25 @@ export function KanbanCardModal({
               onOpen={() => setPickerMode("part")}
             />
           </div>
-          {card.kaitenMembersSyncWarning ? (
+          </>
+          ) : null}
+          {!embed && card.kaitenMembersSyncWarning ? (
             <p className="border-b border-[var(--kaiten-modal-border)] px-3 py-1.5 text-[0.65rem] leading-snug text-amber-700 dark:text-amber-300">
               {card.kaitenMembersSyncWarning}
             </p>
           ) : null}
 
-          <div className="flex min-h-0 flex-1 max-sm:flex-col sm:flex-row sm:items-stretch">
+          <div
+            className={`flex min-h-0 max-sm:flex-col sm:flex-row sm:items-stretch ${
+              embed ? "" : "flex-1"
+            }`}
+          >
             <div
               className={`flex min-h-0 min-w-0 flex-col sm:overflow-y-auto sm:overscroll-contain ${
                 rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"
-              } sm:flex-1`}
+              } ${embed ? "" : "sm:flex-1"}`}
             >
+              {embed && rightTab !== "card" ? null : (
               <div className="shrink-0 px-3 pb-2 pt-2.5">
               <div className="mb-0 sm:mb-3">
                 <button
@@ -2607,6 +2646,7 @@ export function KanbanCardModal({
                 ) : null}
               </div>
               </div>
+              )}
               <div className="sm:hidden">
                 <KanbanCardModalTabs
                   rightTab={rightTab}
@@ -3018,7 +3058,9 @@ export function KanbanCardModal({
               className={`flex w-full min-h-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
                 rightTab === "card"
                   ? "max-sm:hidden"
-                  : "max-sm:min-h-0 max-sm:flex-1"
+                  : embed
+                    ? "max-sm:min-h-0"
+                    : "max-sm:min-h-0 max-sm:flex-1"
               }`}
               style={{ backgroundColor: "var(--kaiten-modal-aside)" }}
             >
@@ -3070,6 +3112,7 @@ export function KanbanCardModal({
                 </div>
               ) : (
                 <ChatPanel
+                  compact={embed}
                   card={card}
                   board={board}
                   kaitenLoading={kaitenChatLoading}
@@ -3170,7 +3213,7 @@ function KanbanAttachmentImg({
     const bg = variant === "viewer" ? "bg-white/10" : "bg-black/35";
     return (
       <div
-        className={`flex h-full min-h-[4rem] w-full flex-col items-center justify-center gap-1 px-1 text-center ${muted} ${bg} ${className ?? ""}`}
+        className={`flex h-full min-h-0 w-full flex-col items-center justify-center gap-1 px-1 text-center sm:min-h-[4rem] ${muted} ${bg} ${className ?? ""}`}
       >
         <span className="text-[0.6rem] leading-tight">
           Превью недоступно · откройте файл по клику
@@ -3449,6 +3492,7 @@ function fallbackMentionToken(row: KanbanCrmUserRow | { name: string }): string 
 }
 
 function ChatPanel({
+  compact = false,
   card,
   board,
   kaitenLoading = false,
@@ -3464,6 +3508,8 @@ function ChatPanel({
   onFilesDropped,
   onOpenAttachment,
 }: {
+  /** Список: фикс. высота ленты ~2–3 сообщения, без раздува карточки. */
+  compact?: boolean;
   card: KanbanCard;
   board: KanbanBoard;
   kaitenLoading?: boolean;
@@ -3489,7 +3535,9 @@ function ChatPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [inp, setInp] = useState("");
-  const inputRef = useAutosizeTextarea(inp, { maxHeight: 240 });
+  const inputRef = useAutosizeTextarea(inp, {
+    maxHeight: compact ? 44 : 240,
+  });
   const [caretPos, setCaretPos] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -3641,7 +3689,9 @@ function ChatPanel({
 
   return (
     <div
-      className={`flex min-h-0 flex-1 flex-col transition-[box-shadow] ${
+      className={`flex min-h-0 flex-col transition-[box-shadow] ${
+        compact ? "" : "flex-1"
+      } ${
         dragOver
           ? "ring-2 ring-[var(--kaiten-accent)] ring-inset ring-offset-0"
           : ""
@@ -3674,7 +3724,11 @@ function ChatPanel({
           Загрузка из Kaiten…
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
+      <div
+        className={`min-h-0 overflow-y-auto overscroll-contain px-2 py-2 ${
+          compact ? "h-[12rem] max-h-[12rem] shrink-0" : "flex-1"
+        }`}
+      >
         {chatBlocks.map((block) => {
           if (block.kind === "imageRow") {
             const cm0 = block.comments[0];
@@ -3690,6 +3744,7 @@ function ChatPanel({
                   </span>
                   <button
                     type="button"
+                    data-no-touch-expand
                     className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
                     title="Ответить"
                     aria-label="Ответить на комментарий"
@@ -3701,7 +3756,7 @@ function ChatPanel({
                     <IconReply className={TOOLBAR_CIRCLE_ICON} />
                   </button>
                 </div>
-                <div className="mt-1 grid grid-cols-3 gap-1">
+                <div className="mt-1 flex flex-wrap gap-1 sm:grid sm:grid-cols-3 sm:gap-1">
                   {block.comments.map((cm) => {
                     const imgFile = resolveChatImageFile(card, cm)!;
                     return (
@@ -3711,11 +3766,12 @@ function ChatPanel({
                       >
                         <button
                           type="button"
+                          data-no-touch-expand
                           className="cursor-zoom-in text-left transition-opacity hover:opacity-95"
                           title={imgFile.name}
                           onClick={() => onOpenAttachment(imgFile)}
                         >
-                          <div className="aspect-square w-full overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-black/20">
+                          <div className="h-8 w-8 overflow-hidden rounded border border-[var(--kaiten-modal-border)] bg-black/20 sm:aspect-square sm:h-auto sm:w-full sm:rounded-md">
                             <KanbanAttachmentImg
                               file={imgFile}
                               alt=""
@@ -3723,12 +3779,13 @@ function ChatPanel({
                             />
                           </div>
                         </button>
-                        <div className="flex items-start justify-between gap-1">
+                        <div className="hidden items-start justify-between gap-1 sm:flex">
                           <span className="line-clamp-2 min-w-0 flex-1 break-all text-[0.55rem] leading-tight text-[var(--kaiten-modal-muted)]">
                             {cm.text.trim() || imgFile.name}
                           </span>
                           <button
                             type="button"
+                            data-no-touch-expand
                             className="shrink-0 rounded border border-[var(--kaiten-modal-border)] px-1 py-0.5 text-[0.55rem] leading-none text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
                             onClick={() => downloadCardFile(imgFile)}
                             title="Скачать файл"
@@ -3782,6 +3839,7 @@ function ChatPanel({
                     <>
                       <button
                         type="button"
+                        data-no-touch-expand
                         className="rounded border border-[var(--kaiten-modal-border)] px-1.5 py-0.5 text-[0.65rem] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)]"
                         onClick={() => {
                           setEditingId(cm.id);
@@ -3792,6 +3850,7 @@ function ChatPanel({
                       </button>
                       <button
                         type="button"
+                        data-no-touch-expand
                         className="rounded border border-[var(--kaiten-modal-border)] px-1.5 py-0.5 text-[0.65rem] text-[var(--kaiten-modal-muted)] hover:text-red-300"
                         onClick={() => {
                           void onDeleteComment(cm.id);
@@ -3803,6 +3862,7 @@ function ChatPanel({
                   ) : null}
                   <button
                     type="button"
+                    data-no-touch-expand
                     className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-control)] hover:text-[var(--kaiten-modal-text)]"
                     title="Ответить"
                     aria-label="Ответить на комментарий"
@@ -3882,7 +3942,7 @@ function ChatPanel({
           );
         })}
       </div>
-      <div className="relative flex shrink-0 flex-col gap-2 border-t border-[var(--kaiten-modal-border)] p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="relative flex shrink-0 flex-col gap-1.5 border-t border-[var(--kaiten-modal-border)] p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:gap-2">
         {replyTo ? (
           <div className="flex items-start gap-2 rounded-md border border-[var(--kaiten-accent)]/35 bg-[var(--kaiten-accent)]/10 px-2 py-1.5 text-[0.7rem] text-[var(--kaiten-modal-text)]">
             <div className="min-w-0 flex-1">
@@ -3915,7 +3975,7 @@ function ChatPanel({
         <textarea
           ref={inputRef}
           rows={1}
-          className="min-h-11 w-full min-w-0 resize-none overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-3 py-2 text-left text-[0.8125rem] font-medium text-[var(--kaiten-modal-text)] placeholder:text-center placeholder:text-[var(--kaiten-modal-muted)]"
+          className="h-11 min-h-11 w-full min-w-0 resize-none overflow-hidden rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-3 py-2 text-left text-[0.8125rem] font-medium text-[var(--kaiten-modal-text)] placeholder:text-center placeholder:text-[var(--kaiten-modal-muted)] sm:h-auto"
           placeholder="Комментарий"
           value={inp}
           onChange={(e) => {
@@ -3963,10 +4023,11 @@ function ChatPanel({
             }
           }}
         />
-        <div className="flex min-w-0 items-stretch gap-1.5 sm:gap-2">
+        <div className="flex h-11 min-h-11 min-w-0 items-center gap-1.5 sm:h-auto sm:min-h-0 sm:items-stretch sm:gap-2">
           <button
             type="button"
-            className="min-w-0 flex-1 rounded-md border border-amber-400/50 bg-amber-50 px-2 py-2 text-[0.75rem] font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-40 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200 dark:hover:bg-amber-400/20 sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
+            data-no-touch-expand
+            className="inline-flex h-11 min-h-0 min-w-0 flex-1 items-center justify-center rounded-md border border-amber-400/50 bg-amber-50 px-1.5 text-[0.65rem] font-semibold leading-none text-amber-900 hover:bg-amber-100 disabled:opacity-40 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200 dark:hover:bg-amber-400/20 sm:h-auto sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
             disabled={!inp.trim()}
             title="Отправить как корректировку"
             onClick={() => {
@@ -3977,7 +4038,8 @@ function ChatPanel({
           </button>
           <button
             type="button"
-            className="min-w-0 flex-1 rounded-md border border-sky-400/50 bg-sky-50 px-2 py-2 text-[0.75rem] font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-40 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-200 dark:hover:bg-sky-400/20 sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
+            data-no-touch-expand
+            className="inline-flex h-11 min-h-0 min-w-0 flex-1 items-center justify-center rounded-md border border-sky-400/50 bg-sky-50 px-1.5 text-[0.65rem] font-semibold leading-none text-sky-900 hover:bg-sky-100 disabled:opacity-40 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-200 dark:hover:bg-sky-400/20 sm:h-auto sm:px-2.5 sm:py-2.5 sm:text-[0.8125rem]"
             disabled={!inp.trim()}
             title="Отправить как заказ протетики"
             onClick={() => {
@@ -3989,7 +4051,8 @@ function ChatPanel({
           {canSendPt ? (
             <button
               type="button"
-              className="w-11 shrink-0 rounded-md border border-violet-400/50 bg-violet-50 px-1.5 py-2 text-[0.75rem] font-semibold text-violet-900 hover:bg-violet-100 disabled:opacity-40 dark:border-violet-400/40 dark:bg-violet-400/10 dark:text-violet-200 dark:hover:bg-violet-400/20 sm:w-12 sm:py-2.5 sm:text-[0.8125rem]"
+              data-no-touch-expand
+              className="inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-md border border-violet-400/50 bg-violet-50 px-1 text-[0.65rem] font-semibold leading-none text-violet-900 hover:bg-violet-100 disabled:opacity-40 dark:border-violet-400/40 dark:bg-violet-400/10 dark:text-violet-200 dark:hover:bg-violet-400/20 sm:h-auto sm:w-12 sm:py-2.5 sm:text-[0.8125rem]"
               disabled={!inp.trim()}
               title="Отправить в чат и в колонку ПТ в заказах"
               onClick={() => {
@@ -4001,7 +4064,8 @@ function ChatPanel({
           ) : null}
           <button
             type="button"
-            className="flex w-11 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-2 text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:w-12 sm:py-2.5"
+            data-no-touch-expand
+            className="inline-flex h-11 w-11 min-h-0 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] disabled:opacity-40 sm:h-auto sm:w-12 sm:py-2.5"
             disabled={!inp.trim()}
             aria-label="Отправить комментарий"
             onClick={() => {

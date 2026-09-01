@@ -12,10 +12,6 @@ import {
   buildKanbanListViewRows,
   DEFAULT_LIST_SORT,
   defaultDirForSortKey,
-  isDefaultListSort,
-  loadListSort,
-  LIST_SORT_SELECT_OPTIONS,
-  sortToSelectValue,
   type ListSort,
   type ListSortKey,
 } from "@/lib/kanban/list-view-sort";
@@ -29,12 +25,13 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 
 const LIST_ROW_PX = 68;
 const LIST_OVERSCAN = 10;
-import { IconBrick, IconListCheck, IconPlus } from "./kanban-icons";
+import { IconBrick, IconLink, IconListCheck, IconMail, IconPlus, IconUnlock } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
 import { KanbanMemberPickerDialog } from "./KanbanMemberPickerDialog";
 import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
-import { readClientState, writeClientState } from "@/lib/client-state-client";
+import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
+import { extractOrderNumberLabelFromKanbanCardTitle } from "@/lib/kanban-mention-telegram-html";
 
 /**
  * Desktop: одна сетка на шапку + все строки (`auto` = max по столбцу).
@@ -158,7 +155,7 @@ function ListMemberAddButton({
   title: string;
   disabled?: boolean;
   onClick: () => void;
-  /** Mobile list: чуть меньше аватара (18 vs 24), не второй такой же кружок. */
+  /** Mobile list: меньше аватара (16 vs 24). Без data-no-touch-expand глобальный 44px раздувает кружок. */
   compact?: boolean;
   /** @deprecated размер задаёт compact */
   size?: "xs" | "sm";
@@ -166,12 +163,13 @@ function ListMemberAddButton({
   return (
     <button
       type="button"
+      data-no-touch-expand
       disabled={disabled}
       title={title}
       aria-label={title}
-      className={`box-border inline-flex min-h-0 min-w-0 shrink-0 items-center justify-center overflow-hidden rounded-full border border-dashed border-[var(--kanban-text-muted)] p-0 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`box-border inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-dashed border-[var(--kanban-text-muted)] p-0 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40 ${
         compact
-          ? "h-[18px] w-[18px] max-h-[18px] max-w-[18px]"
+          ? "!h-4 !w-4 !min-h-4 !min-w-4 !max-h-4 !max-w-4"
           : "h-4 w-4 max-h-4 max-w-4"
       }`}
       onPointerDown={(e) => e.stopPropagation()}
@@ -224,7 +222,11 @@ function ListMembersCell({
           ))}
           {overflow > 0 ? (
             <span
-              className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full bg-black/[0.08] px-1 text-[0.5rem] font-semibold text-[var(--kanban-text-muted)] dark:bg-white/[0.1]"
+              className={`inline-flex shrink-0 items-center justify-center rounded-full bg-black/[0.08] px-1 font-semibold text-[var(--kanban-text-muted)] dark:bg-white/[0.1] ${
+                isMobileList
+                  ? "h-5 min-w-5 text-[0.45rem]"
+                  : "h-7 min-w-7 text-[0.5rem]"
+              }`}
               title={`Ещё ${overflow}`}
             >
               +{overflow}
@@ -422,13 +424,14 @@ function ListUrgentPillButton({
   return (
     <button
       type="button"
+      data-no-touch-expand
       disabled={!onUrgentChange}
       title={
         urgent
           ? "Снять метку «Срочно» для следующего отдела (только канбан)"
           : "Срочно для следующего отдела (только канбан, наряд не меняется)"
       }
-      className={`inline-flex h-4 shrink-0 items-center whitespace-nowrap rounded-full border px-1.5 text-[0.4rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`inline-flex h-5 min-h-0 min-w-0 shrink-0 items-center whitespace-nowrap rounded-md border px-2 text-[0.5rem] font-extrabold uppercase leading-none tracking-wide disabled:cursor-not-allowed disabled:opacity-50 ${
         urgent
           ? "border-orange-600 bg-gradient-to-b from-orange-500 to-red-600 text-white shadow-sm"
           : "border-[var(--kanban-text-muted)] bg-transparent text-[var(--kanban-text)]"
@@ -440,6 +443,36 @@ function ListUrgentPillButton({
       }}
     >
       Срочно
+    </button>
+  );
+}
+
+function ListMobileIconButton({
+  title,
+  disabled,
+  onClick,
+  children,
+}: {
+  title: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      data-no-touch-expand
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-white/[0.08]"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {children}
     </button>
   );
 }
@@ -463,10 +496,16 @@ type KanbanListViewProps = {
   canEditDueDate?: boolean;
   onUpdateStageDue?: (cardId: string, homeBoardId: string, ymd: string) => void;
   onToggleUrgent?: (cardId: string, homeBoardId: string, urgent: boolean) => void;
+  onCopyCardLink?: (cardId: string) => void;
+  canManageKanbanBlock?: boolean;
+  /** Раскрыть карточку и открыть попап блокировки (как в модалке). */
+  onRequestKanbanBlock?: (cardId: string) => void;
   /** Mobile: полная карточка под строкой списка (без оверлея). */
   renderExpandedCard?: (cardId: string) => ReactNode;
   expandedCardId?: string | null;
   onExpandedCardIdChange?: (cardId: string | null) => void;
+  sort?: ListSort;
+  onSortChange?: (next: ListSort) => void;
 };
 
 export function KanbanListView({
@@ -481,11 +520,17 @@ export function KanbanListView({
   canEditDueDate = true,
   onUpdateStageDue,
   onToggleUrgent,
+  onCopyCardLink,
+  canManageKanbanBlock = false,
+  onRequestKanbanBlock,
   renderExpandedCard,
   expandedCardId: expandedCardIdProp,
   onExpandedCardIdChange,
+  sort: sortProp,
+  onSortChange: onSortChangeProp,
 }: KanbanListViewProps) {
-  const [sort, setSort] = useState<ListSort>(DEFAULT_LIST_SORT);
+  const [sortLocal, setSortLocal] = useState<ListSort>(DEFAULT_LIST_SORT);
+  const sort = sortProp ?? sortLocal;
   const [expandedCardIdLocal, setExpandedCardIdLocal] = useState<string | null>(
     null,
   );
@@ -507,44 +552,18 @@ export function KanbanListView({
     mode: KanbanMemberPickerMode;
     initialUserIds: string[];
   }>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const remote = await readClientState<unknown>(
-        "user",
-        `kanbanListSort:${board.id}`,
-      );
-      if (cancelled) return;
-      if (
-        remote &&
-        typeof remote === "object" &&
-        "key" in remote &&
-        "dir" in remote
-      ) {
-        setSort(remote as ListSort);
-        return;
-      }
-      setSort(loadListSort(board.id));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [board.id]);
+  const [mailOrder, setMailOrder] = useState<null | {
+    orderId: string;
+    orderNumber: string;
+  }>(null);
 
   const onSortChange = useCallback(
     (next: ListSort) => {
-      setSort(next);
-      void writeClientState("user", `kanbanListSort:${board.id}`, next);
+      if (onSortChangeProp) onSortChangeProp(next);
+      else setSortLocal(next);
     },
-    [board.id],
+    [onSortChangeProp],
   );
-
-  const resetSort = useCallback(() => {
-    onSortChange(DEFAULT_LIST_SORT);
-  }, [onSortChange]);
-
-  const sortIsDefault = isDefaultListSort(sort);
 
   const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
 
@@ -584,8 +603,6 @@ export function KanbanListView({
     ? Math.max(0, (rows.length - listEnd) * LIST_ROW_PX)
     : 0;
 
-  const mobileSelectValue = sortToSelectValue(sort);
-
   const pickerBoard = useMemo(() => {
     if (!picker) return board;
     return appState.boards.find((b) => b.id === picker.homeBoardId) ?? board;
@@ -609,51 +626,6 @@ export function KanbanListView({
   return (
     <div className="relative z-0 flex w-full min-h-0 flex-1 flex-col overflow-hidden py-2 pl-2 pr-1 sm:pl-3 sm:pr-2">
       <div className="flex w-full min-h-0 max-w-full flex-1 flex-col">
-        <div className="mb-2 shrink-0 sm:hidden">
-          <label
-            htmlFor="kanban-list-sort-mobile"
-            className="mb-1 block text-[0.6rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)]"
-          >
-            Порядок списка
-          </label>
-          <div className="flex items-center gap-2">
-            <select
-              id="kanban-list-sort-mobile"
-              className="min-w-0 flex-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1.5 text-[0.75rem] text-[var(--kanban-text)]"
-              value={mobileSelectValue}
-              onChange={(e) => {
-                const opt = LIST_SORT_SELECT_OPTIONS.find((o) => o.value === e.target.value);
-                if (opt) onSortChange(opt.sort);
-              }}
-            >
-              {LIST_SORT_SELECT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={sortIsDefault}
-              title="Вернуть сортировку по умолчанию: новые карточки сверху"
-              className="shrink-0 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-1.5 text-[0.68rem] font-medium text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-default disabled:opacity-45 dark:hover:bg-white/[0.08]"
-              onClick={resetSort}
-            >
-              Сброс
-            </button>
-          </div>
-        </div>
-        <div className="mb-1 flex shrink-0 justify-end">
-          <button
-            type="button"
-            disabled={sortIsDefault}
-            title="Вернуть сортировку по умолчанию: новые карточки сверху"
-            className="hidden rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-2 py-0.5 text-[0.62rem] font-medium text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] disabled:cursor-default disabled:opacity-45 dark:hover:bg-white/[0.08] sm:inline-flex"
-            onClick={resetSort}
-          >
-            Сброс сортировки
-          </button>
-        </div>
         <div
           className="min-h-0 flex-1 overflow-y-auto"
           ref={onListScroll}
@@ -950,32 +922,82 @@ export function KanbanListView({
                                 />
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08]"
-                              title={
-                                expandedCardId === card.id
-                                  ? "Свернуть карточку"
-                                  : "Раскрыть карточку в списке"
-                              }
-                              aria-expanded={expandedCardId === card.id}
-                              aria-label={
-                                expandedCardId === card.id
-                                  ? "Свернуть карточку"
-                                  : "Раскрыть карточку в списке"
-                              }
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleExpandedCard(card.id);
-                              }}
-                            >
-                              <IconChevronDown
-                                className={`h-4 w-4 transition-transform ${
-                                  expandedCardId === card.id ? "rotate-180" : ""
-                                }`}
-                              />
-                            </button>
+                            <div className="flex items-center gap-0.5">
+                              <ListMobileIconButton
+                                title="Поделиться — копировать ссылку"
+                                disabled={!onCopyCardLink}
+                                onClick={() => onCopyCardLink?.(card.id)}
+                              >
+                                <IconLink className="h-3.5 w-3.5" />
+                              </ListMobileIconButton>
+                              <ListMobileIconButton
+                                title={
+                                  card.linkedOrderId
+                                    ? (card.sourceEmailCount ?? 0) > 0
+                                      ? `Письма наряда (${card.sourceEmailCount})`
+                                      : "Письма наряда"
+                                    : "Нет связанного наряда"
+                                }
+                                disabled={!card.linkedOrderId}
+                                onClick={() => {
+                                  const orderId = card.linkedOrderId?.trim();
+                                  if (!orderId) return;
+                                  setMailOrder({
+                                    orderId,
+                                    orderNumber:
+                                      extractOrderNumberLabelFromKanbanCardTitle(
+                                        card.title,
+                                      ),
+                                  });
+                                }}
+                              >
+                                <IconMail className="h-3.5 w-3.5" />
+                              </ListMobileIconButton>
+                              <ListMobileIconButton
+                                title={
+                                  canManageKanbanBlock
+                                    ? blocked
+                                      ? "Снять блокировку — раскройте карточку"
+                                      : "Заблокировать карточку"
+                                    : "Блокировку могут менять ответственные и участники карточки или администратор"
+                                }
+                                disabled={!onRequestKanbanBlock}
+                                onClick={() => onRequestKanbanBlock?.(card.id)}
+                              >
+                                {blocked ? (
+                                  <IconUnlock className="h-3.5 w-3.5" />
+                                ) : (
+                                  <IconBrick className="h-3.5 w-3.5" />
+                                )}
+                              </ListMobileIconButton>
+                              <button
+                                type="button"
+                                data-no-touch-expand
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08]"
+                                title={
+                                  expandedCardId === card.id
+                                    ? "Свернуть карточку"
+                                    : "Раскрыть карточку в списке"
+                                }
+                                aria-expanded={expandedCardId === card.id}
+                                aria-label={
+                                  expandedCardId === card.id
+                                    ? "Свернуть карточку"
+                                    : "Раскрыть карточку в списке"
+                                }
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleExpandedCard(card.id);
+                                }}
+                              >
+                                <IconChevronDown
+                                  className={`h-4 w-4 transition-transform ${
+                                    expandedCardId === card.id ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </button>
+                            </div>
                           </div>
                         </div>
                         {expandedCardId === card.id ? (
@@ -1097,6 +1119,14 @@ export function KanbanListView({
         />
       ) : null}
       {previewNode}
+      {mailOrder ? (
+        <OrderSourceEmailsModal
+          orderId={mailOrder.orderId}
+          orderNumber={mailOrder.orderNumber}
+          hideReplyStatus
+          onClose={() => setMailOrder(null)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1143,9 +1143,11 @@ export async function PATCH(
     ? await getEffectiveModuleAccess(tenantId, session.role)
     : null;
   const canMove = moduleAccess?.KANBAN_MOVE_COLUMNS === true;
-  const canStop = moduleAccess?.KANBAN_STOP === true || canMove;
-  const canRestoreFromStop =
-    moduleAccess?.KANBAN === true || canStop;
+  const canStop =
+    moduleAccess?.KANBAN === true ||
+    moduleAccess?.KANBAN_STOP === true ||
+    canMove;
+  const canRestoreFromStop = canStop;
   const canOtherBoard =
     moduleAccess?.KANBAN_MOVE_TO_OTHER_BOARD === true || canMove;
   if (body.moveToStop === true && !canStop) {

@@ -59,6 +59,10 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
   const loadingUi = isCrmModuleListLoading(children);
   const live = Boolean(path && painted === path && !loadingUi);
   const liveRootRef = useRef<HTMLDivElement>(null);
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  const liveRef = useRef(live);
+  liveRef.current = live;
   const htmlSnap = !live && path ? readCrmModuleListHtml(path) : null;
   const [hydratedPath, setHydratedPath] = useState<string | null>(null);
 
@@ -71,6 +75,7 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
       setHydratedPath(path);
       return;
     }
+    if (loadingUi) return;
     const hydrate = () => setHydratedPath(path);
     if (typeof window.requestIdleCallback === "function") {
       const id = window.requestIdleCallback(hydrate, { timeout: 400 });
@@ -78,18 +83,38 @@ export function CrmModuleKeepAlive({ children }: { children: ReactNode }) {
     }
     const t = window.setTimeout(hydrate, 200);
     return () => window.clearTimeout(t);
-  }, [path]);
+  }, [path, loadingUi]);
 
   useLayoutEffect(() => {
     if (!live || !path || !liveRootRef.current) return;
     rememberCrmModuleListHtml(path, liveRootRef.current.innerHTML);
   }, [live, path, children]);
 
+  useEffect(() => {
+    const capture = () => {
+      const p = pathRef.current;
+      const el = liveRootRef.current;
+      if (!p || !el || !liveRef.current) return;
+      rememberCrmModuleListHtml(p, el.innerHTML);
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") capture();
+    };
+    window.addEventListener("pagehide", capture);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      capture();
+      window.removeEventListener("pagehide", capture);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [path]);
+
   if (!path) {
     return <CrmModuleListLive>{children}</CrmModuleListLive>;
   }
 
-  const mountLive = !htmlSnap || hydratedPath === path;
+  /** Пока RSC грузится — только кадр, без скрытого дерева (меньше RAM). */
+  const mountLive = !htmlSnap || (hydratedPath === path && !loadingUi);
 
   return (
     <div className="relative">
