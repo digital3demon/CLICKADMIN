@@ -50,7 +50,6 @@ function MenuToggleIcon({ open }: { open: boolean }) {
 
 function AppShellChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const {
     mobileNavOpen,
     setMobileNavOpen,
