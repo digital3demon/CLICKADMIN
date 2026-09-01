@@ -3227,7 +3227,7 @@ export function KanbanApp({
   return (
     <KanbanCrmUsersProvider>
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
-      <header className="flex max-w-full flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
+      <header className="flex max-w-full shrink-0 flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
         <div className="flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2">
           <div className="relative max-md:ms-[max(2.75rem,calc(env(safe-area-inset-left,0px)+2.35rem+0.2rem))] md:ms-0">
             <select
@@ -3293,7 +3293,8 @@ export function KanbanApp({
       </header>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="relative z-20 flex max-w-full flex-wrap items-center gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 sm:gap-2.5 sm:px-4 sm:py-2.5">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:overflow-y-auto max-sm:overscroll-y-contain sm:overflow-hidden">
+          <div className="relative z-20 flex max-w-full shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 sm:gap-2.5 sm:px-4 sm:py-2.5">
             <div
               className="flex shrink-0 items-center gap-1 sm:gap-1.5"
               role="group"
@@ -3551,6 +3552,13 @@ export function KanbanApp({
               </div>
           </div>
 
+          <div
+            className={`flex min-h-0 min-w-0 flex-col ${
+              !stopOpen && appState.viewMode === "list"
+                ? "max-sm:flex-none max-sm:overflow-visible sm:min-h-0 sm:flex-1 sm:overflow-hidden"
+                : "min-h-0 flex-1 overflow-hidden"
+            }`}
+          >
           {stopOpen ? (
             <KanbanStopView
               board={board}
@@ -3869,6 +3877,8 @@ export function KanbanApp({
               )}
             />
           )}
+          </div>
+          </div>
       </div>
 
       <KanbanCardModal

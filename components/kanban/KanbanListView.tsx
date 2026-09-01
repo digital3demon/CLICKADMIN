@@ -35,11 +35,11 @@ import { extractOrderNumberLabelFromKanbanCardTitle } from "@/lib/kanban-mention
 
 /**
  * Desktop: одна сетка на шапку + все строки (`auto` = max по столбцу).
- * Название — не 1fr: иначе пустота между текстом и «Колонка».
+ * Первый столбец — кнопка раскрытия; название — не 1fr: иначе пустота между текстом и «Колонка».
  * Хвост `1fr` забирает лишнюю ширину, карточка остаётся на всю строку.
  */
 const LIST_TABLE =
-  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
+  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[auto_minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
 
 /** Mobile: своя сетка. Desktop: `contents` — ячейки входят в subgrid карточки. */
 const LIST_ROW_INNER = "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:contents";
@@ -136,6 +136,36 @@ function IconChevronDown(props: { className?: string }) {
         clipRule="evenodd"
       />
     </svg>
+  );
+}
+
+function ListRowExpandButton({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-no-touch-expand
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08]"
+      title={expanded ? "Свернуть карточку" : "Раскрыть карточку в списке"}
+      aria-expanded={expanded}
+      aria-label={
+        expanded ? "Свернуть карточку" : "Раскрыть карточку в списке"
+      }
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      <IconChevronDown
+        className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+      />
+    </button>
   );
 }
 
@@ -576,6 +606,14 @@ export function KanbanListView({
     [board, appState, sort, cardHomeBoardId],
   );
   const [listRange, setListRange] = useState({ start: 0, end: 40 });
+  const [mobileListScroll, setMobileListScroll] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const sync = () => setMobileListScroll(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
   const onListScroll = useCallback(
     (el: HTMLDivElement | null) => {
       if (!el) return;
@@ -592,7 +630,7 @@ export function KanbanListView({
     },
     [rows.length],
   );
-  const windowing = !expandedCardId;
+  const windowing = !expandedCardId && !mobileListScroll;
   const listStart = windowing ? Math.min(listRange.start, rows.length) : 0;
   const listEnd = windowing
     ? Math.min(Math.max(listRange.end, listStart), rows.length)
@@ -624,17 +662,20 @@ export function KanbanListView({
   );
 
   return (
-    <div className="relative z-0 flex w-full min-h-0 flex-1 flex-col overflow-hidden py-2 pl-2 pr-1 sm:pl-3 sm:pr-2">
-      <div className="flex w-full min-h-0 max-w-full flex-1 flex-col">
+    <div className="relative z-0 flex w-full min-h-0 flex-1 flex-col overflow-hidden py-2 pl-2 pr-1 max-sm:flex-none max-sm:overflow-visible sm:pl-3 sm:pr-2">
+      <div className="flex w-full min-h-0 max-w-full flex-1 flex-col max-sm:flex-none">
         <div
-          className="min-h-0 flex-1 overflow-y-auto"
-          ref={onListScroll}
-          onScroll={(e) => onListScroll(e.currentTarget)}
+          className="min-h-0 flex-1 overflow-y-auto max-sm:overflow-visible max-sm:flex-none"
+          ref={mobileListScroll ? undefined : onListScroll}
+          onScroll={
+            mobileListScroll ? undefined : (e) => onListScroll(e.currentTarget)
+          }
         >
         <div className={LIST_TABLE}>
         <div
           className="sticky top-0 z-10 hidden border-b border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] pb-1 text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:border-l-[3px] sm:border-l-transparent sm:border-r sm:border-r-transparent"
         >
+          <div className="min-w-0 sm:w-7" aria-hidden />
           <div className="min-w-0 sm:px-2">
             <SortHeaderButton
               label="Название"
@@ -729,6 +770,16 @@ export function KanbanListView({
                   }}
                 >
                   <div className={LIST_ROW_INNER}>
+                    <div
+                      className="hidden sm:flex sm:items-start sm:justify-center sm:px-0.5 sm:py-1.5"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ListRowExpandButton
+                        expanded={expandedCardId === card.id}
+                        onToggle={() => toggleExpandedCard(card.id)}
+                      />
+                    </div>
                     {/* Mobile: тип | контент; отв./участн. справа сверху */}
                     <div className="flex min-w-0 sm:contents">
                       <div
@@ -970,52 +1021,13 @@ export function KanbanListView({
                                   <IconBrick className="h-3.5 w-3.5" />
                                 )}
                               </ListMobileIconButton>
-                              <button
-                                type="button"
-                                data-no-touch-expand
-                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-text)] dark:hover:bg-white/[0.08]"
-                                title={
-                                  expandedCardId === card.id
-                                    ? "Свернуть карточку"
-                                    : "Раскрыть карточку в списке"
-                                }
-                                aria-expanded={expandedCardId === card.id}
-                                aria-label={
-                                  expandedCardId === card.id
-                                    ? "Свернуть карточку"
-                                    : "Раскрыть карточку в списке"
-                                }
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleExpandedCard(card.id);
-                                }}
-                              >
-                                <IconChevronDown
-                                  className={`h-4 w-4 transition-transform ${
-                                    expandedCardId === card.id ? "rotate-180" : ""
-                                  }`}
-                                />
-                              </button>
+                              <ListRowExpandButton
+                                expanded={expandedCardId === card.id}
+                                onToggle={() => toggleExpandedCard(card.id)}
+                              />
                             </div>
                           </div>
                         </div>
-                        {expandedCardId === card.id ? (
-                          <div
-                            className="border-t border-[var(--kanban-border)] sm:hidden"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {renderExpandedCard ? (
-                              renderExpandedCard(card.id)
-                            ) : (
-                              <ListInlineExpandedBody
-                                card={card}
-                                onOpenCard={() => onOpenCard(card.id)}
-                              />
-                            )}
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                     <div className="hidden min-h-[2rem] sm:flex sm:min-w-0 sm:items-start sm:gap-1 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1.5">
@@ -1089,6 +1101,22 @@ export function KanbanListView({
                       />
                     </div>
                   </div>
+                  {expandedCardId === card.id ? (
+                    <div
+                      className="border-t border-[var(--kanban-border)] sm:col-span-full"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {renderExpandedCard ? (
+                        renderExpandedCard(card.id)
+                      ) : (
+                        <ListInlineExpandedBody
+                          card={card}
+                          onOpenCard={() => onOpenCard(card.id)}
+                        />
+                      )}
+                    </div>
+                  ) : null}
                 </article>
             );
           })}

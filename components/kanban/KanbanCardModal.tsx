@@ -1835,7 +1835,7 @@ export function KanbanCardModal({
       ref={overlayRef}
       className={
         embed
-          ? "kanban-root relative z-0 flex min-h-0 w-full flex-col overflow-hidden bg-transparent p-0"
+          ? "kanban-root relative z-0 flex min-h-0 w-full flex-col overflow-visible bg-transparent p-0"
           : "kanban-root fixed inset-0 z-[200] flex overflow-hidden bg-black/55 max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
       }
       role={embed ? "region" : "dialog"}
@@ -2014,7 +2014,7 @@ export function KanbanCardModal({
       <div
         className={
           embed
-            ? "flex w-full min-h-0 flex-col overflow-hidden bg-[var(--kaiten-modal-bg)]"
+            ? "flex w-full min-h-0 flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
             : "flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         }
         onMouseDown={(e) => e.stopPropagation()}
@@ -2101,7 +2101,7 @@ export function KanbanCardModal({
         <div
           className={
             embed
-              ? "relative flex min-h-0 flex-col overflow-hidden bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
+              ? "relative flex min-h-0 flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
               : `relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
                   blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
                 }`
@@ -2408,9 +2408,11 @@ export function KanbanCardModal({
             }`}
           >
             <div
-              className={`flex min-h-0 min-w-0 flex-col sm:overflow-y-auto sm:overscroll-contain ${
-                rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"
-              } ${embed ? "" : "sm:flex-1"}`}
+              className={`flex min-h-0 min-w-0 flex-col ${
+                embed
+                  ? "overflow-visible"
+                  : "sm:flex-1 sm:overflow-y-auto sm:overscroll-contain"
+              } ${rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"}`}
             >
               {embed && rightTab !== "card" ? null : (
               <div className="shrink-0 px-3 pb-2 pt-2.5">
@@ -3055,7 +3057,9 @@ export function KanbanCardModal({
             </div>
 
             <div
-              className={`flex w-full min-h-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
+              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
+                embed ? "overflow-visible" : "overflow-hidden"
+              } ${
                 rightTab === "card"
                   ? "max-sm:hidden"
                   : embed
@@ -3073,7 +3077,9 @@ export function KanbanCardModal({
                 />
               </div>
               {rightTab === "done" ? (
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <div
+                  className={`min-h-0 flex-1 ${embed ? "overflow-visible" : "overflow-y-auto overscroll-contain"}`}
+                >
                   <PayrollDonePanel
                     orderId={card.linkedOrderId ?? null}
                     kanbanCardId={card.id}
@@ -3081,7 +3087,9 @@ export function KanbanCardModal({
                   />
                 </div>
               ) : rightTab === "act" ? (
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 text-[0.8125rem]">
+                <div
+                  className={`min-h-0 flex-1 px-2 py-2 text-[0.8125rem] ${embed ? "overflow-visible" : "overflow-y-auto overscroll-contain"}`}
+                >
                   {(card.activity || []).length === 0 ? (
                     <p className="text-[var(--kaiten-modal-muted)]">
                       Журнал пуст. Дата создания — в шапке карточки. Переносы
