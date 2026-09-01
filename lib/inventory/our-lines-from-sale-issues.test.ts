@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   aggregateSaleIssueOurLines,
   hydrateOrderProstheticsFromStock,
@@ -75,5 +75,60 @@ describe("our lines from SALE_ISSUE", () => {
       { id: "o1", prosthetics: saved },
     );
     expect(shown.ourLines).toEqual(saved.ourLines);
+  });
+
+  it("пустой JSON восстанавливается из SALE_ISSUE", async () => {
+    const db = {
+      stockMovement: {
+        findMany: async () => [
+          {
+            kind: "SALE_ISSUE",
+            itemId: "абатмент",
+            warehouseId: "протетика",
+            quantity: 2,
+            returnedToWarehouseAt: null,
+          },
+        ],
+      },
+      order: {
+        update: vi.fn(),
+      },
+    };
+    const shown = await hydrateOrderProstheticsFromStock(db as never, {
+      id: "o-restore",
+      prosthetics: null,
+    });
+    expect(shown.ourLines).toEqual([
+      { inventoryItemId: "абатмент", quantity: 2, warehouseId: "протетика" },
+    ]);
+    expect(db.order.update).toHaveBeenCalled();
+  });
+
+  it("сохранённый JSON не перезаписывается старым SALE_ISSUE", async () => {
+    const saved = {
+      v: 1 as const,
+      clientProvided: [] as const,
+      ourLines: [{ inventoryItemId: "новая", quantity: 1, warehouseId: "протетика" }],
+    };
+    const db = {
+      stockMovement: {
+        findMany: async () => [
+          {
+            kind: "SALE_ISSUE",
+            itemId: "старая",
+            warehouseId: "протетика",
+            quantity: 5,
+            returnedToWarehouseAt: null,
+          },
+        ],
+      },
+      order: { update: vi.fn() },
+    };
+    const shown = await hydrateOrderProstheticsFromStock(db as never, {
+      id: "o2",
+      prosthetics: saved,
+    });
+    expect(shown.ourLines).toEqual(saved.ourLines);
+    expect(db.order.update).not.toHaveBeenCalled();
   });
 });

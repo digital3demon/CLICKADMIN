@@ -7,6 +7,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   prostheticsFromDb,
+  prostheticsToJson,
   type OrderProstheticsV1,
   type ProstheticsOurLine,
 } from "@/lib/order-prosthetics";
@@ -130,12 +131,30 @@ export async function loadOurLinesFromOrderSaleIssues(
 }
 
 /**
- * Показ состава: JSON наряда — источник истины после «Сохранить».
- * Журнал не пишем обратно: иначе старые SALE_ISSUE затирают правку.
+ * Показ состава: сохранённый JSON «Наше» — источник истины.
+ * Если JSON пуст, но в журнале есть открытые списания — подтягиваем для
+ * отображения и тихо чиним JSON (без затирания после правки состава).
  */
 export async function hydrateOrderProstheticsFromStock(
-  _db: MovementDb,
+  db: MovementDb,
   order: { id: string; prosthetics: unknown },
 ): Promise<OrderProstheticsV1> {
-  return prostheticsFromDb(order.prosthetics);
+  const json = prostheticsFromDb(order.prosthetics);
+  if (json.ourLines.length > 0) {
+    return json;
+  }
+  const stock = await loadOurLinesFromOrderSaleIssues(db, order.id);
+  if (stock.length === 0) {
+    return json;
+  }
+  const merged = mergeProstheticsFromStock(json, stock);
+  if (
+    ourLinesFingerprint(merged.ourLines) !== ourLinesFingerprint(json.ourLines)
+  ) {
+    await db.order.update({
+      where: { id: order.id },
+      data: { prosthetics: prostheticsToJson(merged) },
+    });
+  }
+  return merged;
 }
