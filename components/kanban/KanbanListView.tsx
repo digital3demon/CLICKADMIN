@@ -469,33 +469,6 @@ type KanbanListViewProps = {
   onExpandedCardIdChange?: (cardId: string | null) => void;
 };
 
-const MOBILE_SORT_OPTIONS: { value: string; label: string; sort: ListSort }[] = [
-  { value: "created-desc", label: "Создана: новые сверху", sort: { key: "created", dir: "desc" } },
-  { value: "created-asc", label: "Создана: старые сверху", sort: { key: "created", dir: "asc" } },
-  { value: "title-asc", label: "Название: А → Я", sort: { key: "title", dir: "asc" } },
-  { value: "title-desc", label: "Название: Я → А", sort: { key: "title", dir: "desc" } },
-  { value: "column-asc", label: "Колонка: слева направо", sort: { key: "column", dir: "asc" } },
-  { value: "column-desc", label: "Колонка: справа налево", sort: { key: "column", dir: "desc" } },
-  { value: "due-asc", label: "Срок: раньше сверху", sort: { key: "due", dir: "asc" } },
-  { value: "due-desc", label: "Срок: позже сверху", sort: { key: "due", dir: "desc" } },
-  { value: "assignee-desc", label: "Ответственные: больше сверху", sort: { key: "assignee", dir: "desc" } },
-  { value: "assignee-asc", label: "Ответственные: меньше сверху", sort: { key: "assignee", dir: "asc" } },
-  {
-    value: "participants-desc",
-    label: "Участники: больше сверху",
-    sort: { key: "participants", dir: "desc" },
-  },
-  {
-    value: "participants-asc",
-    label: "Участники: меньше сверху",
-    sort: { key: "participants", dir: "asc" },
-  },
-];
-
-function sortToSelectValue(s: ListSort): string {
-  return `${s.key}-${s.dir}`;
-}
-
 export function KanbanListView({
   appState,
   board,
