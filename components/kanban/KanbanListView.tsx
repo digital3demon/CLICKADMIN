@@ -39,7 +39,7 @@ import { extractOrderNumberLabelFromKanbanCardTitle } from "@/lib/kanban-mention
  * Хвост `1fr` забирает лишнюю ширину, карточка остаётся на всю строку.
  */
 const LIST_TABLE =
-  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
+  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(8rem,18rem)_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
 
 /** Mobile: своя сетка. Desktop: `contents` — ячейки входят в subgrid карточки. */
 const LIST_ROW_INNER = "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:contents";
@@ -924,6 +924,12 @@ export function KanbanListView({
               onSortChange={onSortChange}
             />
           </div>
+          <div
+            className="min-w-0 sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5"
+            title="Причина блокировки карточки"
+          >
+            Блокировка
+          </div>
         </div>
         {rows.length === 0 ? (
           <p className="text-[0.875rem] text-[var(--kanban-text-muted)] sm:col-span-full">
@@ -942,6 +948,9 @@ export function KanbanListView({
               (t) => t.id === card.cardTypeId,
             );
             const blocked = isCardBlocked(card);
+            const blockReasonText = blocked
+              ? (card.blockReason || "").trim()
+              : "";
             const urgent = !!card.urgent;
             const cl = card.checklist || [];
             const done = cl.filter((i) => i.completed).length;
@@ -1103,7 +1112,8 @@ export function KanbanListView({
                               {blocked ? (
                                 <span
                                   className="mt-0.5 shrink-0"
-                                  aria-label={(card.blockReason || "").trim() || "Остановлена"}
+                                  aria-label={blockReasonText || "Остановлена"}
+                                  title={blockReasonText || "Остановлена"}
                                 >
                                   <IconBrick className="h-5 w-5 text-red-600 dark:text-red-500" />
                                 </span>
@@ -1125,6 +1135,14 @@ export function KanbanListView({
                                 <span className="text-[var(--kanban-text)]">
                                   {rowBoard.title}
                                 </span>
+                              </div>
+                            ) : null}
+                            {blockReasonText ? (
+                              <div
+                                className="mt-0.5 text-[0.68rem] font-bold leading-snug text-red-600 sm:hidden dark:text-red-400"
+                                title={blockReasonText}
+                              >
+                                {blockReasonText}
                               </div>
                             ) : null}
                             {cl.length > 0 ? (
@@ -1360,6 +1378,16 @@ export function KanbanListView({
                           openMemberPicker(card.id, homeBoardId, "part", participants)
                         }
                       />
+                    </div>
+                    <div
+                      className="hidden min-w-0 sm:flex sm:items-center sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1"
+                      title={blockReasonText || undefined}
+                    >
+                      {blockReasonText ? (
+                        <span className="line-clamp-3 text-[0.72rem] font-bold leading-snug text-red-600 dark:text-red-400">
+                          {blockReasonText}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   {expandedCardId === card.id ? (

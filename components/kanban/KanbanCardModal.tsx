@@ -637,6 +637,8 @@ export function KanbanCardModal({
   const { byId: crmById, list: crmList } = useKanbanCrmUsers();
   const [descDraft, setDescDraft] = useState("");
   const [kaitenChatLoading, setKaitenChatLoading] = useState(false);
+  /** Полная подгрузка linked-наряда (описание / чат / файлы) — оверлей на модалке. */
+  const [linkedDetailLoading, setLinkedDetailLoading] = useState(false);
   const [descExpanded, setDescExpanded] = useState(true);
   const [descCanCollapse, setDescCanCollapse] = useState(false);
   const descUserOverrideRef = useRef(false);
@@ -656,6 +658,9 @@ export function KanbanCardModal({
   const [orderMailOpen, setOrderMailOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const linkedHydrateKeyRef = useRef("");
+  const onApplyRef = useRef(onApply);
+  onApplyRef.current = onApply;
+  const chatActorUserIdRef = useRef("");
   const found = useMemo(() => {
     if (!cardId) return null;
     const boards = allBoards?.length ? allBoards : [board];
@@ -746,8 +751,8 @@ export function KanbanCardModal({
   }, [card?.id, card?.title]);
 
   useEffect(() => {
+    linkedHydrateKeyRef.current = "";
     if (!cardId) {
-      linkedHydrateKeyRef.current = "";
       setDescDraft("");
       return;
     }
@@ -767,6 +772,7 @@ export function KanbanCardModal({
     setDescExpanded(true);
     setDescCanCollapse(false);
     setKaitenChatLoading(false);
+    setLinkedDetailLoading(false);
     setPlacementFieldsOpen(false);
   }, [cardId]);
 
@@ -880,16 +886,22 @@ export function KanbanCardModal({
   }, [cardId, found, onMoveToColumn, onRequestStopCard, board.columns]);
   const chatActorUserId =
     (commentAuthorUserId ?? "").trim() || board.users[0]?.id || "";
+  chatActorUserIdRef.current = chatActorUserId;
 
   useEffect(() => {
-    if (!cardId || !linkedOrderId) return;
+    if (!cardId || !linkedOrderId) {
+      setLinkedDetailLoading(false);
+      return;
+    }
     const hydrateKey = `${cardId}\0${linkedOrderId}`;
+    // Уже успешно подгрузили этот наряд в этой модалке — не дёргаем снова.
     if (linkedHydrateKeyRef.current === hydrateKey) return;
-    linkedHydrateKeyRef.current = hydrateKey;
+
     let cancelled = false;
+    setLinkedDetailLoading(true);
+    setKaitenChatLoading(true);
     const alreadyLinked =
       card?.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
-    if (alreadyLinked) setKaitenChatLoading(true);
 
     void (async () => {
       try {
@@ -906,7 +918,7 @@ export function KanbanCardModal({
             detailJson.orders?.find((o) => o.id === linkedOrderId) ??
             (detailJson.orders?.length === 1 ? detailJson.orders[0] : undefined);
           if (row && row.id === linkedOrderId) {
-            onApply((b) => {
+            onApplyRef.current((b) => {
               const fc = findCard(b, cardId);
               if (!fc) return;
               if (fc.card.linkedOrderId !== linkedOrderId) return;
@@ -924,10 +936,12 @@ export function KanbanCardModal({
         /* offline */
       }
 
+      if (cancelled) return;
+
       const storedAct = await readClientState("tenant", kanbanOrderActivityStateKey(linkedOrderId));
       if (!cancelled) {
         const fromStore = parseStoredKanbanOrderActivity(storedAct);
-        onApply((b) => {
+        onApplyRef.current((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
           fc.card.activity = seedKanbanCreatedActivity({
@@ -940,7 +954,7 @@ export function KanbanCardModal({
       if (cancelled) return;
       const closedFlags = snap.ok ? snap.comments : [];
       if (snap.ok) {
-        onApply((b) => {
+        onApplyRef.current((b) => {
           const fc = findCard(b, cardId);
           if (!fc) return;
           ensureKanbanCardFilesFromChatImages(fc.card, snap.cardImages);
@@ -967,72 +981,82 @@ export function KanbanCardModal({
         });
       }
       const pullKaiten = alreadyLinked || (snap.ok && snap.linkedKaiten);
-      if (!pullKaiten) {
-        setKaitenChatLoading(false);
-        return;
-      }
-      setKaitenChatLoading(true);
-      const [kaiten, head] = await Promise.all([
-        fetchOrderKaitenCommentsForKanban(linkedOrderId, chatActorUserId),
-        fetchOrderKaitenCardHeadForKanban(linkedOrderId),
-      ]);
-      if (cancelled) return;
-      if (head.ok) {
-        onApply((b) => {
-          const fc = findCard(b, cardId);
-          if (!fc) return;
-          if (head.assignees.length > 0 || head.participants.length > 0) {
-            fc.card.assignees = [...head.assignees];
-            fc.card.participants = [...head.participants];
-          }
-          fc.card.urgent = head.urgent;
-          if (
-            head.stageDue &&
-            !shouldSkipInboundKanbanStageDue(linkedOrderId, head.stageDue)
-          ) {
-            setKanbanStageDue(fc.card, head.stageDue);
-          }
-        });
-      }
-      if (kaiten.ok && kaiten.comments.length > 0) {
-        onApply((b) => {
-          const fc = findCard(b, cardId);
-          if (!fc) return;
-          fc.card.comments = withImagePlaceholders(
-            mergeRequestClosedFlags(
-              mergeKaitenSnapshotIntoCardComments(
-                fc.card.comments || [],
-                kaiten.comments,
+      if (pullKaiten) {
+        const actorId = chatActorUserIdRef.current;
+        const [kaiten, head] = await Promise.all([
+          fetchOrderKaitenCommentsForKanban(linkedOrderId, actorId),
+          fetchOrderKaitenCardHeadForKanban(linkedOrderId),
+        ]);
+        if (cancelled) return;
+        if (head.ok) {
+          onApplyRef.current((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            if (head.assignees.length > 0 || head.participants.length > 0) {
+              fc.card.assignees = [...head.assignees];
+              fc.card.participants = [...head.participants];
+            }
+            fc.card.urgent = head.urgent;
+            if (
+              head.stageDue &&
+              !shouldSkipInboundKanbanStageDue(linkedOrderId, head.stageDue)
+            ) {
+              setKanbanStageDue(fc.card, head.stageDue);
+            }
+          });
+        }
+        if (kaiten.ok && kaiten.comments.length > 0) {
+          onApplyRef.current((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            fc.card.comments = withImagePlaceholders(
+              mergeRequestClosedFlags(
+                mergeKaitenSnapshotIntoCardComments(
+                  fc.card.comments || [],
+                  kaiten.comments,
+                ),
+                closedFlags,
               ),
-              closedFlags,
-            ),
-            fc.card,
-          );
-        });
+              fc.card,
+            );
+          });
+        }
+        const again = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
+        if (cancelled) return;
+        if (again.ok) {
+          onApplyRef.current((b) => {
+            const fc = findCard(b, cardId);
+            if (!fc) return;
+            ensureKanbanCardFilesFromChatImages(fc.card, again.cardImages);
+            if (again.comments.length === 0) return;
+            fc.card.comments = withImagePlaceholders(
+              mergeRequestClosedFlags(
+                mergeKanbanOrderComments(fc.card.comments, again.comments),
+                closedFlags,
+              ),
+              fc.card,
+            );
+          });
+        }
       }
-      const again = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
-      if (cancelled) return;
-      if (again.ok) {
-        onApply((b) => {
-          const fc = findCard(b, cardId);
-          if (!fc) return;
-          ensureKanbanCardFilesFromChatImages(fc.card, again.cardImages);
-          if (again.comments.length === 0) return;
-          fc.card.comments = withImagePlaceholders(
-            mergeRequestClosedFlags(
-              mergeKanbanOrderComments(fc.card.comments, again.comments),
-              closedFlags,
-            ),
-            fc.card,
-          );
-        });
+      if (!cancelled) {
+        linkedHydrateKeyRef.current = hydrateKey;
       }
-      setKaitenChatLoading(false);
-    })();
+    })()
+      .catch(() => {
+        /* network */
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLinkedDetailLoading(false);
+        setKaitenChatLoading(false);
+      });
+
     return () => {
       cancelled = true;
+      // Не помечаем ключ «готово» — при смене сессии/deps гидрация повторится.
     };
-  }, [cardId, linkedOrderId, onApply, chatActorUserId, isDemo]);
+  }, [cardId, linkedOrderId, isDemo]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(
@@ -2287,6 +2311,22 @@ export function KanbanCardModal({
           }
           style={{ backgroundColor: "var(--kaiten-modal-bg)" }}
         >
+          {linkedDetailLoading ? (
+            <div
+              className="absolute inset-0 z-[45] flex flex-col items-center justify-center gap-2.5 bg-[color-mix(in_srgb,var(--kaiten-modal-bg)_72%,transparent)] backdrop-blur-[1px]"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <span
+                className="inline-block h-7 w-7 shrink-0 animate-spin rounded-full border-2 border-[var(--kaiten-modal-accent,#3b82f6)] border-t-transparent"
+                aria-hidden
+              />
+              <span className="text-[0.85rem] font-medium text-[var(--kaiten-modal-text)]">
+                Загрузка…
+              </span>
+            </div>
+          ) : null}
           {!embed ? (
           <>
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--kaiten-modal-border)] px-4 py-5 max-sm:ps-[var(--app-mobile-menu-inset,3.5rem)] sm:gap-4 sm:px-6 sm:py-6">
