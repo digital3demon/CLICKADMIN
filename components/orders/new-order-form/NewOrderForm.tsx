@@ -1498,6 +1498,8 @@ export function NewOrderForm({
                   kaitenCardTypeId: kaiten.kaitenCardTypeId,
                   kaitenTrackLane: kaiten.kaitenTrackLane,
                   kaitenCardTitleLabel: kaiten.kaitenCardTitleLabel,
+                  kanbanAssigneeIds: kaiten.kanbanAssigneeIds ?? [],
+                  kanbanParticipantIds: kaiten.kanbanParticipantIds ?? [],
                 }
               : {
                   kaitenDecideLater: false,
@@ -1507,6 +1509,8 @@ export function NewOrderForm({
                   kaitenCardTypeId: kaiten.kaitenCardTypeId,
                   kaitenTrackLane: kaiten.kaitenTrackLane,
                   kaitenCardTitleLabel: kaiten.kaitenCardTitleLabel,
+                  kanbanAssigneeIds: kaiten.kanbanAssigneeIds ?? [],
+                  kanbanParticipantIds: kaiten.kanbanParticipantIds ?? [],
                 }),
           }),
         });

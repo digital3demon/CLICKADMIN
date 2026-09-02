@@ -22,6 +22,7 @@ import { getKaitenEnvConfig } from "@/lib/kaiten-config";
 import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import { resolveOrderCreateKaitenMode } from "@/lib/order-create-kaiten-mode";
 import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
+import { normalizeCrmUserIds } from "@/lib/kanban/crm-board-tile";
 
 /** Совпадает с KAITEN_MIRROR_DEFAULT_QUEUE_TITLE — без импорта тяжёлого model. */
 const CRM_DEFAULT_KANBAN_COLUMN_TITLE = "К исполнению";
@@ -121,6 +122,9 @@ export type CreateOrderBody = {
   /** false — запись «в течение дня», время не принципиально */
   dueToAdminsHasTime?: boolean;
   kaitenCardTitleLabel?: string | null;
+  /** CRM-канбан: ответственные / участники при создании (пусто = никто). */
+  kanbanAssigneeIds?: string[];
+  kanbanParticipantIds?: string[];
   dueDate?: string | null;
   dueToAdminsAt?: string | null;
   /** Когда работа поступила; null/пусто — только createdAt в CRM */
@@ -506,6 +510,8 @@ export async function createOrderFromBody(
     kaitenCardTitleLabel: needKaitenPlacementFields
       ? body.kaitenCardTitleLabel?.trim() || null
       : null,
+    kanbanAssigneeIds: normalizeCrmUserIds(body.kanbanAssigneeIds),
+    kanbanParticipantIds: normalizeCrmUserIds(body.kanbanParticipantIds),
     constructions:
       constructionCreates.length > 0 ? { create: constructionCreates } : undefined,
     ...(prostheticsPrisma === Prisma.JsonNull ? {} : { prosthetics: prostheticsPrisma }),

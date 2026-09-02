@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import type { UserRole } from "@prisma/client";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getKaitenRestAuth } from "@/lib/kaiten-rest";
-import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
 import {
   countKanbanMembersBackfillOrders,
   KANBAN_MEMBERS_BACKFILL_BATCH_SIZE,
@@ -35,15 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Нет контекста организации" }, { status: 403 });
   }
 
-  const moduleAccess = await getEffectiveModuleAccess(
-    tenantId,
-    session.role as UserRole,
-  );
-  if (
-    moduleAccess.KANBAN_MANAGE_ASSIGNEES === false &&
-    moduleAccess.KANBAN_MANAGE_PARTICIPANTS === false &&
-    session.role !== "OWNER"
-  ) {
+  if (session.role !== "OWNER") {
     return NextResponse.json({ error: "Нет прав" }, { status: 403 });
   }
 

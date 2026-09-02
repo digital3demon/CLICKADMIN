@@ -265,6 +265,47 @@ describe("buildKanbanDisplayView · search on board", () => {
     expect(shippedView?.cards.map((c) => c.id)).toEqual(["arch-079"]);
     expect(cardHomeBoardId.get("arch-079")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
   });
+
+  it("при поиске показывает попадание из СТОП в колонке, откуда ушла карточка", () => {
+    const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
+    const queue = ortho.columns.find((c) => c.title === "К исполнению")!;
+    const stoppedCard = createCard({
+      id: "stop-171",
+      title: "2608-171 Груздева К.Н. Сканы",
+      linkedOrderId: "o-stop",
+    });
+    ortho.stoppedCards = [
+      {
+        id: "stop-row",
+        card: stoppedCard,
+        stoppedAt: "2026-09-02T00:00:00.000Z",
+        sourceColumnId: queue.id,
+        sourceColumnTitle: "К исполнению",
+      },
+    ];
+    const state: KanbanAppState = {
+      version: 1,
+      boards: [ortho],
+      activeBoardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      search: "171",
+      viewMode: "board",
+      calendarMonth: { y: 2026, m: 8 },
+      filters: {
+        cardTypeId: "",
+        due: "",
+        assigneeUserId: "",
+        participantUserId: "",
+      },
+      filterTemplates: [],
+    };
+    const { displayBoard, cardHomeBoardId } = buildKanbanDisplayView(state, {
+      sessionUserId: "me",
+      sessionUserRole: "ADMIN",
+    });
+    const queueView = displayBoard.columns.find((c) => c.title === "К исполнению");
+    expect(queueView?.cards.map((c) => c.id)).toEqual(["stop-171"]);
+    expect(cardHomeBoardId.get("stop-171")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+  });
 });
 
 describe("buildKanbanDisplayView · фильтры только активная доска", () => {

@@ -85,23 +85,33 @@ describe("kaiten integration ui helpers", () => {
     expect(showLegacyKaitenData(state, false)).toBe(false);
   });
 
-  it("кнопка Обновить на канбане скрыта без интеграции", () => {
+  it("кнопка Обновить на канбане только у владельца при живой интеграции", () => {
     expect(
       showKanbanKaitenRefreshButton({
         isDemo: false,
         kaitenIntegrationActive: false,
+        sessionRole: "OWNER",
       }),
     ).toBe(false);
     expect(
       showKanbanKaitenRefreshButton({
         isDemo: true,
         kaitenIntegrationActive: true,
+        sessionRole: "OWNER",
       }),
     ).toBe(false);
     expect(
       showKanbanKaitenRefreshButton({
         isDemo: false,
         kaitenIntegrationActive: true,
+        sessionRole: "ADMINISTRATOR",
+      }),
+    ).toBe(false);
+    expect(
+      showKanbanKaitenRefreshButton({
+        isDemo: false,
+        kaitenIntegrationActive: true,
+        sessionRole: "OWNER",
       }),
     ).toBe(true);
   });

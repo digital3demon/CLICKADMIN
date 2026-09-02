@@ -58,6 +58,9 @@ export type KaitenLinkedOrderForKanban = {
   }[];
   /** Писем, привязанных к наряду через EmailSourceOrder. */
   sourceEmailCount?: number;
+  /** CRM-канбан: ответственные / участники с наряда. */
+  assignees?: string[];
+  participants?: string[];
 };
 
 const CONTINUATION_HEAD_RE =

@@ -53,6 +53,7 @@ import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state
 import { stripLinkedOrderCardsForTenantChrome } from "@/lib/kanban/kanban-tenant-chrome";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
+import { normalizeCrmUserIds } from "@/lib/kanban/crm-board-tile";
 import {
   collectCardTypeDefaultLanes,
   defaultTrackLaneForCardTypeName,
@@ -2160,6 +2161,47 @@ function appendArchivedSearchHits(args: {
   }
 }
 
+/**
+ * При поиске — карточки из СТОП (колонка = откуда ушли).
+ * Иначе наряд в стопе не находится на основной доске / в списке.
+ */
+function appendStoppedSearchHits(args: {
+  displayBoard: KanbanBoard;
+  homes: KanbanBoard[];
+  cardHomeBoardId: Map<string, string>;
+  textMatches: (card: KanbanCard, home: KanbanBoard) => boolean;
+  passesFilters: (card: KanbanCard, home: KanbanBoard) => boolean;
+  extraKeep?: (card: KanbanCard) => boolean;
+}): void {
+  const seen = new Set(
+    args.displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id)),
+  );
+  for (const home of args.homes) {
+    for (const row of home.stoppedCards || []) {
+      const card = row.card;
+      if (!card || seen.has(card.id)) continue;
+      if (args.extraKeep && !args.extraKeep(card)) continue;
+      if (!args.textMatches(card, home)) continue;
+      if (!args.passesFilters(card, home)) continue;
+      const titleNorm = (row.sourceColumnTitle || "СТОП").trim().toLowerCase();
+      let colView = args.displayBoard.columns.find(
+        (c) => c.title.trim().toLowerCase() === titleNorm,
+      );
+      if (!colView) {
+        colView = {
+          id: `search-stop-${home.id}-${titleNorm || "stop"}`,
+          title: row.sourceColumnTitle?.trim() || "СТОП",
+          cards: [],
+        };
+        args.displayBoard.columns.push(colView);
+      }
+      seen.add(card.id);
+      colView.cards.push(card);
+      args.cardHomeBoardId.set(card.id, home.id);
+    }
+  }
+}
+
 /** «МОИ» / «Ответственный»: люди на карточке; sticky только пока активен поиск. */
 export function kanbanAggregateKeepsCard(
   card: KanbanCard,
@@ -2303,6 +2345,19 @@ export function buildKanbanDisplayView(
             memberHeads,
           }),
       });
+      appendStoppedSearchHits({
+        displayBoard,
+        homes: sources,
+        cardHomeBoardId,
+        textMatches,
+        passesFilters: passesFiltersWithoutSearchText,
+        extraKeep: (card) =>
+          kanbanAggregateKeepsCard(card, uid, agg, {
+            searchActive: Boolean(q),
+            stickyOrderIds: stickyLinkedOrderIds,
+            memberHeads,
+          }),
+      });
       /* Пустые колонки шаблона оставляем: иначе fit-zoom раздувает 1–2 столбца. */
     }
     return { displayBoard, cardHomeBoardId };
@@ -2371,6 +2426,13 @@ export function buildKanbanDisplayView(
   }
   if (q) {
     appendArchivedSearchHits({
+      displayBoard,
+      homes,
+      cardHomeBoardId,
+      textMatches,
+      passesFilters: passesFiltersWithoutSearchText,
+    });
+    appendStoppedSearchHits({
       displayBoard,
       homes,
       cardHomeBoardId,
@@ -3192,8 +3254,18 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       foundEff.card.updatedAt = nowIso;
       mergeOrderAttachmentsIntoLinkedCard(foundEff.card, row.id, row);
       restoreKanbanMembersFromSnap(foundEff.card, membersByOrder.get(row.id));
+      if (
+        !hasKanbanCardMembers(foundEff.card) &&
+        (normalizeCrmUserIds(row.assignees).length > 0 ||
+          normalizeCrmUserIds(row.participants).length > 0)
+      ) {
+        foundEff.card.assignees = normalizeCrmUserIds(row.assignees);
+        foundEff.card.participants = normalizeCrmUserIds(row.participants);
+      }
     } else {
       const kept = membersByOrder.get(row.id);
+      const fromOrderAssignees = normalizeCrmUserIds(row.assignees);
+      const fromOrderParticipants = normalizeCrmUserIds(row.participants);
       const card = createCard({
         id: cardDbId,
         title,
@@ -3205,8 +3277,14 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         linkedOrderNumber: row.orderNumber,
         kaitenCardId: row.kaitenCardId ?? null,
         kaitenCardSortOrder: row.kaitenCardSortOrder ?? null,
-        assignees: kept?.assignees ?? reuseCard?.assignees ?? [],
-        participants: kept?.participants ?? reuseCard?.participants ?? [],
+        assignees:
+          kept?.assignees ??
+          reuseCard?.assignees ??
+          fromOrderAssignees,
+        participants:
+          kept?.participants ??
+          reuseCard?.participants ??
+          fromOrderParticipants,
         trackLane: lane,
         blocked: !!row.kaitenBlocked,
         blockReason: (row.kaitenBlockReason || "").trim(),

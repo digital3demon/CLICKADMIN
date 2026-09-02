@@ -3242,8 +3242,8 @@ export function KanbanApp({
             {showKanbanKaitenRefreshButton({
               isDemo,
               kaitenIntegrationActive,
-            }) &&
-            (kanbanCardPerms.manageAssignees || kanbanCardPerms.manageParticipants) ? (
+              sessionRole: kanbanSessionRole,
+            }) ? (
               <KanbanMembersBackfillButton
                 refreshTargets={collectKanbanKaitenRefreshTargets(
                   appState,
@@ -3396,7 +3396,7 @@ export function KanbanApp({
                 {(viewBoard?.columns ?? []).reduce(
                   (n, c) => n + c.cards.length,
                   0,
-                ) + stoppedCards.length}
+                )}
               </span>
             ) : actualOn ? (
               <span className="text-[0.75rem] text-[var(--kanban-text-muted)]">

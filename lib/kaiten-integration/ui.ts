@@ -1,16 +1,22 @@
 /** Признаки видимости Kaiten UI (server-safe). */
+import type { UserRole } from "@prisma/client";
 import type { KaitenIntegrationTenantState } from "@/lib/kaiten-integration/types";
 
 export function showKaitenUi(state: KaitenIntegrationTenantState): boolean {
   return state.active || state.reenableInProgress;
 }
 
-/** Кнопка «Обновить» с Kaiten — только при живой интеграции, не в демо. */
+/** Кнопка «Обновить» с Kaiten — только владелец, при живой интеграции, не в демо. */
 export function showKanbanKaitenRefreshButton(input: {
   isDemo: boolean;
   kaitenIntegrationActive: boolean;
+  sessionRole?: UserRole | string | null;
 }): boolean {
-  return !input.isDemo && input.kaitenIntegrationActive;
+  return (
+    !input.isDemo &&
+    input.kaitenIntegrationActive &&
+    input.sessionRole === "OWNER"
+  );
 }
 
 /** Legacy read-only: старые kaitenCardId / поля можно показывать при выключенной интеграции. */

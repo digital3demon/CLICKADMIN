@@ -21,6 +21,7 @@ import type { KanbanAppState } from "@/lib/kanban/types";
 import { crmKanbanLinkedCardId } from "@/lib/kanban-order-card-url";
 import { activeContinuationChildrenWhere } from "@/lib/order-continuation-display";
 import { isOrderWorkAttachment } from "@/lib/order-work-attachments";
+import { normalizeCrmUserIds } from "@/lib/kanban/crm-board-tile";
 
 export { KANBAN_STATE_KEY as KANBAN_ENSURE_STATE_KEY } from "@/lib/kanban/kanban-tenant-state-write.server";
 
@@ -103,6 +104,8 @@ async function buildLinkedOrderRow(
       status: true,
       archivedAt: true,
       isTestOrder: true,
+      kanbanAssigneeIds: true,
+      kanbanParticipantIds: true,
       _count: { select: { sourceEmailLinks: true } },
       continuesFromOrder: {
         select: { id: true, orderNumber: true, kaitenCardId: true },
@@ -214,6 +217,8 @@ async function buildLinkedOrderRow(
       createdAt: a.createdAt.toISOString(),
     })),
     sourceEmailCount: o._count.sourceEmailLinks,
+    assignees: normalizeCrmUserIds(o.kanbanAssigneeIds),
+    participants: normalizeCrmUserIds(o.kanbanParticipantIds),
   };
 }
 
