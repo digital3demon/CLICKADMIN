@@ -518,7 +518,8 @@ export function KanbanApp({
         const tiles = Array.isArray(j.tiles) ? j.tiles : [];
         if (j.asOf) boardTilesAsOfRef.current[boardId] = j.asOf;
         if (since) mergeCrmBoardTilesCache(boardId, tiles);
-        else saveCrmBoardTilesCache(boardId, tiles);
+        else if (tiles.length > 0) saveCrmBoardTilesCache(boardId, tiles);
+        if (tiles.length === 0) return;
         setLinkedAppointmentByOrderId((prev) => {
           const next = new Map(prev);
           for (const [id, snap] of appointmentSnapsFromCrmTiles(tiles)) {
@@ -984,7 +985,6 @@ export function KanbanApp({
           KANBAN_ARCHIVE_SETTINGS_KEY,
         );
         if (remote) {
-          lastArchiveSettingsSigRef.current = JSON.stringify(remote);
           setAppState((prev) =>
             prev ? applyKanbanArchiveSettings(prev, remote) : prev,
           );
@@ -1019,7 +1019,6 @@ export function KanbanApp({
           lastCardTypeLanesRef.current,
         );
         lastCardTypeLanesRef.current = merged;
-        lastCardTypeLanesSigRef.current = JSON.stringify(merged);
         if (merged.types.length > 0) {
           setAppState((prev) =>
             prev ? applyKanbanCardTypeLanes(prev, merged) : prev,
@@ -1055,7 +1054,9 @@ export function KanbanApp({
     }
     kanbanStateSaveTimerRef.current = setTimeout(() => {
       kanbanStateSaveTimerRef.current = null;
-      writePersistedKanbanState(appState, isDemo);
+      const cur = appStateRef.current;
+      if (!cur) return;
+      writePersistedKanbanState(cur, isDemo);
     }, 2000);
     return () => {
       if (kanbanStateSaveTimerRef.current) {
@@ -1587,13 +1588,19 @@ export function KanbanApp({
       if (!id) return;
       setAppState((s) => {
         if (!s) return s;
+        const beforeLoc = findCardInAppState(s, id);
+        if (!beforeLoc) return s;
+        const beforeCardJson = JSON.stringify(beforeLoc.card);
         const next = structuredClone(s);
         const loc = findCardInAppState(next, id);
         if (!loc) return s;
         const b = next.boards.find((x) => x.id === loc.board.id);
         if (!b) return s;
         fn(b);
-        syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+        const syncTouched = syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+        const afterLoc = findCardInAppState(next, id);
+        const afterCardJson = afterLoc ? JSON.stringify(afterLoc.card) : beforeCardJson;
+        if (syncTouched === 0 && beforeCardJson === afterCardJson) return s;
         return next;
       });
     },
@@ -1771,7 +1778,6 @@ export function KanbanApp({
   }, [isDemo]);
 
   useEffect(() => {
-    if (!appState) return;
     const runSweep = () => {
       let archivedCount = 0;
       let deletedCount = 0;
@@ -1799,7 +1805,7 @@ export function KanbanApp({
     runSweep();
     const iv = window.setInterval(runSweep, 60_000);
     return () => window.clearInterval(iv);
-  }, [appState, showToast]);
+  }, [showToast]);
 
   const syncKaitenMirrorAfterKanbanMove = useCallback(
     async (args: {

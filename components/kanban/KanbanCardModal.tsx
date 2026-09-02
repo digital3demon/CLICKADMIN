@@ -661,6 +661,7 @@ export function KanbanCardModal({
   const [manualRouteRows, setManualRouteRows] = useState<ManualRouteDraftRow[]>([]);
   const [orderMailOpen, setOrderMailOpen] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const linkedHydrateKeyRef = useRef("");
   const found = useMemo(() => {
     if (!cardId) return null;
     const boards = allBoards?.length ? allBoards : [board];
@@ -898,7 +899,6 @@ export function KanbanCardModal({
   }, [recomputeDescCollapse]);
 
   const linkedOrderId = card?.linkedOrderId;
-  const kaitenCardIdForChat = card?.kaitenCardId;
   const currentColumnTitle = found?.col?.title || "—";
   const productionSettingsForCard = useMemo(
     () => normalizeProductionSettings(board),
@@ -955,9 +955,12 @@ export function KanbanCardModal({
 
   useEffect(() => {
     if (!cardId || !linkedOrderId) return;
+    const hydrateKey = `${cardId}\0${linkedOrderId}`;
+    if (linkedHydrateKeyRef.current === hydrateKey) return;
+    linkedHydrateKeyRef.current = hydrateKey;
     let cancelled = false;
     const alreadyLinked =
-      kaitenCardIdForChat != null && Number.isFinite(kaitenCardIdForChat);
+      card?.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
     if (alreadyLinked) setKaitenChatLoading(true);
 
     void (async () => {
@@ -1080,7 +1083,7 @@ export function KanbanCardModal({
     return () => {
       cancelled = true;
     };
-  }, [cardId, linkedOrderId, onApply, chatActorUserId, kaitenCardIdForChat, isDemo]);
+  }, [cardId, linkedOrderId, onApply, chatActorUserId, isDemo]);
 
   const adminMentionTag = useKanbanAdminMentionTag();
   const adminMentionUserIds = useMemo(
