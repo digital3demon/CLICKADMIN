@@ -30,6 +30,9 @@ type WriteSlot = {
 
 const slots = new Map<string, WriteSlot>();
 
+/** Одна цепочка PUT — меньше SQLITE_BUSY при шторме разных ключей. */
+let putChain: Promise<unknown> = Promise.resolve();
+
 /** Только 413 / локальный oversized — повтор того же тела бесполезен. */
 const COOLDOWN_HARD_MS = 5 * 60_000;
 /** 500/400 часто транзиент (лок БД, обрезка прокси) — не глушим сохранение на 5 минут. */
@@ -223,7 +226,13 @@ export async function writeClientState(
   key: string,
   value: unknown,
 ): Promise<boolean> {
-  return flushWrite(scope, key, value);
+  // Сериализуем PUT: параллельные ключи на SQLite дают SQLITE_BUSY → HTTP 500.
+  const run = putChain.then(() => flushWrite(scope, key, value));
+  putChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 export async function deleteClientState(
@@ -242,4 +251,5 @@ export async function deleteClientState(
 /** Для тестов: сброс слотов. */
 export function __resetClientStateClientForTests(): void {
   slots.clear();
+  putChain = Promise.resolve();
 }

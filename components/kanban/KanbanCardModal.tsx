@@ -93,6 +93,7 @@ import {
   parseStoredKanbanOrderActivity,
   seedKanbanCreatedActivity,
 } from "@/lib/kanban/kanban-order-activity";
+import { persistKanbanOrderActivityClient } from "@/lib/kanban/persist-kanban-activity-client";
 import {
   mergeOrderAttachmentsIntoLinkedCard,
   ensureKanbanCardFilesFromChatImages,
@@ -952,6 +953,8 @@ export function KanbanCardModal({
       if (cancelled) return;
 
       const fromStore = parseStoredKanbanOrderActivity(storedAct);
+      let activityToPersist: ReturnType<typeof seedKanbanCreatedActivity> | null =
+        null;
       onApplyRef.current((b) => {
         const fc = findCard(b, cardId);
         if (!fc) return;
@@ -959,7 +962,11 @@ export function KanbanCardModal({
           ...fc.card,
           activity: mergeKanbanOrderActivity(fc.card.activity, fromStore),
         });
+        activityToPersist = fc.card.activity;
       });
+      if (activityToPersist) {
+        persistKanbanOrderActivityClient(linkedOrderId, activityToPersist);
+      }
 
       const closedFlags = snap.ok ? snap.comments : [];
       if (snap.ok) {

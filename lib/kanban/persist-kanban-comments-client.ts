@@ -7,10 +7,6 @@ import {
   collectLinkedOrderCommentsFromState,
   kanbanOrderCommentsStateKey,
 } from "@/lib/kanban/kanban-order-comments";
-import {
-  collectLinkedOrderActivityFromState,
-  kanbanOrderActivityStateKey,
-} from "@/lib/kanban/kanban-order-activity";
 import { kanbanStateForPersistence } from "@/lib/kanban/model";
 import type { KanbanAppState } from "@/lib/kanban/types";
 
@@ -25,23 +21,17 @@ export function flushLinkedOrderCommentsFromState(state: KanbanAppState): void {
   }
 }
 
-export function flushLinkedOrderActivityFromState(state: KanbanAppState): void {
-  const byOrder = collectLinkedOrderActivityFromState(state);
-  for (const [orderId, activity] of byOrder) {
-    if (activity.length === 0) continue;
-    void writeClientState("tenant", kanbanOrderActivityStateKey(orderId), {
-      activity,
-    });
-  }
-}
-
+/**
+ * Журнал активности пишется точечно (`persistKanbanOrderActivityClient` /
+ * `pushActivity`) — не гоняем PUT по всем нарядам доски при каждом debounce.
+ * Комменты по-прежнему сбрасываем перед slim JSON, иначе лента теряется.
+ */
 export function writePersistedKanbanState(
   state: KanbanAppState,
   isDemo: boolean,
 ): void {
   if (!isDemo) {
     flushLinkedOrderCommentsFromState(state);
-    flushLinkedOrderActivityFromState(state);
   }
   void writeClientState(
     isDemo ? "user" : "tenant",
@@ -56,22 +46,13 @@ export async function writePersistedKanbanStateNow(
 ): Promise<boolean> {
   if (!isDemo) {
     const byOrder = collectLinkedOrderCommentsFromState(state);
-    const byAct = collectLinkedOrderActivityFromState(state);
-    await Promise.all([
-      ...[...byOrder].map(([orderId, comments]) => {
-        const hasText = comments.some((c) => String(c.text || "").trim());
-        if (!hasText) return Promise.resolve(true);
-        return writeClientState("tenant", kanbanOrderCommentsStateKey(orderId), {
-          comments,
-        });
-      }),
-      ...[...byAct].map(([orderId, activity]) => {
-        if (activity.length === 0) return Promise.resolve(true);
-        return writeClientState("tenant", kanbanOrderActivityStateKey(orderId), {
-          activity,
-        });
-      }),
-    ]);
+    for (const [orderId, comments] of byOrder) {
+      const hasText = comments.some((c) => String(c.text || "").trim());
+      if (!hasText) continue;
+      await writeClientState("tenant", kanbanOrderCommentsStateKey(orderId), {
+        comments,
+      });
+    }
   }
   return writeClientState(
     isDemo ? "user" : "tenant",

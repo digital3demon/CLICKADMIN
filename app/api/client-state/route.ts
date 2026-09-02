@@ -43,6 +43,38 @@ function isProtectedTenantKanbanStateKey(key: string): boolean {
   );
 }
 
+/** Prisma Json не любит undefined / циклические ссылки из клиента. */
+function toPrismaJsonValue(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function prismaErrorCode(e: unknown): string {
+  if (e && typeof e === "object" && "code" in e) {
+    return String((e as { code: unknown }).code || "");
+  }
+  return "";
+}
+
+function isPrismaUniqueConflict(e: unknown): boolean {
+  return prismaErrorCode(e) === "P2002";
+}
+
+function isTransientClientStateError(e: unknown): boolean {
+  const code = prismaErrorCode(e);
+  if (
+    code === "P2002" ||
+    code === "P2034" ||
+    code === "P1008" ||
+    code === "P1017"
+  ) {
+    return true;
+  }
+  const msg = e instanceof Error ? e.message : String(e);
+  return /database is locked|sqlite_busy|SQLITE_BUSY|deadlock|serialization|timed out|too many connections|connection|busy/i.test(
+    msg,
+  );
+}
+
 export async function GET(req: Request) {
   const session = await getSessionFromCookies();
   if (!session?.sub) {
@@ -159,15 +191,16 @@ export async function PUT(req: Request) {
       }
 
       if (scope === "user") {
+        const userJson = toPrismaJsonValue(body.value);
         await prisma.userClientState.upsert({
           where: { userId_key: { userId: session.sub, key } },
           create: {
             userId: session.sub,
             tenantId,
             key,
-            value: body.value as never,
+            value: userJson as never,
           },
-          update: { value: body.value as never, tenantId },
+          update: { value: userJson as never, tenantId },
         });
         return NextResponse.json({ ok: true, scope, key });
       }
@@ -219,31 +252,36 @@ export async function PUT(req: Request) {
           }
         }
       }
-      await prisma.tenantClientState.upsert({
-        where: { tenantId_key: { tenantId, key } },
-        create: {
-          tenantId,
-          key,
-          value: valueToStore as never,
-        },
-        update: { value: valueToStore as never },
-      });
+      const tenantJson = toPrismaJsonValue(valueToStore);
+      try {
+        await prisma.tenantClientState.upsert({
+          where: { tenantId_key: { tenantId, key } },
+          create: {
+            tenantId,
+            key,
+            value: tenantJson as never,
+          },
+          update: { value: tenantJson as never },
+        });
+      } catch (e) {
+        // Гонка двух create на одном ключе — добиваем update.
+        if (!isPrismaUniqueConflict(e)) throw e;
+        await prisma.tenantClientState.update({
+          where: { tenantId_key: { tenantId, key } },
+          data: { value: tenantJson as never },
+        });
+      }
       return NextResponse.json({ ok: true, scope, key });
     };
 
     let lastErr: unknown;
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 8; i += 1) {
       try {
         return await persist();
       } catch (e) {
         lastErr = e;
-        const msg = e instanceof Error ? e.message : String(e);
-        const transient =
-          /database is locked|sqlite_busy|deadlock|serialization failure|p2034|too many connections|connection/i.test(
-            msg,
-          );
-        if (!transient || i === 3) break;
-        await new Promise((r) => setTimeout(r, 40 * (i + 1)));
+        if (!isTransientClientStateError(e) || i === 7) break;
+        await new Promise((r) => setTimeout(r, 50 * 2 ** i));
       }
     }
     throw lastErr;
