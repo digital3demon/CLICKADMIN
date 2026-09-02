@@ -9,6 +9,10 @@ import {
   type PrefixComboboxOption,
 } from "@/components/ui/PrefixSearchCombobox";
 import { comboboxSearchPrefixesFromText } from "@/lib/prefix-search-match";
+import { WarehouseTreeView } from "@/components/inventory/WarehouseTreeView";
+
+const WAREHOUSE_LAYOUT_STORAGE_KEY = "warehouse-layout";
+type WarehouseLayout = "tree" | "classic";
 
 /** Значение фильтра «производитель не указан» в combobox */
 const MANUFACTURER_EMPTY_VALUE = "__MAN_EMPTY__";
@@ -171,6 +175,29 @@ export function InventoryWarehouseClient() {
   /** Сужает список складов по полю «тип склада» */
   const [warehouseTypeFilter, setWarehouseTypeFilter] = useState("");
   const [manufacturerFilter, setManufacturerFilter] = useState("");
+  const [layout, setLayout] = useState<WarehouseLayout>("tree");
+  const [layoutReady, setLayoutReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(WAREHOUSE_LAYOUT_STORAGE_KEY);
+      if (stored === "tree" || stored === "classic") {
+        setLayout(stored);
+      }
+    } catch {
+      /* ignore */
+    }
+    setLayoutReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!layoutReady) return;
+    try {
+      localStorage.setItem(WAREHOUSE_LAYOUT_STORAGE_KEY, layout);
+    } catch {
+      /* ignore */
+    }
+  }, [layout, layoutReady]);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -675,6 +702,18 @@ export function InventoryWarehouseClient() {
         </div>
       ) : null}
 
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() =>
+            setLayout((prev) => (prev === "tree" ? "classic" : "tree"))
+          }
+          className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-muted)]"
+        >
+          {layout === "tree" ? "Старый вид склада" : "Новый вид склада"}
+        </button>
+      </div>
+
       <p className="text-sm text-[var(--text-secondary)]">
         Новые склады и учётные позиции:{" "}
         <Link
@@ -693,6 +732,21 @@ export function InventoryWarehouseClient() {
         .
       </p>
 
+      {layout === "tree" ? (
+        <WarehouseTreeView
+          warehouses={warehouses}
+          items={items}
+          balances={balances.map((b) => ({
+            quantityOnHand: b.quantityOnHand,
+            item: { id: b.item.id },
+            warehouse: { id: b.warehouse.id },
+          }))}
+          onRefresh={refresh}
+        />
+      ) : null}
+
+      {layout === "classic" ? (
+      <>
       <section className="rounded-xl border border-[var(--card-border)] bg-[var(--surface-muted)] p-4 sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--text-body)]">
           Операция
@@ -1271,6 +1325,8 @@ export function InventoryWarehouseClient() {
           ) : null}
         </div>
       </section>
+      </>
+      ) : null}
     </div>
   );
 }
