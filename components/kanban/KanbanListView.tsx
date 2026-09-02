@@ -857,7 +857,7 @@ export function KanbanListView({
   );
 
   return (
-    <div className="kanban-list-view relative z-0 flex w-full min-h-0 flex-1 flex-col overflow-hidden py-2 pl-2 pr-1 max-sm:flex-none max-sm:overflow-visible max-sm:px-0 sm:pl-3 sm:pr-2">
+    <div className="kanban-list-view relative z-0 flex w-full min-h-0 flex-1 flex-col overflow-hidden py-2 pl-2 pr-1 max-sm:flex-none max-sm:overflow-visible max-sm:px-0 max-sm:py-1 sm:pl-3 sm:pr-2">
       <div className="flex w-full min-h-0 max-w-full flex-1 flex-col max-sm:flex-none">
         <div
           className="min-h-0 flex-1 overflow-y-auto max-sm:overflow-visible max-sm:flex-none"
@@ -874,7 +874,7 @@ export function KanbanListView({
               : (e) => onListScroll(e.currentTarget)
           }
         >
-        <div className={LIST_TABLE}>
+        <div className={`${LIST_TABLE} max-sm:gap-y-0`}>
         <div
           className="sticky top-0 z-10 hidden border-b border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] pb-1 text-[0.52rem] font-semibold uppercase tracking-wide text-[var(--kanban-text-muted)] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-center sm:border-l-[3px] sm:border-l-transparent sm:border-r sm:border-r-transparent"
         >
@@ -1036,7 +1036,7 @@ export function KanbanListView({
             return (
                 <article
                   key={card.id}
-                  className={`relative w-full min-w-0 cursor-pointer overflow-x-hidden overflow-y-visible rounded-md border-y border-r border-black/[0.1] border-l-[3px] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-center sm:overflow-x-visible ${
+                  className={`relative w-full min-w-0 cursor-pointer overflow-x-hidden overflow-y-visible border-y border-black/[0.1] border-l-[3px] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] max-sm:rounded-none max-sm:border-r-0 sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-center sm:overflow-x-visible sm:rounded-md sm:border-r sm:border-r-black/[0.1] sm:hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] dark:sm:border-r-white/[0.1] ${
                     expandedCardId === card.id
                       ? "bg-transparent"
                       : "bg-[var(--kanban-card-bg)]"
@@ -1128,14 +1128,6 @@ export function KanbanListView({
                                 </span>
                               </div>
                             ) : null}
-                            {blockReasonText ? (
-                              <div
-                                className="mt-0.5 text-[0.68rem] font-bold leading-snug text-red-600 sm:hidden dark:text-red-400"
-                                title={blockReasonText}
-                              >
-                                {blockReasonText}
-                              </div>
-                            ) : null}
                             {cl.length > 0 ? (
                               <div className="mt-0.5 hidden items-center gap-1 text-[0.7rem] text-[var(--kanban-text-muted)] sm:flex">
                                 <IconListCheck />
@@ -1196,6 +1188,17 @@ export function KanbanListView({
                                 {columnCellCompact}
                               </span>
                             </div>
+                            {blocked ? (
+                              <div
+                                className="mt-1.5 flex min-w-0 items-start gap-1.5 sm:hidden"
+                                title={blockReasonText || "Карточка заблокирована"}
+                              >
+                                <IconBrick className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-500" />
+                                <span className="min-w-0 text-[0.72rem] font-bold uppercase leading-snug tracking-wide text-red-600 dark:text-red-400">
+                                  {blockReasonText || "Причина блокировки"}
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
                           <div
                             className="flex shrink-0 flex-col items-end gap-1 self-start sm:hidden"
@@ -1383,7 +1386,7 @@ export function KanbanListView({
                   </div>
                   {expandedCardId === card.id ? (
                     <div
-                      className="w-fit max-w-full border-t border-[var(--kanban-border)] bg-[var(--kaiten-modal-bg)] sm:col-span-full sm:justify-self-start"
+                      className="w-full max-w-full border-t border-[var(--kanban-border)] bg-[var(--kaiten-modal-bg)] sm:col-span-full sm:w-fit sm:justify-self-start"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
                     >

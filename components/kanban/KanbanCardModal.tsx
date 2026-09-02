@@ -2076,7 +2076,7 @@ export function KanbanCardModal({
       ref={overlayRef}
       className={
         embed
-          ? "kanban-root relative z-0 flex min-h-0 w-fit max-w-full flex-col overflow-visible bg-transparent p-0"
+          ? "kanban-root relative z-0 flex min-h-0 w-full max-w-full flex-col overflow-visible bg-transparent p-0 sm:w-fit"
           : "kanban-root fixed inset-0 z-[200] flex overflow-hidden max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
       }
       role={embed ? "region" : "dialog"}
@@ -2262,7 +2262,7 @@ export function KanbanCardModal({
         ref={panelRef}
         className={
           embed
-            ? "flex w-fit min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
+            ? "flex w-full min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] sm:w-fit"
             : "relative flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         }
         onMouseDown={(e) => e.stopPropagation()}
@@ -2349,7 +2349,7 @@ export function KanbanCardModal({
         <div
           className={
             embed
-              ? "relative flex min-h-0 w-fit max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
+              ? "relative flex min-h-0 w-full max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] sm:w-fit"
               : `relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
                   blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
                 }`
@@ -2620,13 +2620,13 @@ export function KanbanCardModal({
 
           <div
             className={`flex min-h-0 max-sm:flex-col sm:flex-row sm:items-stretch ${
-              embed ? "w-fit min-w-0 max-w-full" : "flex-1"
+              embed ? "w-full min-w-0 max-w-full sm:w-fit" : "flex-1"
             }`}
           >
             <div
               className={`flex min-h-0 min-w-0 flex-col ${
                 embed
-                  ? "w-[min(100%,28rem)] overflow-visible sm:w-[min(36rem,52vw)] sm:max-w-[36rem] sm:shrink-0"
+                  ? "w-full overflow-visible sm:w-[min(36rem,52vw)] sm:max-w-[36rem] sm:shrink-0"
                   : "sm:flex-1 sm:overflow-y-auto sm:overscroll-contain"
               } ${rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"}`}
             >
