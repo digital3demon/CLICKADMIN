@@ -195,6 +195,7 @@ import {
   saveKanbanBoardUiLocal,
 } from "@/lib/kanban/user-board-ui-state";
 import dynamic from "next/dynamic";
+import { KanbanCardModal } from "./KanbanCardModal";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
@@ -225,10 +226,6 @@ const KanbanCalendar = dynamic(
 );
 const KanbanListView = dynamic(
   () => import("./KanbanListView").then((m) => m.KanbanListView),
-  { ssr: false, loading: () => null },
-);
-const KanbanCardModal = dynamic(
-  () => import("./KanbanCardModal").then((m) => m.KanbanCardModal),
   { ssr: false, loading: () => null },
 );
 
@@ -3792,7 +3789,6 @@ export function KanbanApp({
           </div>
       </div>
 
-      {cardModalId ? (
       <KanbanCardModal
         cardId={cardModalId}
         board={modalBoard ?? board}
@@ -3853,7 +3849,6 @@ export function KanbanApp({
         onParentProductionFilesUpdated={syncParentProductionChildrenAfterFilesAttach}
         isDemo={isDemo}
       />
-      ) : null}
 
       {moveCardId && appState.boards.length > 1 && (
         <div

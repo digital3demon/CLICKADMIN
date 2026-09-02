@@ -95,6 +95,7 @@ import {
   mergeOrderAttachmentsIntoLinkedCard,
   ensureKanbanCardFilesFromChatImages,
   findCardIncludingStopped as findCard,
+  findCardInAppState,
   formatBlockedAt,
   formatDate,
   formatDateTimeRu,
@@ -665,11 +666,9 @@ export function KanbanCardModal({
   const found = useMemo(() => {
     if (!cardId) return null;
     const boards = allBoards?.length ? allBoards : [board];
-    for (const b of boards) {
-      const hit = findCard(b, cardId);
-      if (hit) return hit;
-    }
-    return null;
+    const hit = findCardInAppState({ boards } as Parameters<typeof findCardInAppState>[0], cardId);
+    if (!hit) return null;
+    return { col: hit.col, card: hit.card };
   }, [allBoards, board, cardId]);
   const card = found?.card;
   const showOrderMailButton = Boolean(card?.linkedOrderId);
@@ -830,6 +829,10 @@ export function KanbanCardModal({
   }, [card?.id, card?.title]);
 
   useEffect(() => {
+    if (!cardId) {
+      linkedHydrateKeyRef.current = "";
+      return;
+    }
     setRightTab("chat");
     setBlockReasonDraft("");
     setBlockPopupOpen(false);
