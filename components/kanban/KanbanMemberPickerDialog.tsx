@@ -26,6 +26,8 @@ type KanbanMemberPickerDialogProps = {
   initialUserIds: string[];
   onClose: () => void;
   onSave: (userIds: string[]) => void;
+  /** Поверх других модалок (напр. префлайт заказа z-600). */
+  overlayClassName?: string;
 };
 
 export function KanbanMemberPickerDialog({
@@ -35,6 +37,7 @@ export function KanbanMemberPickerDialog({
   initialUserIds,
   onClose,
   onSave,
+  overlayClassName = "z-[280]",
 }: KanbanMemberPickerDialogProps) {
   const { list: crmList } = useKanbanCrmUsers();
   const [pickerIds, setPickerIds] = useState<string[]>(() => [...initialUserIds]);
@@ -90,7 +93,7 @@ export function KanbanMemberPickerDialog({
 
   const dialog = (
     <div
-      className="kanban-root fixed inset-0 z-[280] flex items-center justify-center bg-black/60 p-4"
+      className={`kanban-root fixed inset-0 flex items-center justify-center bg-black/60 p-4 ${overlayClassName}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

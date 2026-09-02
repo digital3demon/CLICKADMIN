@@ -5,11 +5,16 @@ import type { KaitenTrackLane } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
+import { KanbanCrmUsersProvider, useKanbanCrmUsers } from "@/components/kanban/kanban-crm-users-context";
+import { KanbanMemberPickerDialog } from "@/components/kanban/KanbanMemberPickerDialog";
+import { KanbanPersonAvatar } from "@/components/kanban/KanbanPersonAvatar";
 import { readClientState } from "@/lib/client-state-client";
+import type { KanbanMemberPickerMode } from "@/lib/kanban/kanban-card-members-client";
 import {
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
 } from "@/lib/kanban/model";
+import type { KanbanBoard } from "@/lib/kanban/types";
 import {
   defaultTrackLaneForCardTypeName,
   isCardTypeTrackLane,
@@ -271,6 +276,71 @@ function ModalCloseIcon(props: { className?: string }) {
   );
 }
 
+/** Заглушка доски для аватаров/пикера вне канбана. */
+const PREFLIGHT_MEMBERS_BOARD: KanbanBoard = {
+  id: "preflight-members",
+  title: "",
+  columns: [],
+  users: [],
+  cardTypes: [],
+};
+
+function PreflightMembersPickButton({
+  label,
+  userIds,
+  variant,
+  disabled,
+  onOpen,
+}: {
+  label: string;
+  userIds: string[];
+  variant: "assignee" | "participant";
+  disabled?: boolean;
+  onOpen: () => void;
+}) {
+  const { byId } = useKanbanCrmUsers();
+  const names = userIds
+    .map((id) => byId.get(id)?.displayName?.trim() || id)
+    .filter(Boolean);
+  const summary =
+    names.length === 0
+      ? "Не выбран"
+      : names.length <= 2
+        ? names.join(", ")
+        : `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <div className="block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]">
+        {label}
+      </div>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onOpen}
+        className="flex h-10 w-full min-w-0 items-center gap-2 rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-left text-sm text-[var(--app-text)] shadow-sm outline-none hover:bg-[var(--table-row-hover)] focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
+      >
+        <span className="flex shrink-0 items-center -space-x-1">
+          {userIds.slice(0, 3).map((id) => (
+            <KanbanPersonAvatar
+              key={id}
+              userId={id}
+              homeBoard={PREFLIGHT_MEMBERS_BOARD}
+              variant={variant}
+              size="list"
+              titleSuffix=""
+            />
+          ))}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{summary}</span>
+        <span className="shrink-0 text-[var(--text-muted)]" aria-hidden>
+          ▾
+        </span>
+      </button>
+    </div>
+  );
+}
+
 /** При сбросе невалидного выбора — не ставим пространство автоматически. */
 function isTrackLane(value: string): value is KaitenTrackLane {
   return value === "ORTHOPEDICS" || value === "ORTHODONTICS" || value === "TEST";
@@ -334,11 +404,11 @@ export function KaitenPreflightModal({
   const [boardLaneName, setBoardLaneName] = useState("");
   const [workLabel, setWorkLabel] = useState("");
   const [kaitenIntegrationEnabled, setKaitenIntegrationEnabled] = useState(true);
-  const [assigneeUserId, setAssigneeUserId] = useState("");
-  const [participantUserId, setParticipantUserId] = useState("");
-  const [crmUsers, setCrmUsers] = useState<
-    Array<{ id: string; displayName: string }>
-  >([]);
+  const [assigneeUserIds, setAssigneeUserIds] = useState<string[]>([]);
+  const [participantUserIds, setParticipantUserIds] = useState<string[]>([]);
+  const [pickerMode, setPickerMode] = useState<KanbanMemberPickerMode | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -353,9 +423,9 @@ export function KaitenPreflightModal({
     setBoardLaneOptionsBySpace({});
     setBoardLaneName("");
     setWorkLabel("");
-    setAssigneeUserId("");
-    setParticipantUserId("");
-    setCrmUsers([]);
+    setAssigneeUserIds([]);
+    setParticipantUserIds([]);
+    setPickerMode(null);
     setLoadError(null);
     let cancelled = false;
     void (async () => {
@@ -370,30 +440,6 @@ export function KaitenPreflightModal({
           "tenant",
           KANBAN_CARD_TYPE_LANES_KEY,
         );
-        const crmUsersPromise = fetch("/api/kanban/crm-users", {
-          credentials: "include",
-          cache: "no-store",
-        })
-          .then(async (res) => {
-            const j = (await res.json().catch(() => ({}))) as {
-              users?: Array<{ id?: unknown; displayName?: unknown }>;
-            };
-            if (!res.ok) return [] as Array<{ id: string; displayName: string }>;
-            const rows = Array.isArray(j.users) ? j.users : [];
-            return rows
-              .map((u) => {
-                const id = String(u?.id ?? "").trim();
-                const displayName = String(u?.displayName ?? "").trim() || id;
-                return id ? { id, displayName } : null;
-              })
-              .filter((u): u is { id: string; displayName: string } => Boolean(u))
-              .sort((a, b) =>
-                a.displayName.localeCompare(b.displayName, "ru", {
-                  sensitivity: "base",
-                }),
-              );
-          })
-          .catch(() => [] as Array<{ id: string; displayName: string }>);
         const res = await fetch("/api/kaiten-ui-options");
         const data = (await res.json()) as {
           enabled?: boolean;
@@ -410,13 +456,11 @@ export function KaitenPreflightModal({
         setLaneAllowlist(
           Array.isArray(data.trackLanes) ? data.trackLanes : [],
         );
-        const [tenantKanbanState, tenantCardTypeLanes, users] = await Promise.all([
+        const [tenantKanbanState, tenantCardTypeLanes] = await Promise.all([
           tenantKanbanStatePromise,
           tenantCardTypeLanesPromise,
-          crmUsersPromise,
         ]);
         if (!cancelled) {
-          setCrmUsers(users);
           const distribution = distributionLanesFromTenantKanbanState(tenantKanbanState);
           setDistributionLaneAllowlist(distribution);
           const defaults = {
@@ -528,12 +572,10 @@ export function KaitenPreflightModal({
         return;
       }
       setSelectionHint(null);
-      const kanbanAssigneeIds = assigneeUserId.trim()
-        ? [assigneeUserId.trim()]
-        : [];
-      const kanbanParticipantIds = participantUserId.trim()
-        ? [participantUserId.trim()]
-        : [];
+      const kanbanAssigneeIds = assigneeUserIds.map((id) => id.trim()).filter(Boolean);
+      const kanbanParticipantIds = participantUserIds
+        .map((id) => id.trim())
+        .filter(Boolean);
       if (decideLater) {
         onConfirm(
           {
@@ -570,8 +612,8 @@ export function KaitenPreflightModal({
       cardTypeId,
       space,
       workLabel,
-      assigneeUserId,
-      participantUserId,
+      assigneeUserIds,
+      participantUserIds,
       missingSelectionMessage,
     ],
   );
@@ -585,6 +627,7 @@ export function KaitenPreflightModal({
   if (typeof document === "undefined") return null;
 
   return createPortal(
+    <KanbanCrmUsersProvider>
     <div
       className="fixed inset-0 z-[600] overflow-y-auto bg-zinc-900/50 p-3 sm:p-5"
       role="presentation"
@@ -824,50 +867,20 @@ export function KaitenPreflightModal({
               </fieldset>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="min-w-0 space-y-1.5">
-                  <label
-                    htmlFor="kaiten-preflight-assignee"
-                    className="block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
-                  >
-                    Ответственный
-                  </label>
-                  <select
-                    id="kaiten-preflight-assignee"
-                    value={assigneeUserId}
-                    onChange={(e) => setAssigneeUserId(e.target.value)}
-                    disabled={!!loadError}
-                    className="h-10 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
-                  >
-                    <option value="">Не выбран</option>
-                    {crmUsers.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.displayName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="min-w-0 space-y-1.5">
-                  <label
-                    htmlFor="kaiten-preflight-participant"
-                    className="block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
-                  >
-                    Участник
-                  </label>
-                  <select
-                    id="kaiten-preflight-participant"
-                    value={participantUserId}
-                    onChange={(e) => setParticipantUserId(e.target.value)}
-                    disabled={!!loadError}
-                    className="h-10 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50"
-                  >
-                    <option value="">Не выбран</option>
-                    {crmUsers.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.displayName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <PreflightMembersPickButton
+                  label="Ответственный"
+                  userIds={assigneeUserIds}
+                  variant="assignee"
+                  disabled={!!loadError}
+                  onOpen={() => setPickerMode("assign")}
+                />
+                <PreflightMembersPickButton
+                  label="Участник"
+                  userIds={participantUserIds}
+                  variant="participant"
+                  disabled={!!loadError}
+                  onOpen={() => setPickerMode("part")}
+                />
               </div>
             </div>
           </div>
@@ -940,7 +953,25 @@ export function KaitenPreflightModal({
         </div>
       ) : null}
       </div>
-    </div>,
+    </div>
+    {pickerMode ? (
+      <KanbanMemberPickerDialog
+        open
+        mode={pickerMode}
+        board={PREFLIGHT_MEMBERS_BOARD}
+        initialUserIds={
+          pickerMode === "assign" ? assigneeUserIds : participantUserIds
+        }
+        overlayClassName="z-[650]"
+        onClose={() => setPickerMode(null)}
+        onSave={(userIds) => {
+          if (pickerMode === "assign") setAssigneeUserIds(userIds);
+          else setParticipantUserIds(userIds);
+          setPickerMode(null);
+        }}
+      />
+    ) : null}
+    </KanbanCrmUsersProvider>,
     document.body,
   );
 }
