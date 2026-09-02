@@ -266,7 +266,7 @@ describe("buildKanbanDisplayView · search on board", () => {
     expect(cardHomeBoardId.get("arch-079")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
   });
 
-  it("при поиске показывает попадание из СТОП в колонке, откуда ушла карточка", () => {
+  it("при поиске показывает попадание из СТОП в колонке СТОП", () => {
     const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
     const queue = ortho.columns.find((c) => c.title === "К исполнению")!;
     const stoppedCard = createCard({
@@ -302,8 +302,13 @@ describe("buildKanbanDisplayView · search on board", () => {
       sessionUserId: "me",
       sessionUserRole: "ADMIN",
     });
-    const queueView = displayBoard.columns.find((c) => c.title === "К исполнению");
-    expect(queueView?.cards.map((c) => c.id)).toEqual(["stop-171"]);
+    const stopView = displayBoard.columns.find((c) => c.title === "СТОП");
+    expect(stopView?.cards.map((c) => c.id)).toEqual(["stop-171"]);
+    expect(
+      displayBoard.columns
+        .find((c) => c.title === "К исполнению")
+        ?.cards.map((c) => c.id),
+    ).not.toContain("stop-171");
     expect(cardHomeBoardId.get("stop-171")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
   });
 });

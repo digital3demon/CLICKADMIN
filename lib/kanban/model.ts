@@ -14,7 +14,10 @@ import type {
 import type { UserRole } from "@prisma/client";
 import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
-import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
+import {
+  isKanbanStopColumnTitle,
+  KANBAN_STOP_COLUMN_TITLE,
+} from "@/lib/kanban/kanban-stop-column";
 import {
   linkedOrderRowHasDescriptionBody,
   resolveLinkedOrderKanbanDescription,
@@ -2162,8 +2165,8 @@ function appendArchivedSearchHits(args: {
 }
 
 /**
- * При поиске — карточки из СТОП (колонка = откуда ушли).
- * Иначе наряд в стопе не находится на основной доске / в списке.
+ * При поиске — карточки из СТОП в колонке «СТОП» (не в колонке, откуда сняли).
+ * Иначе в списке / на доске показывается «НА СКАН» вместо статуса стопа.
  */
 function appendStoppedSearchHits(args: {
   displayBoard: KanbanBoard;
@@ -2176,6 +2179,8 @@ function appendStoppedSearchHits(args: {
   const seen = new Set(
     args.displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id)),
   );
+  const stopTitle = KANBAN_STOP_COLUMN_TITLE;
+  const titleNorm = stopTitle.trim().toLowerCase();
   for (const home of args.homes) {
     for (const row of home.stoppedCards || []) {
       const card = row.card;
@@ -2183,14 +2188,13 @@ function appendStoppedSearchHits(args: {
       if (args.extraKeep && !args.extraKeep(card)) continue;
       if (!args.textMatches(card, home)) continue;
       if (!args.passesFilters(card, home)) continue;
-      const titleNorm = (row.sourceColumnTitle || "СТОП").trim().toLowerCase();
       let colView = args.displayBoard.columns.find(
         (c) => c.title.trim().toLowerCase() === titleNorm,
       );
       if (!colView) {
         colView = {
-          id: `search-stop-${home.id}-${titleNorm || "stop"}`,
-          title: row.sourceColumnTitle?.trim() || "СТОП",
+          id: `search-stop-${home.id}`,
+          title: stopTitle,
           cards: [],
         };
         args.displayBoard.columns.push(colView);
