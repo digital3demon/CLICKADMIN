@@ -68,6 +68,7 @@ function MinusIcon({ className }: { className?: string }) {
 type CardChromeProps = {
   level: WarehouseTreeCardLevel;
   highlighted?: boolean;
+  dimmed?: boolean;
   children: React.ReactNode;
   onClick?: () => void;
   role?: React.AriaRole;
@@ -78,6 +79,7 @@ type CardChromeProps = {
 function CardChrome({
   level,
   highlighted,
+  dimmed,
   children,
   onClick,
   role,
@@ -88,7 +90,9 @@ function CardChrome({
 
   return (
     <div
-      className={`relative shrink-0 rounded-[9px] p-[2px] ${levelRingClass(level, highlighted)}`}
+      className={`relative shrink-0 rounded-[9px] p-[2px] transition-opacity ${levelRingClass(level, highlighted)} ${
+        dimmed ? "opacity-50" : "opacity-100"
+      }`}
       style={{ width, height }}
     >
       <article
@@ -135,7 +139,7 @@ function StockActionButton({
         e.stopPropagation();
         onClick(e);
       }}
-      className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--app-text)] shadow-sm transition-colors hover:border-[var(--sidebar-blue)] hover:bg-[var(--card-bg)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
+      className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--app-text)] shadow-sm transition-colors hover:border-[var(--sidebar-blue)] hover:bg-[var(--card-bg)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
     >
       {children}
     </button>
@@ -148,6 +152,7 @@ export function WarehouseTreeCard(props: {
   highlighted?: boolean;
   metrics: { label: string; value: string }[];
   expanded?: boolean;
+  dimmed?: boolean;
   onOpen?: () => void;
   onPlus: (e: React.MouseEvent) => void;
   onMinus: (e: React.MouseEvent) => void;
@@ -158,6 +163,7 @@ export function WarehouseTreeCard(props: {
     highlighted,
     metrics,
     expanded,
+    dimmed,
     onOpen,
     onPlus,
     onMinus,
@@ -169,6 +175,7 @@ export function WarehouseTreeCard(props: {
     <CardChrome
       level={level}
       highlighted={highlighted}
+      dimmed={dimmed}
       onClick={onOpen}
       role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
@@ -181,12 +188,12 @@ export function WarehouseTreeCard(props: {
           background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 22%, var(--card-bg)) 0%, color-mix(in srgb, ${accent} 10%, var(--card-bg)) 100%)`,
         }}
       >
-        <span className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-wide">
+        <span className="min-w-0 flex-1 truncate text-[12px] font-bold uppercase tracking-wide">
           {tierLabel}
         </span>
         {expanded !== undefined ? (
           <span
-            className="shrink-0 text-[10px] text-[var(--text-muted)]"
+            className="shrink-0 text-[13px] text-[var(--text-muted)]"
             aria-hidden
           >
             {expanded ? "▾" : "▸"}
@@ -194,18 +201,18 @@ export function WarehouseTreeCard(props: {
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-2 pb-2 pt-1.5">
-        <h3 className="min-w-0 break-words text-[13px] font-semibold leading-snug text-[var(--app-text)]">
+      <div className="flex min-h-0 flex-1 flex-col px-2.5 pb-2.5 pt-2">
+        <h3 className="min-w-0 break-words text-[17px] font-bold leading-snug text-[var(--app-text)]">
           {title}
         </h3>
 
-        <dl className="mt-2 min-h-0 flex-1 space-y-1">
+        <dl className="mt-2.5 min-h-0 flex-1 space-y-2 overflow-y-auto">
           {metrics.map((metric) => (
             <div key={metric.label} className="min-w-0">
-              <dt className="truncate text-[10px] leading-tight text-[var(--text-muted)]">
+              <dt className="truncate text-[12px] font-medium leading-tight text-[var(--text-muted)]">
                 {metric.label}
               </dt>
-              <dd className="truncate text-[11px] font-medium leading-tight text-[var(--app-text)]">
+              <dd className="truncate text-[18px] font-semibold leading-tight text-[var(--app-text)]">
                 {metric.value}
               </dd>
             </div>
@@ -214,10 +221,10 @@ export function WarehouseTreeCard(props: {
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <StockActionButton ariaLabel="Приход" onClick={onPlus}>
-            <PlusIcon className="h-3.5 w-3.5" />
+            <PlusIcon className="h-4 w-4" />
           </StockActionButton>
           <StockActionButton ariaLabel="Списание" onClick={onMinus}>
-            <MinusIcon className="h-3.5 w-3.5" />
+            <MinusIcon className="h-4 w-4" />
           </StockActionButton>
         </div>
       </div>
@@ -246,7 +253,7 @@ export function WarehouseTreeGhostCard(props: {
         <PlusIcon className="h-5 w-5" />
       </span>
       {label ? (
-        <span className="max-w-full px-1 text-center text-[11px] leading-snug">
+        <span className="max-w-full px-1 text-center text-[14px] font-medium leading-snug">
           {label}
         </span>
       ) : null}

@@ -59,28 +59,30 @@ function articleTitle(article: WarehouseTreeArticle): string {
   return sku ? `${sku} · ${article.name}` : article.name;
 }
 
-function allWarehouseArticles(warehouse: WarehouseTreeWarehouse): WarehouseTreeArticle[] {
+function allWarehouseArticles(
+  warehouse: WarehouseTreeWarehouse,
+): WarehouseTreeArticle[] {
   return [
     ...warehouse.manufacturers.flatMap((m) => m.articles),
     ...warehouse.orphanArticles,
   ];
 }
 
-function TreeConnector({
-  cardWidthPx,
+/** Ряд карточек: заполняют ширину контейнера, затем второй ряд. */
+function CardWrapRow({
+  center,
   children,
 }: {
-  cardWidthPx: number;
+  center?: boolean;
   children: ReactNode;
 }) {
   return (
     <div
-      className="mt-3 border-l-2 border-[var(--card-border)]"
-      style={{ marginLeft: cardWidthPx / 2 }}
+      className={`flex w-full flex-wrap gap-4 ${
+        center ? "justify-center" : "justify-start"
+      }`}
     >
-      <div className="-ml-px border-t-2 border-[var(--card-border)] pt-3 pl-3">
-        {children}
-      </div>
+      {children}
     </div>
   );
 }
@@ -92,12 +94,12 @@ export function WarehouseTreeView({
   onRefresh,
 }: WarehouseTreeViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedWarehouses, setExpandedWarehouses] = useState<Set<string>>(
-    () => new Set(),
+  const [expandedWarehouseId, setExpandedWarehouseId] = useState<string | null>(
+    null,
   );
-  const [expandedManufacturers, setExpandedManufacturers] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [expandedManufacturerKey, setExpandedManufacturerKey] = useState<
+    string | null
+  >(null);
   const [modalState, setModalState] = useState<WarehouseTreeModalState | null>(
     null,
   );
@@ -129,32 +131,38 @@ export function WarehouseTreeView({
   );
 
   useEffect(() => {
-    if (query) {
-      const { warehouseIds, manufacturerKeys } = collectExpandKeys(displayTree);
-      setExpandedWarehouses(new Set(warehouseIds));
-      setExpandedManufacturers(new Set(manufacturerKeys));
+    if (!query) {
+      setExpandedWarehouseId(null);
+      setExpandedManufacturerKey(null);
       return;
     }
-    setExpandedWarehouses(new Set());
-    setExpandedManufacturers(new Set());
+    const { warehouseIds, manufacturerKeys } = collectExpandKeys(displayTree);
+    setExpandedWarehouseId(warehouseIds[0] ?? null);
+    setExpandedManufacturerKey(manufacturerKeys[0] ?? null);
   }, [query, displayTree]);
 
+  const expandedWarehouse =
+    displayTree.find((w) => w.id === expandedWarehouseId) ?? null;
+  const expandedManufacturer =
+    expandedWarehouse?.manufacturers.find(
+      (m) => m.key === expandedManufacturerKey,
+    ) ?? null;
+
   const toggleWarehouse = (warehouseId: string) => {
-    setExpandedWarehouses((prev) => {
-      const next = new Set(prev);
-      if (next.has(warehouseId)) next.delete(warehouseId);
-      else next.add(warehouseId);
-      return next;
+    setExpandedWarehouseId((prev) => {
+      if (prev === warehouseId) {
+        setExpandedManufacturerKey(null);
+        return null;
+      }
+      setExpandedManufacturerKey(null);
+      return warehouseId;
     });
   };
 
   const toggleManufacturer = (manufacturerKey: string) => {
-    setExpandedManufacturers((prev) => {
-      const next = new Set(prev);
-      if (next.has(manufacturerKey)) next.delete(manufacturerKey);
-      else next.add(manufacturerKey);
-      return next;
-    });
+    setExpandedManufacturerKey((prev) =>
+      prev === manufacturerKey ? null : manufacturerKey,
+    );
   };
 
   const renderArticleCard = (
@@ -191,153 +199,49 @@ export function WarehouseTreeView({
     />
   );
 
-  const renderManufacturerColumn = (
+  const renderManufacturerCard = (
     manufacturer: WarehouseTreeManufacturer,
     warehouseType: string | null,
   ) => {
-    const expanded = expandedManufacturers.has(manufacturer.key);
+    const expanded = expandedManufacturerKey === manufacturer.key;
+    const dimSiblings = expandedManufacturerKey != null && !expanded;
     return (
-      <div key={manufacturer.key} className="flex shrink-0 flex-col">
-        <WarehouseTreeCard
-          level="manufacturer"
-          title={manufacturer.name}
-          highlighted={hits.has(`mf:${manufacturer.key}`)}
-          expanded={expanded}
-          onOpen={() => toggleManufacturer(manufacturer.key)}
-          metrics={[
-            { label: "Всего", value: formatNum(manufacturer.quantityOnHand) },
-            { label: "Артикулов", value: formatNum(manufacturer.articleCount, 0) },
-          ]}
-          onPlus={(e) => {
-            e.stopPropagation();
-            setModalState({
-              type: "manufacturer-plus",
-              warehouseId: manufacturer.warehouseId,
-              manufacturer: manufacturer.name,
-              warehouseType,
-            });
-          }}
-          onMinus={(e) => {
-            e.stopPropagation();
-            setModalState({
-              type: "manufacturer-minus",
-              warehouseId: manufacturer.warehouseId,
-              manufacturer: manufacturer.name,
-              warehouseType,
-              articles: manufacturer.articles,
-            });
-          }}
-        />
-        {expanded ? (
-          <TreeConnector cardWidthPx={187}>
-            <div className="flex min-w-min flex-row items-start gap-3">
-              {manufacturer.articles.map((article) =>
-                renderArticleCard(article, warehouseType),
-              )}
-              <WarehouseTreeGhostCard
-                level="article"
-                label="Добавить артикул"
-                onClick={() =>
-                  setModalState({
-                    type: "create-article",
-                    warehouseId: manufacturer.warehouseId,
-                    manufacturer: manufacturer.name,
-                    warehouseType,
-                  })
-                }
-              />
-            </div>
-          </TreeConnector>
-        ) : null}
-      </div>
+      <WarehouseTreeCard
+        key={manufacturer.key}
+        level="manufacturer"
+        title={manufacturer.name}
+        highlighted={hits.has(`mf:${manufacturer.key}`)}
+        expanded={expanded}
+        dimmed={dimSiblings}
+        onOpen={() => toggleManufacturer(manufacturer.key)}
+        metrics={[
+          { label: "Всего", value: formatNum(manufacturer.quantityOnHand) },
+          { label: "Артикулов", value: formatNum(manufacturer.articleCount, 0) },
+        ]}
+        onPlus={(e) => {
+          e.stopPropagation();
+          setModalState({
+            type: "manufacturer-plus",
+            warehouseId: manufacturer.warehouseId,
+            manufacturer: manufacturer.name,
+            warehouseType,
+          });
+        }}
+        onMinus={(e) => {
+          e.stopPropagation();
+          setModalState({
+            type: "manufacturer-minus",
+            warehouseId: manufacturer.warehouseId,
+            manufacturer: manufacturer.name,
+            warehouseType,
+            articles: manufacturer.articles,
+          });
+        }}
+      />
     );
   };
 
-  const renderWarehouseColumn = (warehouse: WarehouseTreeWarehouse) => {
-    const expanded = expandedWarehouses.has(warehouse.id);
-    const hasManufacturers = warehouse.manufacturers.length > 0;
-
-    return (
-      <div key={warehouse.id} className="flex shrink-0 flex-col">
-        <WarehouseTreeCard
-          level="warehouse"
-          title={warehouse.name}
-          highlighted={hits.has(`wh:${warehouse.id}`)}
-          expanded={expanded}
-          onOpen={() => toggleWarehouse(warehouse.id)}
-          metrics={[
-            { label: "Всего", value: formatNum(warehouse.quantityOnHand) },
-            { label: "Позиций", value: formatNum(warehouse.itemCount, 0) },
-            {
-              label: "Производителей",
-              value: formatNum(warehouse.manufacturerCount, 0),
-            },
-            { label: "Артикулов", value: formatNum(warehouse.articleCount, 0) },
-          ]}
-          onPlus={(e) => {
-            e.stopPropagation();
-            setModalState({
-              type: "warehouse-plus",
-              warehouseId: warehouse.id,
-              warehouseType: warehouse.warehouseType,
-            });
-          }}
-          onMinus={(e) => {
-            e.stopPropagation();
-            setModalState({
-              type: "warehouse-minus",
-              warehouseId: warehouse.id,
-              warehouseType: warehouse.warehouseType,
-              articles: allWarehouseArticles(warehouse),
-            });
-          }}
-        />
-        {expanded ? (
-          <TreeConnector cardWidthPx={221}>
-            {hasManufacturers ? (
-              <div className="flex min-w-min flex-row items-start gap-3">
-                {warehouse.manufacturers.map((manufacturer) =>
-                  renderManufacturerColumn(manufacturer, warehouse.warehouseType),
-                )}
-                {warehouse.orphanArticles.map((article) =>
-                  renderArticleCard(article, warehouse.warehouseType),
-                )}
-                <WarehouseTreeGhostCard
-                  level="manufacturer"
-                  label="Добавить производителя"
-                  onClick={() =>
-                    setModalState({
-                      type: "create-manufacturer",
-                      warehouseId: warehouse.id,
-                      warehouseType: warehouse.warehouseType,
-                    })
-                  }
-                />
-              </div>
-            ) : (
-              <div className="flex min-w-min flex-row items-start gap-3">
-                {warehouse.orphanArticles.map((article) =>
-                  renderArticleCard(article, warehouse.warehouseType),
-                )}
-                <WarehouseTreeGhostCard
-                  level="article"
-                  label="Добавить артикул"
-                  onClick={() =>
-                    setModalState({
-                      type: "create-article",
-                      warehouseId: warehouse.id,
-                      manufacturer: null,
-                      warehouseType: warehouse.warehouseType,
-                    })
-                  }
-                />
-              </div>
-            )}
-          </TreeConnector>
-        ) : null}
-      </div>
-    );
-  };
+  const dimOtherWarehouses = expandedWarehouseId != null;
 
   return (
     <div className="space-y-4">
@@ -353,17 +257,127 @@ export function WarehouseTreeView({
         />
       </label>
 
-      <div className="overflow-x-auto pb-2">
-        <div className="flex min-w-min flex-row items-start gap-4">
-          {displayTree.map((warehouse) => renderWarehouseColumn(warehouse))}
+      <div className="flex w-full min-w-0 flex-col gap-6">
+        <CardWrapRow>
+          {displayTree.map((warehouse) => {
+            const expanded = warehouse.id === expandedWarehouseId;
+            return (
+              <WarehouseTreeCard
+                key={warehouse.id}
+                level="warehouse"
+                title={warehouse.name}
+                highlighted={hits.has(`wh:${warehouse.id}`)}
+                expanded={expanded}
+                dimmed={dimOtherWarehouses && !expanded}
+                onOpen={() => toggleWarehouse(warehouse.id)}
+                metrics={[
+                  { label: "Всего", value: formatNum(warehouse.quantityOnHand) },
+                  { label: "Позиций", value: formatNum(warehouse.itemCount, 0) },
+                  {
+                    label: "Производителей",
+                    value: formatNum(warehouse.manufacturerCount, 0),
+                  },
+                  {
+                    label: "Артикулов",
+                    value: formatNum(warehouse.articleCount, 0),
+                  },
+                ]}
+                onPlus={(e) => {
+                  e.stopPropagation();
+                  setModalState({
+                    type: "warehouse-plus",
+                    warehouseId: warehouse.id,
+                    warehouseType: warehouse.warehouseType,
+                  });
+                }}
+                onMinus={(e) => {
+                  e.stopPropagation();
+                  setModalState({
+                    type: "warehouse-minus",
+                    warehouseId: warehouse.id,
+                    warehouseType: warehouse.warehouseType,
+                    articles: allWarehouseArticles(warehouse),
+                  });
+                }}
+              />
+            );
+          })}
           <WarehouseTreeGhostCard
             level="warehouse"
             label="Добавить склад"
             onClick={() => setModalState({ type: "create-warehouse" })}
           />
-        </div>
+        </CardWrapRow>
+
+        {expandedWarehouse ? (
+          <CardWrapRow center>
+            {expandedWarehouse.manufacturers.length > 0 ? (
+              <>
+                {expandedWarehouse.manufacturers.map((manufacturer) =>
+                  renderManufacturerCard(
+                    manufacturer,
+                    expandedWarehouse.warehouseType,
+                  ),
+                )}
+                {expandedWarehouse.orphanArticles.map((article) =>
+                  renderArticleCard(article, expandedWarehouse.warehouseType),
+                )}
+                <WarehouseTreeGhostCard
+                  level="manufacturer"
+                  label="Добавить производителя"
+                  onClick={() =>
+                    setModalState({
+                      type: "create-manufacturer",
+                      warehouseId: expandedWarehouse.id,
+                      warehouseType: expandedWarehouse.warehouseType,
+                    })
+                  }
+                />
+              </>
+            ) : (
+              <>
+                {expandedWarehouse.orphanArticles.map((article) =>
+                  renderArticleCard(article, expandedWarehouse.warehouseType),
+                )}
+                <WarehouseTreeGhostCard
+                  level="article"
+                  label="Добавить артикул"
+                  onClick={() =>
+                    setModalState({
+                      type: "create-article",
+                      warehouseId: expandedWarehouse.id,
+                      manufacturer: null,
+                      warehouseType: expandedWarehouse.warehouseType,
+                    })
+                  }
+                />
+              </>
+            )}
+          </CardWrapRow>
+        ) : null}
+
+        {expandedWarehouse && expandedManufacturer ? (
+          <CardWrapRow center>
+            {expandedManufacturer.articles.map((article) =>
+              renderArticleCard(article, expandedWarehouse.warehouseType),
+            )}
+            <WarehouseTreeGhostCard
+              level="article"
+              label="Добавить артикул"
+              onClick={() =>
+                setModalState({
+                  type: "create-article",
+                  warehouseId: expandedManufacturer.warehouseId,
+                  manufacturer: expandedManufacturer.name,
+                  warehouseType: expandedWarehouse.warehouseType,
+                })
+              }
+            />
+          </CardWrapRow>
+        ) : null}
+
         {displayTree.length === 0 ? (
-          <p className="mt-4 text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-[var(--text-muted)]">
             {fullTree.length === 0
               ? "Нет складов. Добавьте первый склад."
               : "Ничего не найдено по запросу."}
