@@ -96,7 +96,10 @@ export function FinanceOfficeOrderPickSearch({
           items?: FinanceOfficeOrderSearchHit[];
         };
         if (!res.ok || ac.signal.aborted) return;
-        const hit = Array.isArray(data.items) ? data.items[0] : null;
+        const hit =
+          Array.isArray(data.items)
+            ? data.items.find((x) => x.id === selectedId) ?? null
+            : null;
         if (hit) setPreview(hit);
       } catch {
         /* сеть — оставим label из строки */

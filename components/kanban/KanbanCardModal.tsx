@@ -24,6 +24,7 @@ import {
   uploadOrderAttachmentFromFile,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { mergeKaitenSnapshotIntoCardComments } from "@/lib/kanban/chat-sync";
+import { mergeKanbanOrderComments } from "@/lib/kanban/kanban-order-comments";
 import {
   forgetOptimisticKaitenBlock,
   OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
@@ -938,7 +939,13 @@ export function KanbanCardModal({
           if (!fc) return;
           ensureKanbanCardFilesFromChatImages(fc.card, snap.cardImages);
           if (snap.comments.length > 0) {
-            fc.card.comments = withImagePlaceholders(snap.comments, fc.card);
+            fc.card.comments = withImagePlaceholders(
+              mergeRequestClosedFlags(
+                mergeKanbanOrderComments(fc.card.comments, snap.comments),
+                closedFlags,
+              ),
+              fc.card,
+            );
           } else if ((fc.card.comments || []).length > 0) {
             fc.card.comments = withImagePlaceholders(
               mergeRequestClosedFlags(fc.card.comments || [], closedFlags),
@@ -1005,7 +1012,13 @@ export function KanbanCardModal({
           if (!fc) return;
           ensureKanbanCardFilesFromChatImages(fc.card, again.cardImages);
           if (again.comments.length === 0) return;
-          fc.card.comments = withImagePlaceholders(again.comments, fc.card);
+          fc.card.comments = withImagePlaceholders(
+            mergeRequestClosedFlags(
+              mergeKanbanOrderComments(fc.card.comments, again.comments),
+              closedFlags,
+            ),
+            fc.card,
+          );
         });
       }
       setKaitenChatLoading(false);
