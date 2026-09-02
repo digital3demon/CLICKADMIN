@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
+  linkedOrderRowHasDescriptionBody,
   resolveLinkedOrderKanbanDescription,
   resolveLinkedOrderKanbanTitle,
   stripKaitenDescriptionForKanbanBody,
 } from "@/lib/kanban/kaiten-linked-order";
+
+describe("linkedOrderRowHasDescriptionBody", () => {
+  it("false для slim-строки без текстов", () => {
+    expect(
+      linkedOrderRowHasDescriptionBody({
+        clientOrderText: null,
+        notes: null,
+        kaitenCardDescriptionMirror: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("true если есть clientOrderText с кириллицей", () => {
+    expect(
+      linkedOrderRowHasDescriptionBody({
+        clientOrderText: "пац: Свиргунова Настя",
+        notes: null,
+        kaitenCardDescriptionMirror: null,
+      }),
+    ).toBe(true);
+  });
+});
 
 describe("resolveLinkedOrderKanbanTitle", () => {
   const fromOrder = "2606-179 Иванов И.И.\nПетров П.П. Коронка 10.06";

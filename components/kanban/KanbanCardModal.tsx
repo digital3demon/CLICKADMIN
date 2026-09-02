@@ -113,11 +113,7 @@ import {
 } from "@/lib/kanban/model";
 import { resolveLinkedOrderKanbanDescription } from "@/lib/kanban/kaiten-linked-order";
 import type { KaitenLinkedOrderForKanban } from "@/lib/kanban/kaiten-linked-order";
-import {
-  KANBAN_CARD_MODAL_ANIM_MS,
-  kanbanCardModalClosedTransform,
-  type KanbanCardOpenOrigin,
-} from "@/lib/kanban/card-modal-animation";
+import type { KanbanCardOpenOrigin } from "@/lib/kanban/card-modal-animation";
 import { runKanbanAutomations } from "@/lib/kanban/automations";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -598,7 +594,7 @@ export function KanbanCardModal({
   allBoards,
   activityActorLabel,
   onClose,
-  openOrigin = null,
+  openOrigin: _openOrigin = null,
   onApply,
   toast,
   onMovePrevStage,
@@ -645,10 +641,6 @@ export function KanbanCardModal({
   const descUserOverrideRef = useRef(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const originSnapRef = useRef<KanbanCardOpenOrigin | null>(null);
-  const closingRef = useRef(false);
-  const [backdropOpacity, setBackdropOpacity] = useState(1);
-  const [panelAnimStyle, setPanelAnimStyle] = useState<CSSProperties>({});
   const descBoxRef = useRef<HTMLDivElement>(null);
   const descMeasureRef = useRef<HTMLDivElement>(null);
   const [placementFieldsOpen, setPlacementFieldsOpen] = useState(false);
@@ -674,85 +666,9 @@ export function KanbanCardModal({
   const showOrderMailButton = Boolean(card?.linkedOrderId);
   const act = (activityActorLabel ?? "").trim() || undefined;
 
-  const requestAnimatedClose = useCallback(() => {
-    if (embed) {
-      onClose();
-      return;
-    }
-    if (closingRef.current) return;
-    const prefersReduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (prefersReduced) {
-      onClose();
-      return;
-    }
-    closingRef.current = true;
-    const panel = panelRef.current;
-    if (!panel) {
-      onClose();
-      return;
-    }
-    const panelRect = panel.getBoundingClientRect();
-    const closedTransform = kanbanCardModalClosedTransform(
-      panelRect,
-      originSnapRef.current,
-    );
-    setBackdropOpacity(0);
-    setPanelAnimStyle({
-      transform: closedTransform,
-      opacity: 0.88,
-      transition: `transform ${KANBAN_CARD_MODAL_ANIM_MS}ms cubic-bezier(0.4, 0, 0.6, 1), opacity ${KANBAN_CARD_MODAL_ANIM_MS}ms ease-in`,
-    });
-    window.setTimeout(onClose, KANBAN_CARD_MODAL_ANIM_MS);
-  }, [embed, onClose]);
-
-  useLayoutEffect(() => {
-    if (embed || !cardId) return;
-    closingRef.current = false;
-    if (openOrigin) originSnapRef.current = openOrigin;
-  }, [cardId, embed, openOrigin]);
-
-  useLayoutEffect(() => {
-    if (embed || !cardId || !card) return;
-    const panel = panelRef.current;
-    if (!panel) return;
-
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (prefersReduced) {
-      setBackdropOpacity(1);
-      setPanelAnimStyle({});
-      return;
-    }
-
-    const panelRect = panel.getBoundingClientRect();
-    const closedTransform = kanbanCardModalClosedTransform(
-      panelRect,
-      originSnapRef.current,
-    );
-
-    setBackdropOpacity(0);
-    setPanelAnimStyle({
-      transform: closedTransform,
-      opacity: originSnapRef.current ? 0.92 : 0,
-      transition: "none",
-    });
-
-    panel.getBoundingClientRect();
-
-    const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setBackdropOpacity(1);
-        setPanelAnimStyle({
-          transform: "none",
-          opacity: 1,
-          transition: `transform ${KANBAN_CARD_MODAL_ANIM_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${KANBAN_CARD_MODAL_ANIM_MS}ms ease-out`,
-        });
-      });
-    });
-
-    return () => cancelAnimationFrame(frame);
-  }, [cardId, embed, card]);
+  const requestClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     if (embed || !cardId) return;
@@ -762,7 +678,7 @@ export function KanbanCardModal({
         return;
       }
       e.preventDefault();
-      requestAnimatedClose();
+      requestClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -774,7 +690,7 @@ export function KanbanCardModal({
     manualRouteOpen,
     orderMailOpen,
     pickerMode,
-    requestAnimatedClose,
+    requestClose,
   ]);
 
   useEffect(() => {
@@ -831,8 +747,10 @@ export function KanbanCardModal({
   useEffect(() => {
     if (!cardId) {
       linkedHydrateKeyRef.current = "";
+      setDescDraft("");
       return;
     }
+    setDescDraft("");
     setRightTab("chat");
     setBlockReasonDraft("");
     setBlockPopupOpen(false);
@@ -976,14 +894,20 @@ export function KanbanCardModal({
           const detailJson = (await detailRes.json()) as {
             orders?: KaitenLinkedOrderForKanban[];
           };
-          const row = detailJson.orders?.[0];
-          if (row) {
+          if (cancelled) return;
+          const row =
+            detailJson.orders?.find((o) => o.id === linkedOrderId) ??
+            (detailJson.orders?.length === 1 ? detailJson.orders[0] : undefined);
+          if (row && row.id === linkedOrderId) {
             onApply((b) => {
               const fc = findCard(b, cardId);
               if (!fc) return;
+              if (fc.card.linkedOrderId !== linkedOrderId) return;
               mergeOrderAttachmentsIntoLinkedCard(fc.card, linkedOrderId, row);
               const desc = resolveLinkedOrderKanbanDescription(row, isDemo);
-              if (desc.trim() && !(fc.card.description || "").trim()) {
+              // Всегда из этого наряда: иначе «orders[0]» мог записать чужой текст
+              // и условие «только если пусто» оставляло его на всех карточках.
+              if (desc.trim()) {
                 fc.card.description = desc;
               }
             });
@@ -1021,7 +945,10 @@ export function KanbanCardModal({
               fc.card,
             );
           }
-          if (snap.description.trim() && !(fc.card.description || "").trim()) {
+          if (
+            snap.description.trim() &&
+            fc.card.linkedOrderId === linkedOrderId
+          ) {
             fc.card.description = snap.description;
           }
         });
@@ -2070,17 +1997,13 @@ export function KanbanCardModal({
         embed
           ? undefined
           : (ev) => {
-              if (ev.target === ev.currentTarget) requestAnimatedClose();
+              if (ev.target === ev.currentTarget) requestClose();
             }
       }
     >
       {!embed ? (
         <div
-          className="pointer-events-none absolute inset-0 bg-black/55 transition-opacity ease-out"
-          style={{
-            opacity: backdropOpacity,
-            transitionDuration: `${KANBAN_CARD_MODAL_ANIM_MS}ms`,
-          }}
+          className="pointer-events-none absolute inset-0 bg-black/55"
           aria-hidden
         />
       ) : null}
@@ -2249,7 +2172,6 @@ export function KanbanCardModal({
 
       <div
         ref={panelRef}
-        style={embed ? undefined : panelAnimStyle}
         className={
           embed
             ? "flex w-full min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
@@ -2452,7 +2374,7 @@ export function KanbanCardModal({
             <button
               type="button"
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:text-[var(--kaiten-modal-text)] sm:h-12 sm:w-12"
-              onClick={requestAnimatedClose}
+              onClick={requestClose}
               aria-label="Закрыть"
             >
               <IconX className="h-5 w-5 sm:h-6 sm:w-6" />

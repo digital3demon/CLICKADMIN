@@ -16,6 +16,7 @@ import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 import {
+  linkedOrderRowHasDescriptionBody,
   resolveLinkedOrderKanbanDescription,
   resolveLinkedOrderKanbanTitle,
   type KaitenLinkedOrderForKanban,
@@ -3168,7 +3169,13 @@ export function mergeKaitenLinkedOrdersIntoAppState(
         moveLinkedCardToColumn(foundEff.card, foundEff.col, targetCol);
       }
       foundEff.card.title = title;
-      foundEff.card.description = desc;
+      // Slim poll без clientOrderText/mirror — не затираем описание, уже подтянутое модалкой.
+      if (
+        linkedOrderRowHasDescriptionBody(row) ||
+        !(foundEff.card.description || "").trim()
+      ) {
+        foundEff.card.description = desc;
+      }
       applyContinuesFromOrderToKanbanCard(foundEff.card, row);
       foundEff.card.kaitenCardId = row.kaitenCardId ?? null;
       foundEff.card.linkedOrderId = row.id;

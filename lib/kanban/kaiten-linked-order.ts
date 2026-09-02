@@ -100,6 +100,20 @@ function kanbanDescriptionTail(
     : "Наряд в CRM. Карточка Kaiten ещё не создана.";
 }
 
+/** Slim list-hydrate не отдаёт тексты — нельзя затирать полное описание хвостом «Наряд в CRM…». */
+export function linkedOrderRowHasDescriptionBody(
+  row: Pick<
+    KaitenLinkedOrderForKanban,
+    "clientOrderText" | "notes" | "kaitenCardDescriptionMirror"
+  >,
+): boolean {
+  return Boolean(
+    row.clientOrderText?.trim() ||
+      row.notes?.trim() ||
+      row.kaitenCardDescriptionMirror?.trim(),
+  );
+}
+
 /** Описание карточки CRM-канбана: зеркало Kaiten и поля наряда — берём более полное. */
 export function resolveLinkedOrderKanbanDescription(
   row: Pick<

@@ -220,7 +220,13 @@ export async function GET(request: Request) {
       ],
     };
     const searchActive = searchQ.length >= 2;
-    const recentRows = searchActive
+    /**
+     * detail=1 из модалки: только запрошенные ids.
+     * Иначе в ответе до 200 «свежих» и клиент мог взять orders[0] чужого наряда.
+     */
+    const detailIdsOnly =
+      detailHydrate && boardOrderIds.length > 0 && !searchActive;
+    const recentRows = searchActive || detailIdsOnly
       ? []
       : await ordersPrisma.order.findMany({
           where: linkedOrdersWhere,
@@ -229,7 +235,9 @@ export async function GET(request: Request) {
           select: rowSelect,
         });
     const recentIds = new Set(recentRows.map((r) => r.id));
-    const missingBoardIds = boardOrderIds.filter((id) => !recentIds.has(id));
+    const missingBoardIds = detailIdsOnly
+      ? boardOrderIds
+      : boardOrderIds.filter((id) => !recentIds.has(id));
     const boardExtraRows =
       missingBoardIds.length > 0
         ? await ordersPrisma.order.findMany({
@@ -242,7 +250,7 @@ export async function GET(request: Request) {
      * Иначе карточка появляется только после поиска.
      */
     const laneRows =
-      !searchActive && hydrateLanes.length > 0
+      !searchActive && !detailIdsOnly && hydrateLanes.length > 0
         ? (
             await Promise.all(
               hydrateLanes.map((lane) =>
