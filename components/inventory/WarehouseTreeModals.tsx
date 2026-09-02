@@ -74,7 +74,15 @@ export type WarehouseTreeModalState =
       type: "article-minus";
       article: WarehouseTreeArticle;
       warehouseType: string | null;
-    };
+    }
+  | { type: "rename-warehouse"; warehouseId: string; name: string }
+  | {
+      type: "rename-manufacturer";
+      warehouseId: string;
+      currentName: string;
+      itemIds: string[];
+    }
+  | { type: "rename-article"; article: WarehouseTreeArticle };
 
 type Props = {
   state: WarehouseTreeModalState | null;
@@ -523,6 +531,17 @@ export function WarehouseTreeModals({
       );
     }
 
+    if (state.type === "rename-warehouse") {
+      setWarehouseName(state.name);
+    }
+    if (state.type === "rename-manufacturer") {
+      setManufacturerName(state.currentName);
+    }
+    if (state.type === "rename-article") {
+      setArticleName(state.article.name);
+      setSku(state.article.sku ?? "");
+    }
+
     if (state.type === "article-plus" || state.type === "article-minus") {
       const purchase = purchaseFromHistory(state.article);
       const sale = state.article.saleUnitPriceRub;
@@ -671,6 +690,18 @@ export function WarehouseTreeModals({
           ]
             .filter(Boolean)
             .join(" · "),
+        };
+      case "rename-warehouse":
+        return { title: "Переименовать склад", description: state.name };
+      case "rename-manufacturer":
+        return {
+          title: "Переименовать производителя",
+          description: state.currentName,
+        };
+      case "rename-article":
+        return {
+          title: "Изменить артикул",
+          description: state.article.name,
         };
     }
   })();
@@ -943,6 +974,90 @@ export function WarehouseTreeModals({
           await submitMinus(state.article, state.article.warehouseId);
           break;
         }
+        case "rename-warehouse": {
+          const name = warehouseName.trim();
+          if (!name) {
+            setError("Укажите название");
+            return;
+          }
+          if (name === state.name.trim()) {
+            onClose();
+            return;
+          }
+          if (!window.confirm(`Переименовать склад «${state.name}» в «${name}»?`)) {
+            return;
+          }
+          const res = await fetch(`/api/inventory/warehouses/${state.warehouseId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          if (!res.ok) {
+            setError(await readApiError(res));
+            return;
+          }
+          break;
+        }
+        case "rename-manufacturer": {
+          const name = manufacturerName.trim();
+          if (!name) {
+            setError("Укажите производителя");
+            return;
+          }
+          if (name === state.currentName.trim()) {
+            onClose();
+            return;
+          }
+          if (
+            !window.confirm(
+              `Переименовать производителя «${state.currentName}» в «${name}» у ${state.itemIds.length} позиций?`,
+            )
+          ) {
+            return;
+          }
+          for (const itemId of state.itemIds) {
+            const res = await fetch(`/api/inventory/items/${itemId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ manufacturer: name }),
+            });
+            if (!res.ok) {
+              setError(await readApiError(res));
+              return;
+            }
+          }
+          break;
+        }
+        case "rename-article": {
+          const name = articleName.trim();
+          if (!name) {
+            setError("Укажите наименование");
+            return;
+          }
+          const nextSku = sku.trim() || null;
+          const prevSku = state.article.sku?.trim() || null;
+          if (name === state.article.name.trim() && nextSku === prevSku) {
+            onClose();
+            return;
+          }
+          if (
+            !window.confirm(
+              `Сохранить изменения позиции «${state.article.name}»?`,
+            )
+          ) {
+            return;
+          }
+          const res = await fetch(`/api/inventory/items/${state.article.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, sku: nextSku }),
+          });
+          if (!res.ok) {
+            setError(await readApiError(res));
+            return;
+          }
+          break;
+        }
       }
       await finishSuccess();
     } catch (err) {
@@ -966,6 +1081,10 @@ export function WarehouseTreeModals({
       case "manufacturer-minus":
       case "article-minus":
         return "Оформить списание";
+      case "rename-warehouse":
+      case "rename-manufacturer":
+      case "rename-article":
+        return "Сохранить";
     }
   })();
 
@@ -1023,6 +1142,56 @@ export function WarehouseTreeModals({
         className="flex flex-col gap-3"
         onSubmit={handleSubmit}
       >
+        {state.type === "rename-warehouse" ? (
+          <label className={labelClass}>
+            <span>Название склада</span>
+            <input
+              type="text"
+              className={inputClass}
+              value={warehouseName}
+              onChange={(e) => setWarehouseName(e.target.value)}
+              autoFocus
+            />
+          </label>
+        ) : null}
+
+        {state.type === "rename-manufacturer" ? (
+          <label className={labelClass}>
+            <span>Производитель</span>
+            <input
+              type="text"
+              className={inputClass}
+              value={manufacturerName}
+              onChange={(e) => setManufacturerName(e.target.value)}
+              autoFocus
+            />
+          </label>
+        ) : null}
+
+        {state.type === "rename-article" ? (
+          <>
+            <label className={labelClass}>
+              <span>Наименование</span>
+              <input
+                type="text"
+                className={inputClass}
+                value={articleName}
+                onChange={(e) => setArticleName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <label className={labelClass}>
+              <span>Артикул</span>
+              <input
+                type="text"
+                className={inputClass}
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+              />
+            </label>
+          </>
+        ) : null}
+
         {state.type === "create-warehouse" ? (
           <>
             <label className={labelClass}>

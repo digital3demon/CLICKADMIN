@@ -692,7 +692,7 @@ export function InventoryWarehouseClient() {
   };
 
   return (
-    <div className="space-y-10">
+    <div className={layout === "tree" ? "space-y-5" : "space-y-10"}>
       {loadError ? (
         <div
           className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
@@ -702,35 +702,40 @@ export function InventoryWarehouseClient() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div
+        className={
+          layout === "tree"
+            ? "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            : "flex flex-wrap items-center gap-3"
+        }
+      >
         <button
           type="button"
           onClick={() =>
             setLayout((prev) => (prev === "tree" ? "classic" : "tree"))
           }
-          className="rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-muted)]"
+          className="w-fit rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-muted)]"
         >
           {layout === "tree" ? "Старый вид склада" : "Новый вид склада"}
         </button>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Новые склады и учётные позиции:{" "}
+          <Link
+            href="/directory/warehouse"
+            className="font-medium text-[var(--sidebar-blue)] hover:underline"
+          >
+            Конфигурация → Склад
+          </Link>
+          . Журнал движений:{" "}
+          <Link
+            href="/orders/history?tab=stock"
+            className="font-medium text-[var(--sidebar-blue)] hover:underline"
+          >
+            История → Склад
+          </Link>
+          .
+        </p>
       </div>
-
-      <p className="text-sm text-[var(--text-secondary)]">
-        Новые склады и учётные позиции:{" "}
-        <Link
-          href="/directory/warehouse"
-          className="font-medium text-[var(--sidebar-blue)] hover:underline"
-        >
-          Конфигурация → Склад
-        </Link>
-        . Журнал движений:{" "}
-        <Link
-          href="/orders/history?tab=stock"
-          className="font-medium text-[var(--sidebar-blue)] hover:underline"
-        >
-          История → Склад
-        </Link>
-        .
-      </p>
 
       {layout === "tree" ? (
         <WarehouseTreeView

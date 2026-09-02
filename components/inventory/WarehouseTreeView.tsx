@@ -199,6 +199,10 @@ export function WarehouseTreeView({
           warehouseType,
         });
       }}
+      onRename={(e) => {
+        e.stopPropagation();
+        setModalState({ type: "rename-article", article });
+      }}
     />
   );
 
@@ -240,6 +244,15 @@ export function WarehouseTreeView({
             articles: manufacturer.articles,
           });
         }}
+        onRename={(e) => {
+          e.stopPropagation();
+          setModalState({
+            type: "rename-manufacturer",
+            warehouseId: manufacturer.warehouseId,
+            currentName: manufacturer.name,
+            itemIds: manufacturer.articles.map((a) => a.id),
+          });
+        }}
       />
     );
   };
@@ -248,17 +261,15 @@ export function WarehouseTreeView({
 
   return (
     <div className="space-y-4">
-      <label className="flex max-w-md flex-col gap-1 text-xs font-medium text-[var(--text-secondary)]">
-        <span>Поиск</span>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Склад, производитель, артикул…"
-          className="w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-2 text-sm text-[var(--app-text)]"
-          autoComplete="off"
-        />
-      </label>
+      <input
+        type="search"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Поиск. Склад, производитель, артикул…"
+        aria-label="Поиск"
+        className="w-full max-w-3xl rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2.5 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)]"
+        autoComplete="off"
+      />
 
       <div className="flex w-full min-w-0 flex-col gap-6">
         <CardWrapRow>
@@ -300,6 +311,14 @@ export function WarehouseTreeView({
                     warehouseId: warehouse.id,
                     warehouseType: warehouse.warehouseType,
                     articles: allWarehouseArticles(warehouse),
+                  });
+                }}
+                onRename={(e) => {
+                  e.stopPropagation();
+                  setModalState({
+                    type: "rename-warehouse",
+                    warehouseId: warehouse.id,
+                    name: warehouse.name,
                   });
                 }}
               />
