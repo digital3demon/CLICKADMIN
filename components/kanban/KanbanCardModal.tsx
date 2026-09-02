@@ -3339,10 +3339,10 @@ export function KanbanCardModal({
             </div>
 
             <div
-              className={`flex w-full min-h-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:border-l sm:border-t-0 ${
+              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:border-l sm:border-t-0 ${
                 embed
-                  ? "sm:w-[22.5rem] sm:max-w-[22.5rem] sm:shrink-0"
-                  : "sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0"
+                  ? "overflow-visible sm:w-[22.5rem] sm:max-w-[22.5rem] sm:shrink-0 sm:overflow-hidden"
+                  : "overflow-hidden sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0"
               } ${
                 rightTab === "card"
                   ? "max-sm:hidden"
@@ -4013,9 +4013,13 @@ function ChatPanel({
         </div>
       ) : null}
       <div
-        className={`min-h-0 overflow-y-auto overscroll-contain px-2 py-2 ${
-          compact ? "h-[26rem] max-h-[26rem] shrink-0" : "flex-1"
+        className={`min-h-0 px-2 py-2 ${
+          compact
+            ? // Список: высота по сообщениям (до 26rem). Пустое место чата не ловит скролл — крутится страница.
+              "max-h-[26rem] overflow-y-auto overscroll-y-auto"
+            : "flex-1 overflow-y-auto overscroll-contain"
         }`}
+        data-kanban-chat-messages
       >
         {chatBlocks.map((block) => {
           if (block.kind === "imageRow") {
