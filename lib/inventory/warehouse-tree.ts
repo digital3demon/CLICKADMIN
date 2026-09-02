@@ -15,6 +15,9 @@ export type WarehouseTreeArticle = {
   quantityOnHand: number;
   unitsPerSupply: number | null;
   referenceUnitPriceRub: number | null;
+  saleUnitPriceRub: number | null;
+  /** Средняя закупка с остатка (из старых приходов). */
+  averageUnitCostRub: number | null;
 };
 
 export type WarehouseTreeManufacturer = {
@@ -55,12 +58,14 @@ export type WarehouseTreeSnapshot = {
     isActive: boolean;
     unitsPerSupply: number | null;
     referenceUnitPriceRub: number | null;
+    saleUnitPriceRub?: number | null;
   }>;
   balances: Array<{
     itemId?: string;
     item?: { id: string };
     warehouseId: string;
     quantityOnHand: number;
+    averageUnitCostRub?: number | null;
   }>;
 };
 
@@ -72,17 +77,24 @@ function balanceItemId(
   return null;
 }
 
-function buildBalanceMap(
+function buildBalanceMaps(
   balances: WarehouseTreeSnapshot["balances"],
-): Map<string, number> {
-  const map = new Map<string, number>();
+): { qty: Map<string, number>; avg: Map<string, number> } {
+  const qty = new Map<string, number>();
+  const avg = new Map<string, number>();
   for (const balance of balances) {
     const itemId = balanceItemId(balance);
     if (!itemId) continue;
     const key = `${itemId}\0${balance.warehouseId}`;
-    map.set(key, (map.get(key) ?? 0) + balance.quantityOnHand);
+    qty.set(key, (qty.get(key) ?? 0) + balance.quantityOnHand);
+    if (
+      balance.averageUnitCostRub != null &&
+      Number.isFinite(balance.averageUnitCostRub)
+    ) {
+      avg.set(key, balance.averageUnitCostRub);
+    }
   }
-  return map;
+  return { qty, avg };
 }
 
 function normalizeManufacturerName(name: string): string {
@@ -170,7 +182,7 @@ function buildWarehouseNode(
 export function buildWarehouseTree(
   input: WarehouseTreeSnapshot,
 ): WarehouseTreeWarehouse[] {
-  const balanceMap = buildBalanceMap(input.balances);
+  const { qty: balanceMap, avg: avgMap } = buildBalanceMaps(input.balances);
   const activeWarehouses = input.warehouses.filter((w) => w.isActive !== false);
   const activeItems = input.items.filter((item) => item.isActive !== false);
 
@@ -187,6 +199,8 @@ export function buildWarehouseTree(
       quantityOnHand: balanceMap.get(balanceKey) ?? 0,
       unitsPerSupply: item.unitsPerSupply,
       referenceUnitPriceRub: item.referenceUnitPriceRub,
+      saleUnitPriceRub: item.saleUnitPriceRub ?? null,
+      averageUnitCostRub: avgMap.get(balanceKey) ?? null,
     };
     const bucket = itemsByWarehouse.get(item.warehouseId) ?? [];
     bucket.push(article);

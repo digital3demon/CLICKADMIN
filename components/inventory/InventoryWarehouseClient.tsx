@@ -738,6 +738,7 @@ export function InventoryWarehouseClient() {
           items={items}
           balances={balances.map((b) => ({
             quantityOnHand: b.quantityOnHand,
+            averageUnitCostRub: b.averageUnitCostRub,
             item: { id: b.item.id },
             warehouse: { id: b.warehouse.id },
           }))}

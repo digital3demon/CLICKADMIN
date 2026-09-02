@@ -2,13 +2,31 @@
 
 import {
   useEffect,
+  useId,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactElement,
 } from "react";
+import { createPortal } from "react-dom";
 import { MobileAwareDialog } from "@/components/ui/MobileAwareDialog";
+import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
 import type { WarehouseTreeArticle } from "@/lib/inventory/warehouse-tree";
+
+type CatalogItem = {
+  id: string;
+  warehouseId: string;
+  name: string;
+  sku: string | null;
+  manufacturer: string | null;
+  isActive: boolean;
+  referenceUnitPriceRub?: number | null;
+  saleUnitPriceRub?: number | null;
+  averageUnitCostRub?: number | null;
+};
+
+type SuggestOption = { id?: string; label: string; hint?: string };
 
 export type WarehouseTreeModalState =
   | { type: "create-warehouse" }
@@ -62,7 +80,227 @@ type Props = {
   state: WarehouseTreeModalState | null;
   onClose: () => void;
   onDone: () => Promise<void>;
+  items: CatalogItem[];
 };
+
+function uniqueSortedLabels(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const t = raw?.trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out.sort((a, b) => a.localeCompare(b, "ru"));
+}
+
+function CreatableSuggestField({
+  value,
+  onChange,
+  options,
+  placeholder,
+  autoFocus,
+  allowCreate = true,
+}: {
+  value: string;
+  onChange: (next: string, picked?: SuggestOption) => void;
+  options: SuggestOption[];
+  placeholder?: string;
+  autoFocus?: boolean;
+  allowCreate?: boolean;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const uid = useId();
+  const listboxId = `${uid}-listbox`;
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const pos = useFixedDropdownPosition(open, inputRef, {
+    maxListHeight: 220,
+    minWidthPx: 200,
+  });
+
+  const q = value.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!q) return options.slice(0, 40);
+    return options
+      .filter((o) => {
+        const hay = `${o.label} ${o.hint ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 40);
+  }, [options, q]);
+
+  const exact = options.some((o) => o.label.trim().toLowerCase() === q);
+  const createLabel =
+    allowCreate && q && !exact
+      ? `Сохранить как новое: ${value.trim()}`
+      : null;
+  const rows: Array<{ key: string; option?: SuggestOption; text: string }> = [
+    ...filtered.map((o) => ({
+      key: o.id ?? `lbl:${o.label}`,
+      option: o,
+      text: o.hint ? `${o.label} · ${o.hint}` : o.label,
+    })),
+    ...(createLabel
+      ? [{ key: "__new__", option: undefined, text: createLabel }]
+      : []),
+  ];
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [value, open]);
+
+  const pick = (row: (typeof rows)[number]) => {
+    if (row.key === "__new__") {
+      onChange(value.trim());
+    } else if (row.option) {
+      onChange(row.option.label, row.option);
+    }
+    setOpen(false);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        autoComplete="off"
+        spellCheck={false}
+        autoFocus={autoFocus}
+        className={inputClass}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          window.setTimeout(() => {
+            if (listRef.current?.contains(document.activeElement)) return;
+            setOpen(false);
+          }, 120);
+        }}
+        onKeyDown={(e) => {
+          if (!open && (e.key === "ArrowDown" || e.key === "Enter")) {
+            e.preventDefault();
+            setOpen(true);
+            return;
+          }
+          if (!open) return;
+          if (e.key === "Escape") {
+            e.preventDefault();
+            setOpen(false);
+            return;
+          }
+          const max = Math.max(0, rows.length - 1);
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, max));
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+            return;
+          }
+          if (e.key === "Enter" && rows[highlight]) {
+            e.preventDefault();
+            pick(rows[highlight]!);
+          }
+        }}
+      />
+      {typeof document !== "undefined" &&
+      open &&
+      rows.length > 0 &&
+      createPortal(
+        <ul
+          ref={listRef}
+          id={listboxId}
+          role="listbox"
+          style={{
+            position: "fixed",
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
+            maxHeight: pos.maxHeight,
+            zIndex: 11000,
+          }}
+          className="overflow-auto rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] py-1 text-sm shadow-lg"
+        >
+          {rows.map((row, i) => (
+            <li
+              key={row.key}
+              role="option"
+              aria-selected={i === highlight}
+              className={`cursor-pointer px-2.5 py-1.5 ${
+                i === highlight
+                  ? "bg-[var(--accent-selection-bg)] text-[var(--app-text)]"
+                  : "text-[var(--text-strong)]"
+              }`}
+              onMouseEnter={() => setHighlight(i)}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                pick(row);
+              }}
+            >
+              {row.text}
+            </li>
+          ))}
+        </ul>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+function OrderSuggestField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [remote, setRemote] = useState<SuggestOption[]>([]);
+
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < 2) {
+      setRemote([]);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void fetch(`/api/orders/search-suggest?q=${encodeURIComponent(q)}`)
+        .then((res) =>
+          res.ok ? (res.json() as Promise<{ items?: { value: string; kind: string }[] }>) : { items: [] },
+        )
+        .then((data) => {
+          const orders = (data.items ?? []).filter((x) => x.kind === "order");
+          setRemote(orders.map((x) => ({ label: x.value })));
+        })
+        .catch(() => setRemote([]));
+    }, 220);
+    return () => window.clearTimeout(t);
+  }, [value]);
+
+  return (
+    <CreatableSuggestField
+      value={value}
+      onChange={(next) => onChange(next)}
+      options={remote}
+      placeholder="Номер наряда — поиск"
+      allowCreate
+    />
+  );
+}
 
 const inputClass =
   "rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2 py-2 text-sm";
@@ -75,6 +313,17 @@ function formatNum(n: number, frac = 3): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: frac,
   });
+}
+
+function purchaseFromHistory(it: {
+  averageUnitCostRub?: number | null;
+  referenceUnitPriceRub?: number | null;
+}): number | null {
+  const avg = it.averageUnitCostRub;
+  if (avg != null && Number.isFinite(avg) && avg > 0) return avg;
+  const ref = it.referenceUnitPriceRub;
+  if (ref != null && Number.isFinite(ref) && ref > 0) return ref;
+  return null;
 }
 
 function referencePriceInputString(n: number | null | undefined): string {
@@ -195,6 +444,7 @@ export function WarehouseTreeModals({
   state,
   onClose,
   onDone,
+  items,
 }: Props): ReactElement | null {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -204,16 +454,25 @@ export function WarehouseTreeModals({
 
   const [manufacturerName, setManufacturerName] = useState("");
   const [articleName, setArticleName] = useState("");
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [sku, setSku] = useState("");
   const [startQty, setStartQty] = useState("");
 
   const [selectedArticleId, setSelectedArticleId] = useState("");
+  const [minusPositionQuery, setMinusPositionQuery] = useState("");
+  const [minusManufacturerFilter, setMinusManufacturerFilter] = useState("");
+  const [orderNumber, setOrderNumber] = useState("");
   const [minusQty, setMinusQty] = useState("");
   const [deactivate, setDeactivate] = useState(false);
 
   const [plusQty, setPlusQty] = useState("");
   const [plusQtyMode, setPlusQtyMode] = useState<"unit" | "supply">("unit");
   const [unitCostRub, setUnitCostRub] = useState("");
+  const [saleUnitRub, setSaleUnitRub] = useState("");
+  const [priceBaseline, setPriceBaseline] = useState<{
+    purchase: number | null;
+    sale: number | null;
+  }>({ purchase: null, sale: null });
   const [minusQtyMode, setMinusQtyMode] = useState<"unit" | "supply">("unit");
 
   const minusArticles = useMemo(() => {
@@ -239,6 +498,7 @@ export function WarehouseTreeModals({
     setWarehouseType("");
     setManufacturerName("");
     setArticleName("");
+    setSelectedItemId(null);
     setSku("");
     setStartQty("");
     setMinusQty("");
@@ -246,20 +506,104 @@ export function WarehouseTreeModals({
     setPlusQtyMode("unit");
     setMinusQtyMode("unit");
     setDeactivate(false);
+    setOrderNumber("");
+    setMinusPositionQuery("");
 
     if (state.type === "warehouse-minus" || state.type === "manufacturer-minus") {
-      const first = state.articles[0];
-      setSelectedArticleId(first?.id ?? "");
+      setSelectedArticleId("");
+      setMinusManufacturerFilter(
+        state.type === "manufacturer-minus" ? state.manufacturer : "",
+      );
     } else {
       setSelectedArticleId("");
+      setMinusManufacturerFilter(
+        state.type === "article-minus"
+          ? state.article.manufacturer?.trim() ?? ""
+          : "",
+      );
     }
 
-    if (state.type === "article-plus") {
-      setUnitCostRub(referencePriceInputString(state.article.referenceUnitPriceRub));
+    if (state.type === "article-plus" || state.type === "article-minus") {
+      const purchase = purchaseFromHistory(state.article);
+      const sale = state.article.saleUnitPriceRub;
+      setUnitCostRub(referencePriceInputString(purchase));
+      setSaleUnitRub(referencePriceInputString(sale));
+      setPriceBaseline({ purchase, sale: sale ?? null });
     } else {
       setUnitCostRub("");
+      setSaleUnitRub("");
+      setPriceBaseline({ purchase: null, sale: null });
     }
   }, [state]);
+
+  useEffect(() => {
+    if (!selectedItemId) return;
+    if (
+      !state ||
+      (state.type !== "warehouse-plus" &&
+        state.type !== "create-article" &&
+        state.type !== "manufacturer-plus" &&
+        state.type !== "create-manufacturer")
+    ) {
+      return;
+    }
+    const it = items.find((x) => x.id === selectedItemId);
+    if (!it) return;
+    const purchase = purchaseFromHistory(it);
+    const sale = it.saleUnitPriceRub ?? null;
+    setUnitCostRub(referencePriceInputString(purchase));
+    setSaleUnitRub(referencePriceInputString(sale));
+    setPriceBaseline({ purchase, sale });
+  }, [selectedItemId, state, items]);
+
+  const catalogWarehouseId =
+    state && "warehouseId" in state ? state.warehouseId : null;
+  const catalogManufacturerHint =
+    state && "manufacturer" in state ? state.manufacturer : null;
+
+  const warehouseItems = useMemo(() => {
+    return items.filter(
+      (it) =>
+        it.isActive !== false &&
+        (!catalogWarehouseId || it.warehouseId === catalogWarehouseId),
+    );
+  }, [items, catalogWarehouseId]);
+
+  const manufacturerOptions = useMemo(
+    (): SuggestOption[] =>
+      uniqueSortedLabels(warehouseItems.map((it) => it.manufacturer)).map(
+        (label) => ({ label }),
+      ),
+    [warehouseItems],
+  );
+
+  const articleOptions = useMemo((): SuggestOption[] => {
+    const mf = (
+      catalogManufacturerHint ?? manufacturerName
+    )?.trim().toLowerCase();
+    return warehouseItems
+      .filter((it) => {
+        if (!mf) return true;
+        return (it.manufacturer ?? "").trim().toLowerCase() === mf;
+      })
+      .map((it) => ({
+        id: it.id,
+        label: it.name,
+        hint: [it.sku, it.manufacturer].filter(Boolean).join(" · ") || undefined,
+      }));
+  }, [warehouseItems, catalogManufacturerHint, manufacturerName]);
+
+  const skuOptions = useMemo(
+    (): SuggestOption[] =>
+      warehouseItems
+        .filter((it) => it.sku?.trim())
+        .map((it) => ({
+          id: it.id,
+          label: it.sku!.trim(),
+          hint: it.name,
+        })),
+    [warehouseItems],
+  );
 
   if (!state) return null;
 
@@ -371,6 +715,47 @@ export function WarehouseTreeModals({
     }
   };
 
+  const patchSaleIfChanged = async (itemId: string) => {
+    const sale = parseDecimal(saleUnitRub);
+    const prev = priceBaseline.sale;
+    if (sale == null && prev == null) return;
+    if (sale != null && prev != null && Math.abs(sale - prev) < 0.005) return;
+    if (sale == null && prev != null) {
+      const res = await fetch(`/api/inventory/items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saleUnitPriceRub: null }),
+      });
+      if (!res.ok) throw new Error(await readApiError(res));
+      return;
+    }
+    if (sale == null) return;
+    const res = await fetch(`/api/inventory/items/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ saleUnitPriceRub: sale }),
+    });
+    if (!res.ok) throw new Error(await readApiError(res));
+  };
+
+  const receiptExistingIfNeeded = async (
+    itemId: string,
+    warehouseId: string,
+  ) => {
+    const startQ = parseDecimal(startQty);
+    const cost = parseDecimal(unitCostRub);
+    if (startQ != null && startQ > 0) {
+      await postMovement({
+        kind: "PURCHASE_RECEIPT",
+        itemId,
+        warehouseId,
+        quantity: startQ,
+        unitCostRub: cost ?? 0,
+      });
+    }
+    await patchSaleIfChanged(itemId);
+  };
+
   const createItemWithOptionalReceipt = async (params: {
     warehouseId: string;
     name: string;
@@ -378,11 +763,15 @@ export function WarehouseTreeModals({
     sku?: string | null;
     startQuantityRaw: string;
   }) => {
+    const purchase = parseDecimal(unitCostRub);
+    const sale = parseDecimal(saleUnitRub);
     const itemId = await postItem({
       warehouseId: params.warehouseId,
       name: params.name,
       manufacturer: params.manufacturer ?? null,
       sku: params.sku?.trim() || null,
+      referenceUnitPriceRub: purchase,
+      saleUnitPriceRub: sale,
     });
     const startQ = parseDecimal(params.startQuantityRaw);
     if (startQ != null && startQ > 0) {
@@ -391,6 +780,7 @@ export function WarehouseTreeModals({
         itemId,
         warehouseId: params.warehouseId,
         quantity: startQ,
+        unitCostRub: purchase ?? 0,
       });
     }
   };
@@ -407,6 +797,15 @@ export function WarehouseTreeModals({
       throw new Error("Укажите количество или отметьте снятие с учёта");
     }
 
+    if (deactivate) {
+      const ok = window.confirm(
+        `Снять «${article.name}» с учёта? Позиция скроется со склада.`,
+      );
+      if (!ok) {
+        throw new Error("Снятие с учёта отменено");
+      }
+    }
+
     let issueUnits = 0;
     if (hasQty) {
       const resolved = resolveQuantityUnits(article, raw, minusQtyMode);
@@ -415,16 +814,20 @@ export function WarehouseTreeModals({
       if (issueUnits > article.quantityOnHand) {
         throw new Error("Нельзя списать больше, чем остаток на складе");
       }
+      const order = orderNumber.trim();
       await postMovement({
-        kind: "MANUAL_ISSUE",
+        kind: order ? "SALE_ISSUE" : "MANUAL_ISSUE",
         itemId: article.id,
         warehouseId,
         quantity: issueUnits,
+        ...(order ? { orderNumber: order } : {}),
       });
     }
 
     if (deactivate) {
       await patchDeactivate(article.id);
+    } else {
+      await patchSaleIfChanged(article.id);
     }
   };
 
@@ -465,13 +868,17 @@ export function WarehouseTreeModals({
             setError("Укажите название первой позиции");
             return;
           }
-          await createItemWithOptionalReceipt({
-            warehouseId: state.warehouseId,
-            name,
-            manufacturer,
-            sku,
-            startQuantityRaw: startQty,
-          });
+          if (selectedItemId) {
+            await receiptExistingIfNeeded(selectedItemId, state.warehouseId);
+          } else {
+            await createItemWithOptionalReceipt({
+              warehouseId: state.warehouseId,
+              name,
+              manufacturer,
+              sku,
+              startQuantityRaw: startQty,
+            });
+          }
           break;
         }
         case "create-article":
@@ -481,6 +888,10 @@ export function WarehouseTreeModals({
           if (!name) {
             setError("Укажите наименование");
             return;
+          }
+          if (selectedItemId) {
+            await receiptExistingIfNeeded(selectedItemId, state.warehouseId);
+            break;
           }
           await createItemWithOptionalReceipt({
             warehouseId: state.warehouseId,
@@ -525,6 +936,7 @@ export function WarehouseTreeModals({
             quantity: resolved.quantity,
             unitCostRub: cost ?? 0,
           });
+          await patchSaleIfChanged(state.article.id);
           break;
         }
         case "article-minus": {
@@ -639,30 +1051,48 @@ export function WarehouseTreeModals({
           <>
             <label className={labelClass}>
               <span>Производитель</span>
-              <input
-                type="text"
-                className={inputClass}
+              <CreatableSuggestField
                 value={manufacturerName}
-                onChange={(e) => setManufacturerName(e.target.value)}
+                onChange={(next) => setManufacturerName(next)}
+                options={manufacturerOptions}
+                placeholder="Найти или ввести нового"
                 autoFocus
               />
             </label>
             <label className={labelClass}>
               <span>Первая позиция</span>
-              <input
-                type="text"
-                className={inputClass}
+              <CreatableSuggestField
                 value={articleName}
-                onChange={(e) => setArticleName(e.target.value)}
+                onChange={(next, picked) => {
+                  setArticleName(next);
+                  setSelectedItemId(picked?.id ?? null);
+                  if (picked?.hint) {
+                    const skuHint = warehouseItems.find((it) => it.id === picked.id)
+                      ?.sku;
+                    if (skuHint) setSku(skuHint);
+                  }
+                }}
+                options={articleOptions}
+                placeholder="Найти или ввести новую"
               />
             </label>
             <label className={labelClass}>
               <span>Артикул (необязательно)</span>
-              <input
-                type="text"
-                className={inputClass}
+              <CreatableSuggestField
                 value={sku}
-                onChange={(e) => setSku(e.target.value)}
+                onChange={(next, picked) => {
+                  setSku(next);
+                  if (picked?.id) {
+                    setSelectedItemId(picked.id);
+                    const it = warehouseItems.find((x) => x.id === picked.id);
+                    if (it) {
+                      setArticleName(it.name);
+                      if (it.manufacturer) setManufacturerName(it.manufacturer);
+                    }
+                  }
+                }}
+                options={skuOptions}
+                placeholder="Найти или ввести новый"
               />
             </label>
           </>
@@ -672,32 +1102,57 @@ export function WarehouseTreeModals({
           <>
             <label className={labelClass}>
               <span>Наименование</span>
-              <input
-                type="text"
-                className={inputClass}
+              <CreatableSuggestField
                 value={articleName}
-                onChange={(e) => setArticleName(e.target.value)}
+                onChange={(next, picked) => {
+                  setArticleName(next);
+                  setSelectedItemId(picked?.id ?? null);
+                  if (picked?.id) {
+                    const it = warehouseItems.find((x) => x.id === picked.id);
+                    if (it) {
+                      if (it.sku) setSku(it.sku);
+                      if (it.manufacturer) setManufacturerName(it.manufacturer);
+                    }
+                  }
+                }}
+                options={articleOptions}
+                placeholder="Найти или ввести новое"
                 autoFocus
               />
             </label>
             {state.type === "warehouse-plus" ? (
               <label className={labelClass}>
                 <span>Производитель (необязательно)</span>
-                <input
-                  type="text"
-                  className={inputClass}
+                <CreatableSuggestField
                   value={manufacturerName}
-                  onChange={(e) => setManufacturerName(e.target.value)}
+                  onChange={(next) => {
+                    setManufacturerName(next);
+                    setSelectedItemId(null);
+                  }}
+                  options={manufacturerOptions}
+                  placeholder="Найти или ввести нового"
                 />
               </label>
             ) : null}
             <label className={labelClass}>
               <span>Артикул (необязательно)</span>
-              <input
-                type="text"
-                className={inputClass}
+              <CreatableSuggestField
                 value={sku}
-                onChange={(e) => setSku(e.target.value)}
+                onChange={(next, picked) => {
+                  setSku(next);
+                  if (picked?.id) {
+                    setSelectedItemId(picked.id);
+                    const it = warehouseItems.find((x) => x.id === picked.id);
+                    if (it) {
+                      setArticleName(it.name);
+                      if (it.manufacturer) setManufacturerName(it.manufacturer);
+                    }
+                  } else {
+                    setSelectedItemId(null);
+                  }
+                }}
+                options={skuOptions}
+                placeholder="Найти или ввести новый"
               />
             </label>
           </>
@@ -718,28 +1173,50 @@ export function WarehouseTreeModals({
         ) : null}
 
         {state.type === "article-plus" ? (
+          <QuantityModeField
+            article={state.article}
+            mode={plusQtyMode}
+            onModeChange={setPlusQtyMode}
+            quantity={plusQty}
+            onQuantityChange={setPlusQty}
+          />
+        ) : null}
+
+        {showStartQty ||
+        state.type === "article-plus" ||
+        showMinusFields ? (
           <>
-            <QuantityModeField
-              article={state.article}
-              mode={plusQtyMode}
-              onModeChange={setPlusQtyMode}
-              quantity={plusQty}
-              onQuantityChange={setPlusQty}
-            />
             <label className={labelClass}>
-              <span>Цена закупки за ед., ₽</span>
+              <span>Закупка за ед., ₽</span>
               <input
                 type="text"
                 inputMode="decimal"
                 className={inputClass}
                 value={unitCostRub}
                 onChange={(e) => setUnitCostRub(e.target.value)}
-                placeholder={
-                  state.article.referenceUnitPriceRub != null
-                    ? `из справочника: ${formatNum(state.article.referenceUnitPriceRub, 2)}`
-                    : "0"
-                }
+                readOnly={showMinusFields}
+                placeholder="из старых приходов"
               />
+              <span className="font-normal text-[11px] leading-snug text-[var(--text-muted)]">
+                {showMinusFields
+                  ? "Себестоимость с прошлых приходов. На списании не меняется."
+                  : "Подставляется средняя с прошлых приходов. Правка только у этого прихода; старые движения не пересчитываются."}
+              </span>
+            </label>
+            <label className={labelClass}>
+              <span>Реализация за ед., ₽</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                className={inputClass}
+                value={saleUnitRub}
+                onChange={(e) => setSaleUnitRub(e.target.value)}
+                placeholder="для сверки / новых списаний"
+              />
+              <span className="font-normal text-[11px] leading-snug text-[var(--text-muted)]">
+                Меняет цену только для новых операций. Уже проведённые списания
+                остаются со своей ценой.
+              </span>
             </label>
           </>
         ) : null}
@@ -748,27 +1225,81 @@ export function WarehouseTreeModals({
           <>
             {state.type === "warehouse-minus" ||
             state.type === "manufacturer-minus" ? (
-              <label className={labelClass}>
-                <span>Позиция</span>
-                <select
-                  className={inputClass}
-                  value={selectedArticleId}
-                  onChange={(e) => setSelectedArticleId(e.target.value)}
-                >
-                  {minusArticles.length === 0 ? (
-                    <option value="">Нет позиций</option>
-                  ) : (
-                    minusArticles.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                        {a.sku ? ` (${a.sku})` : ""} — {formatNum(a.quantityOnHand)}{" "}
-                        {a.unit}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
+              <>
+                <label className={labelClass}>
+                  <span>Производитель</span>
+                  <CreatableSuggestField
+                    value={minusManufacturerFilter}
+                    onChange={(next) => {
+                      setMinusManufacturerFilter(next);
+                      setSelectedArticleId("");
+                      setMinusPositionQuery("");
+                    }}
+                    options={uniqueSortedLabels(
+                      minusArticles.map((a) => a.manufacturer),
+                    ).map((label) => ({ label }))}
+                    placeholder="Все производители"
+                    allowCreate={false}
+                  />
+                </label>
+                <label className={labelClass}>
+                  <span>Позиция</span>
+                  <CreatableSuggestField
+                    value={minusPositionQuery}
+                    onChange={(next, picked) => {
+                      setMinusPositionQuery(next);
+                      if (picked?.id) {
+                        setSelectedArticleId(picked.id);
+                        const art = minusArticles.find((a) => a.id === picked.id);
+                        if (art?.manufacturer) {
+                          setMinusManufacturerFilter(art.manufacturer);
+                        }
+                      } else {
+                        setSelectedArticleId("");
+                      }
+                    }}
+                    options={minusArticles
+                      .filter((a) => {
+                        const mf = minusManufacturerFilter.trim().toLowerCase();
+                        if (!mf) return true;
+                        return (a.manufacturer ?? "").trim().toLowerCase() === mf;
+                      })
+                      .map((a) => ({
+                        id: a.id,
+                        label: a.name,
+                        hint: [
+                          a.sku,
+                          a.manufacturer,
+                          `${formatNum(a.quantityOnHand)} ${a.unit}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · "),
+                      }))}
+                    placeholder="Поиск позиции"
+                    allowCreate={false}
+                    autoFocus
+                  />
+                </label>
+              </>
             ) : null}
+
+            {state.type === "article-minus" ? (
+              <p className="text-sm text-[var(--text-body)]">
+                {state.article.manufacturer?.trim()
+                  ? `${state.article.manufacturer} · `
+                  : ""}
+                {state.article.name}
+                {state.article.sku ? ` (${state.article.sku})` : ""}
+              </p>
+            ) : null}
+
+            <label className={labelClass}>
+              <span>Наряд (необязательно)</span>
+              <OrderSuggestField
+                value={orderNumber}
+                onChange={setOrderNumber}
+              />
+            </label>
 
             {minusArticle ? (
               <QuantityModeField

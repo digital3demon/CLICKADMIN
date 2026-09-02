@@ -122,6 +122,22 @@ function CardChrome({
   );
 }
 
+/** Крупно, но без скролла: чем больше строк метрик, тем плотнее кегль. */
+function cardTypeScale(metricCount: number): {
+  titlePx: number;
+  labelPx: number;
+  valuePx: number;
+  rowGapPx: number;
+} {
+  if (metricCount <= 1) {
+    return { titlePx: 18, labelPx: 13, valuePx: 22, rowGapPx: 10 };
+  }
+  if (metricCount === 2) {
+    return { titlePx: 16, labelPx: 12, valuePx: 18, rowGapPx: 8 };
+  }
+  return { titlePx: 15, labelPx: 11, valuePx: 15, rowGapPx: 4 };
+}
+
 function StockActionButton({
   ariaLabel,
   onClick,
@@ -170,6 +186,7 @@ export function WarehouseTreeCard(props: {
   } = props;
   const { tierLabel } = LEVEL_DIMENSIONS[level];
   const accent = LEVEL_ACCENT[level];
+  const type = cardTypeScale(metrics.length);
 
   return (
     <CardChrome
@@ -201,18 +218,31 @@ export function WarehouseTreeCard(props: {
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col px-2.5 pb-2.5 pt-2">
-        <h3 className="min-w-0 break-words text-[17px] font-bold leading-snug text-[var(--app-text)]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2.5 pb-2.5 pt-2">
+        <h3
+          className="line-clamp-3 min-w-0 shrink-0 break-words font-bold leading-snug text-[var(--app-text)]"
+          style={{ fontSize: type.titlePx }}
+          title={title}
+        >
           {title}
         </h3>
 
-        <dl className="mt-2.5 min-h-0 flex-1 space-y-2 overflow-y-auto">
+        <dl
+          className="mt-2 flex min-h-0 flex-1 flex-col justify-evenly overflow-hidden"
+          style={{ gap: type.rowGapPx }}
+        >
           {metrics.map((metric) => (
-            <div key={metric.label} className="min-w-0">
-              <dt className="truncate text-[12px] font-medium leading-tight text-[var(--text-muted)]">
+            <div key={metric.label} className="min-w-0 shrink">
+              <dt
+                className="truncate font-medium leading-tight text-[var(--text-muted)]"
+                style={{ fontSize: type.labelPx }}
+              >
                 {metric.label}
               </dt>
-              <dd className="truncate text-[18px] font-semibold leading-tight text-[var(--app-text)]">
+              <dd
+                className="truncate font-semibold leading-tight text-[var(--app-text)]"
+                style={{ fontSize: type.valuePx }}
+              >
                 {metric.value}
               </dd>
             </div>

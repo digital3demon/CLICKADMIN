@@ -37,9 +37,11 @@ type WarehouseTreeViewProps = {
     isActive: boolean;
     unitsPerSupply: number | null;
     referenceUnitPriceRub: number | null;
+    saleUnitPriceRub: number | null;
   }[];
   balances: {
     quantityOnHand: number;
+    averageUnitCostRub?: number | null;
     item: { id: string };
     warehouse: { id: string };
   }[];
@@ -110,6 +112,7 @@ export function WarehouseTreeView({
       items,
       balances: balances.map((b) => ({
         quantityOnHand: b.quantityOnHand,
+        averageUnitCostRub: b.averageUnitCostRub ?? null,
         itemId: b.item.id,
         warehouseId: b.warehouse.id,
       })),
@@ -389,6 +392,15 @@ export function WarehouseTreeView({
         state={modalState}
         onClose={() => setModalState(null)}
         onDone={onRefresh}
+        items={items.map((it) => {
+          const bal = balances.find(
+            (b) => b.item.id === it.id && b.warehouse.id === it.warehouseId,
+          );
+          return {
+            ...it,
+            averageUnitCostRub: bal?.averageUnitCostRub ?? null,
+          };
+        })}
       />
     </div>
   );
