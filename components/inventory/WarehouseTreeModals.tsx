@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactElement,
+} from "react";
 import { MobileAwareDialog } from "@/components/ui/MobileAwareDialog";
 import type { WarehouseTreeArticle } from "@/lib/inventory/warehouse-tree";
 
@@ -189,7 +195,7 @@ export function WarehouseTreeModals({
   state,
   onClose,
   onDone,
-}: Props): JSX.Element | null {
+}: Props): ReactElement | null {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

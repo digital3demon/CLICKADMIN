@@ -151,7 +151,7 @@ export function WarehouseTreeCard(props: {
   onOpen?: () => void;
   onPlus: (e: React.MouseEvent) => void;
   onMinus: (e: React.MouseEvent) => void;
-}): JSX.Element {
+}): React.ReactElement {
   const {
     level,
     title,
@@ -229,7 +229,7 @@ export function WarehouseTreeGhostCard(props: {
   level: WarehouseTreeCardLevel;
   label: string;
   onClick: () => void;
-}): JSX.Element {
+}): React.ReactElement {
   const { level, label, onClick } = props;
   const { width, height } = LEVEL_DIMENSIONS[level];
 
