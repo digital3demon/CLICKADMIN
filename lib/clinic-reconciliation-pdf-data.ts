@@ -13,7 +13,11 @@ import { orderLinesIncludedInReconciliationExport } from "@/lib/order-reconcilia
 import { orderUrgentPriceMultiplier } from "@/lib/order-urgency";
 import { orderWhereReconciliationPeriod } from "@/lib/clinic-reconciliation-period";
 import { loadOrderSentAtByIds } from "@/lib/clinic-finance";
-import { prostheticWorkTotalRub } from "@/lib/inventory/sale-unit-price";
+import { prostheticsFromDb } from "@/lib/order-prosthetics";
+import {
+  aggregateProstheticLinesForReconciliationPdf,
+  type ProstheticPdfAggLine,
+} from "@/lib/clinic-reconciliation-prosthetic-lines";
 import {
   aggregateReconciliationSummaryWithoutDiscount,
   defaultReconciliationLabLegalName,
@@ -101,6 +105,8 @@ type DateRangeUtc = { from: Date; to: Date };
 
 /**
  * Общий payload сверки (PDF + Excel по шаблону).
+ * Источник строк — только наряд: orderConstruction + order.prosthetics.ourLines.
+ * Журнал склада (SALE_ISSUE / RETURN_IN) не читаем.
  */
 export async function buildClinicReconciliationPdfPayload(
   clinicId: string | string[],
@@ -155,121 +161,13 @@ export async function buildClinicReconciliationPdfPayload(
   );
   const selectedList = [...selected];
 
-  const rows = await (await getPrisma()).orderConstruction.findMany({
+  const prisma = await getPrisma();
+  const orders = await prisma.order.findMany({
     where: {
-      ...(selectedList.length > 0 ? { orderId: { in: selectedList } } : {}),
-      order: {
-        clinicId: clinicIds.length === 1 ? clinicIds[0] : { in: clinicIds },
-        ...orderWhereReconciliationPeriod(range),
-      },
+      ...(selectedList.length > 0 ? { id: { in: selectedList } } : {}),
+      clinicId: clinicIds.length === 1 ? clinicIds[0] : { in: clinicIds },
+      ...orderWhereReconciliationPeriod(range),
     },
-    orderBy: [{ order: { createdAt: "asc" } }, { sortOrder: "asc" }],
-    include: {
-      order: {
-        select: {
-          id: true,
-          orderNumber: true,
-          createdAt: true,
-          workReceivedAt: true,
-          patientName: true,
-          updatedAt: true,
-          adminShippedOtpr: true,
-          legalEntity: true,
-          isUrgent: true,
-          urgentCoefficient: true,
-          compositionDiscountPercent: true,
-          excludeFromReconciliation: true,
-          excludeFromReconciliationUntil: true,
-          doctor: { select: { fullName: true } },
-          constructions: {
-            select: {
-              quantity: true,
-              unitPrice: true,
-              lineDiscountPercent: true,
-            },
-          },
-        },
-      },
-      constructionType: { select: { name: true } },
-      priceListItem: { select: { code: true, name: true } },
-      material: { select: { name: true } },
-    },
-  });
-
-  type RowIn = (typeof rows)[number];
-
-  const includedRows: RowIn[] = [];
-  for (const l of rows) {
-    const inc = orderLinesIncludedInReconciliationExport(
-      l.order.excludeFromReconciliation,
-      l.order.excludeFromReconciliationUntil,
-      range.to,
-    );
-    if (inc) includedRows.push(l);
-  }
-
-  const orderIds = [...new Set(includedRows.map((r) => r.orderId))];
-
-  const stockRows =
-    orderIds.length === 0
-      ? []
-      : await (await getPrisma()).stockMovement.findMany({
-          where: {
-            orderId: { in: orderIds },
-            kind: "SALE_ISSUE",
-          },
-          select: {
-            orderId: true,
-            quantity: true,
-            totalCostRub: true,
-            item: { select: { id: true, name: true, saleUnitPriceRub: true } },
-          },
-        });
-
-  const prostheticByOrder = new Map<
-    string,
-    { itemId: string; name: string; qty: number; totalRub: number }[]
-  >();
-  for (const m of stockRows) {
-    const oid = m.orderId;
-    if (!oid) continue;
-    const name = m.item.name.trim() || "Позиция склада";
-    const qty = m.quantity;
-    const cost = prostheticWorkTotalRub({
-      quantity: qty,
-      saleUnitPriceRub: m.item.saleUnitPriceRub,
-      fallbackTotalRub: m.totalCostRub,
-    });
-    const list = prostheticByOrder.get(oid) ?? [];
-    const existing = list.find((x) => x.itemId === m.item.id);
-    if (existing) {
-      existing.qty += qty;
-      existing.totalRub += cost;
-    } else {
-      list.push({
-        itemId: m.item.id,
-        name,
-        qty,
-        totalRub: cost,
-      });
-    }
-    prostheticByOrder.set(oid, list);
-  }
-
-  const byOrder = new Map<string, RowIn[]>();
-  for (const l of includedRows) {
-    const arr = byOrder.get(l.orderId) ?? [];
-    arr.push(l);
-    byOrder.set(l.orderId, arr);
-  }
-
-  const allOrderIds = new Set<string>([
-    ...orderIds,
-    ...prostheticByOrder.keys(),
-  ]);
-
-  const ordersOrdered = await (await getPrisma()).order.findMany({
-    where: { id: { in: [...allOrderIds] } },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
@@ -282,44 +180,91 @@ export async function buildClinicReconciliationPdfPayload(
       legalEntity: true,
       isUrgent: true,
       urgentCoefficient: true,
+      compositionDiscountPercent: true,
+      excludeFromReconciliation: true,
+      excludeFromReconciliationUntil: true,
+      prosthetics: true,
       doctor: { select: { fullName: true } },
+      constructions: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          constructionType: { select: { name: true } },
+          priceListItem: { select: { code: true, name: true } },
+          material: { select: { name: true } },
+        },
+      },
     },
   });
 
-  const sentAtById = await loadOrderSentAtByIds([...allOrderIds]);
+  const includedOrders = orders.filter((o) =>
+    orderLinesIncludedInReconciliationExport(
+      o.excludeFromReconciliation,
+      o.excludeFromReconciliationUntil,
+      range.to,
+    ),
+  );
+
+  const itemIds = new Set<string>();
+  for (const o of includedOrders) {
+    for (const l of prostheticsFromDb(o.prosthetics).ourLines) {
+      const id = l.inventoryItemId.trim();
+      if (id) itemIds.add(id);
+    }
+  }
+  const invItems =
+    itemIds.size === 0
+      ? []
+      : await prisma.inventoryItem.findMany({
+          where: { id: { in: [...itemIds] } },
+          select: { id: true, name: true, saleUnitPriceRub: true },
+        });
+  const itemsById = new Map(
+    invItems.map((it) => [
+      it.id,
+      { name: it.name, saleUnitPriceRub: it.saleUnitPriceRub },
+    ]),
+  );
+
+  const prostheticByOrder = new Map<string, ProstheticPdfAggLine[]>();
+  for (const o of includedOrders) {
+    const agg = aggregateProstheticLinesForReconciliationPdf(
+      prostheticsFromDb(o.prosthetics).ourLines,
+      itemsById,
+    );
+    if (agg.length > 0) prostheticByOrder.set(o.id, agg);
+  }
+
+  const ordersWithLines = includedOrders.filter(
+    (o) => o.constructions.length > 0 || (prostheticByOrder.get(o.id)?.length ?? 0) > 0,
+  );
+
+  const sentAtById = await loadOrderSentAtByIds(ordersWithLines.map((o) => o.id));
 
   const labLegalName =
-    modeNonEmptyLabel(ordersOrdered.map((o) => o.legalEntity)) ??
+    modeNonEmptyLabel(ordersWithLines.map((o) => o.legalEntity)) ??
     defaultReconciliationLabLegalName();
 
   const detail: ReconciliationPdfDetailLine[] = [];
 
-  for (const ord of ordersOrdered) {
+  for (const ord of ordersWithLines) {
     const oid = ord.id;
-    const list = byOrder.get(oid) ?? [];
-    if (!list.length && !(prostheticByOrder.get(oid)?.length)) continue;
-    const ord0 = list[0]?.order ?? ord;
-    const zashla = formatDateDdMmYyMsk(
-      ord0.workReceivedAt ?? ord0.createdAt,
-    );
+    const zashla = formatDateDdMmYyMsk(ord.workReceivedAt ?? ord.createdAt);
     const sentAt = sentAtById.get(oid) ?? null;
     const otpr = sentAt ? formatDateDdMmYyMsk(sentAt) : "—";
-    const patient = ord0.patientName?.trim() || "—";
-    const doctor = ord0.doctor.fullName.trim();
-    const orderNumber = ord0.orderNumber;
+    const patient = ord.patientName?.trim() || "—";
+    const doctor = ord.doctor.fullName.trim();
+    const orderNumber = ord.orderNumber;
     let first = true;
 
-    for (const l of list) {
+    const mult = orderUrgentPriceMultiplier(ord.isUrgent, ord.urgentCoefficient);
+    const compLines = ord.constructions.map((c) => ({
+      quantity: c.quantity,
+      unitPrice: c.unitPrice,
+      lineDiscountPercent: c.lineDiscountPercent,
+    }));
+
+    for (const l of ord.constructions) {
       const q = l.quantity > 0 ? l.quantity : 1;
-      const mult = orderUrgentPriceMultiplier(
-        l.order.isUrgent,
-        l.order.urgentCoefficient,
-      );
-      const compLines = l.order.constructions.map((c) => ({
-        quantity: c.quantity,
-        unitPrice: c.unitPrice,
-        lineDiscountPercent: c.lineDiscountPercent,
-      }));
       const lineTotal = lineAllocatedTotalRub(
         {
           quantity: l.quantity,
@@ -327,7 +272,7 @@ export async function buildClinicReconciliationPdfPayload(
           lineDiscountPercent: l.lineDiscountPercent,
         },
         compLines,
-        l.order.compositionDiscountPercent,
+        ord.compositionDiscountPercent,
         mult,
       );
       const unitRub = l.unitPrice;

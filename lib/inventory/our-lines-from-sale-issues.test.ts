@@ -82,6 +82,7 @@ describe("our lines from SALE_ISSUE", () => {
       stockMovement: {
         findMany: async () => [
           {
+            orderId: "o-restore",
             kind: "SALE_ISSUE",
             itemId: "абатмент",
             warehouseId: "протетика",
@@ -114,6 +115,7 @@ describe("our lines from SALE_ISSUE", () => {
       stockMovement: {
         findMany: async () => [
           {
+            orderId: "o2",
             kind: "SALE_ISSUE",
             itemId: "старая",
             warehouseId: "протетика",

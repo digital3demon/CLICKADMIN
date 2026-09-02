@@ -1,19 +1,8 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import { KanbanApp } from "@/components/kanban/KanbanApp";
 
-const KanbanApp = dynamic(
-  () => import("@/components/kanban/KanbanApp").then((m) => m.KanbanApp),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-dvh min-h-0 w-full items-center justify-center bg-[var(--kanban-workspace-bg)] text-sm text-[var(--kanban-text-muted)]">
-        Загрузка канбана…
-      </div>
-    ),
-  },
-);
-
+/** Клиентская обёртка маршрута /kanban — без outer dynamic (на мобиле чанк зависал). */
 export function KanbanPageClient({
   isDemo,
   kaitenIntegrationActive,

@@ -21,6 +21,7 @@ import {
   archiveCardByIdOnBoard,
   buildKanbanDisplayView,
   createCard,
+  defaultAppState,
   findCard,
   findCardInAppState,
   generateId,
@@ -220,13 +221,19 @@ import {
   type KanbanViewSortPref,
 } from "@/lib/kanban/list-view-sort";
 
+const kanbanViewChunkLoading = (
+  <div className="flex min-h-[12rem] flex-1 items-center justify-center text-sm text-[var(--kanban-text-muted)]">
+    Загрузка…
+  </div>
+);
+
 const KanbanCalendar = dynamic(
   () => import("./KanbanCalendar").then((m) => m.KanbanCalendar),
-  { ssr: false, loading: () => null },
+  { ssr: false, loading: () => kanbanViewChunkLoading },
 );
 const KanbanListView = dynamic(
   () => import("./KanbanListView").then((m) => m.KanbanListView),
-  { ssr: false, loading: () => null },
+  { ssr: false, loading: () => kanbanViewChunkLoading },
 );
 
 type ToastItem = { id: string; text: string; err?: boolean };
@@ -835,43 +842,53 @@ export function KanbanApp({
   }, [appState, isDemo, kanbanStateReady]);
 
   useEffect(() => {
-    const loaded = loadKanbanState(isDemo);
-    const params = new URLSearchParams(window.location.search);
-    const bid = params.get("board");
-    let next = isDemo ? normalizeDemoKanbanAppState(loaded) : loaded;
-    if (!isDemo) {
-      const uiLocal = loadKanbanBoardUiLocal();
-      if (uiLocal) {
-        next = applyKanbanBoardUiState(next, uiLocal);
-        if (uiLocal.lastRealBoardId) lastRealBoardIdRef.current = uiLocal.lastRealBoardId;
-      }
-    }
-    if (
-      !isDemo &&
-      bid &&
-      (next.boards.some((b) => b.id === bid) || isKanbanAggregateBoardId(bid))
-    ) {
-      next = structuredClone(next);
-      next.activeBoardId = bid;
-    }
-    if (!isDemo) {
-      applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
-      const cachedTiles = loadCrmBoardTilesCache(next.activeBoardId);
-      if (cachedTiles.length > 0) {
-        const replaceBoardId = isKanbanAggregateBoardId(next.activeBoardId)
-          ? null
-          : next.activeBoardId;
-        next = applyCrmBoardTilesToAppState(next, cachedTiles, { replaceBoardId });
-        applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
-        const snaps = appointmentSnapsFromCrmTiles(cachedTiles);
-        if (snaps.size > 0) {
-          setLinkedAppointmentByOrderId(snaps);
+    try {
+      const loaded = loadKanbanState(isDemo);
+      const params = new URLSearchParams(window.location.search);
+      const bid = params.get("board");
+      let next = isDemo ? normalizeDemoKanbanAppState(loaded) : loaded;
+      if (!isDemo) {
+        const uiLocal = loadKanbanBoardUiLocal();
+        if (uiLocal) {
+          next = applyKanbanBoardUiState(next, uiLocal);
+          if (uiLocal.lastRealBoardId) lastRealBoardIdRef.current = uiLocal.lastRealBoardId;
         }
       }
+      if (
+        !isDemo &&
+        bid &&
+        (next.boards.some((b) => b.id === bid) || isKanbanAggregateBoardId(bid))
+      ) {
+        next = structuredClone(next);
+        next.activeBoardId = bid;
+      }
+      if (!isDemo) {
+        applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+        const cachedTiles = loadCrmBoardTilesCache(next.activeBoardId);
+        if (cachedTiles.length > 0) {
+          const replaceBoardId = isKanbanAggregateBoardId(next.activeBoardId)
+            ? null
+            : next.activeBoardId;
+          next = applyCrmBoardTilesToAppState(next, cachedTiles, { replaceBoardId });
+          applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+          const snaps = appointmentSnapsFromCrmTiles(cachedTiles);
+          if (snaps.size > 0) {
+            setLinkedAppointmentByOrderId(snaps);
+          }
+        }
+      }
+      const c = kanbanCardIdFromSearchParams(params);
+      setAppState(applyPendingKanbanColumnMoves(next, listPendingKanbanColumnMoves()));
+      if (c) setCardModalId(c);
+    } catch (err) {
+      console.error("[kanban] local hydrate failed", err);
+      setAppState(
+        applyPendingKanbanColumnMoves(
+          isDemo ? normalizeDemoKanbanAppState(defaultAppState()) : defaultAppState(),
+          listPendingKanbanColumnMoves(),
+        ),
+      );
     }
-    const c = kanbanCardIdFromSearchParams(params);
-    setAppState(applyPendingKanbanColumnMoves(next, listPendingKanbanColumnMoves()));
-    if (c) setCardModalId(c);
   }, [isDemo]);
 
   useEffect(() => {

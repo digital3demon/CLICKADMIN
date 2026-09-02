@@ -110,12 +110,31 @@ export async function loadOurLinesFromOrderSaleIssues(
 ): Promise<ProstheticsOurLine[]> {
   const id = orderId.trim();
   if (!id) return [];
+  const map = await loadOurLinesFromOrderSaleIssuesByOrderIds(db, [id]);
+  return map.get(id) ?? [];
+}
+
+/**
+ * Нетто SALE_ISSUE − RETURN_IN по нескольким нарядам (гидратация UI / склад).
+ */
+export async function loadOurLinesFromOrderSaleIssuesByOrderIds(
+  db: MovementDb,
+  orderIds: string[],
+): Promise<Map<string, ProstheticsOurLine[]>> {
+  const ids = [
+    ...new Set(orderIds.map((x) => String(x || "").trim()).filter(Boolean)),
+  ];
+  const out = new Map<string, ProstheticsOurLine[]>();
+  for (const id of ids) out.set(id, []);
+  if (ids.length === 0) return out;
+
   const rows = await db.stockMovement.findMany({
     where: {
-      orderId: id,
+      orderId: { in: ids },
       kind: { in: ["SALE_ISSUE", "RETURN_IN"] },
     },
     select: {
+      orderId: true,
       kind: true,
       itemId: true,
       warehouseId: true,
@@ -123,11 +142,34 @@ export async function loadOurLinesFromOrderSaleIssues(
       returnedToWarehouseAt: true,
     },
   });
-  const issues = rows.filter(
-    (r) => r.kind === "SALE_ISSUE" && r.returnedToWarehouseAt == null,
-  );
-  const returns = rows.filter((r) => r.kind === "RETURN_IN");
-  return netStockOurLines(issues, returns);
+
+  const byOrder = new Map<
+    string,
+    Array<{
+      kind: string;
+      itemId: string;
+      warehouseId: string;
+      quantity: number;
+      returnedToWarehouseAt: Date | null;
+    }>
+  >();
+  for (const r of rows) {
+    const oid = r.orderId;
+    if (!oid) continue;
+    const arr = byOrder.get(oid) ?? [];
+    arr.push(r);
+    byOrder.set(oid, arr);
+  }
+
+  for (const id of ids) {
+    const list = byOrder.get(id) ?? [];
+    const issues = list.filter(
+      (r) => r.kind === "SALE_ISSUE" && r.returnedToWarehouseAt == null,
+    );
+    const returns = list.filter((r) => r.kind === "RETURN_IN");
+    out.set(id, netStockOurLines(issues, returns));
+  }
+  return out;
 }
 
 /**
