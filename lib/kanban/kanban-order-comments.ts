@@ -76,11 +76,45 @@ export function mergeKanbanOrderComments(
       byId.set(key, n);
       continue;
     }
-    const prevScore = prev.syncStatus === "synced" ? 2 : 1;
-    const nextScore = n.syncStatus === "synced" ? 2 : 1;
-    if (nextScore >= prevScore) byId.set(key, n);
+    const prevScore = kanbanCommentMergePreferScore(prev);
+    const nextScore = kanbanCommentMergePreferScore(n);
+    if (nextScore > prevScore) {
+      byId.set(key, n);
+      continue;
+    }
+    if (nextScore < prevScore) continue;
+    // Равный score: более поздний deletedAt/editedAt, иначе последняя копия в итерации.
+    if (kanbanCommentEventTs(n) >= kanbanCommentEventTs(prev)) {
+      byId.set(key, n);
+    }
   }
   return compactCardComments([...byId.values()]);
+}
+
+/**
+ * Приоритет при merge store ↔ card:
+ * tombstone (удаление) > правка > synced > pending.
+ * Иначе stale synced без deletedAt/editedAt затирает DELETE/PATCH после refresh.
+ */
+export function kanbanCommentMergePreferScore(row: CardComment): number {
+  let score = 0;
+  if (String(row.deletedAt || "").trim()) score += 100;
+  if (String(row.editedAt || "").trim()) score += 50;
+  if (row.syncStatus === "synced") score += 2;
+  else if (
+    row.syncStatus === "pending" ||
+    row.syncStatus === "local" ||
+    row.syncStatus === "retried"
+  ) {
+    score += 1;
+  }
+  return score;
+}
+
+function kanbanCommentEventTs(row: CardComment): string {
+  return String(
+    row.deletedAt || row.editedAt || row.syncedAt || row.createdAt || "",
+  );
 }
 
 /**

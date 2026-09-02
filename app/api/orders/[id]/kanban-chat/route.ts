@@ -335,11 +335,18 @@ function findCardByLinkedOrderId(state: KanbanAppState, orderId: string): CardLo
   return null;
 }
 
-function normalizeCardCommentsForApi(list: CardComment[]): CardComment[] {
+function normalizeCardCommentsForApi(
+  list: CardComment[],
+  opts?: { includeDeleted?: boolean },
+): CardComment[] {
   return (list || [])
     .map((row) => normalizeCardComment(row))
-    .filter((row) => !isKanbanChatCommentDeleted(row))
-    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+    .filter(
+      (row) => opts?.includeDeleted === true || !isKanbanChatCommentDeleted(row),
+    )
+    .sort((a, b) =>
+      String(a.createdAt || "").localeCompare(String(b.createdAt || "")),
+    );
 }
 
 async function hydrateEmptyKanbanCommentsFromKaiten(opts: {
@@ -441,17 +448,21 @@ export async function GET(
     ? await loadKanbanChatRequestClosedRows(orderId)
     : [];
   let workImages = bundleImages;
-  const commentsForApi = (list: CardComment[]) =>
+  const commentsForApi = (
+    list: CardComment[],
+    opts?: { includeDeleted?: boolean },
+  ) =>
     annotateKanbanCommentsRequestClosed(
-      normalizeCardCommentsForApi(list),
+      normalizeCardCommentsForApi(list, opts),
       requestClosedRows,
     );
 
   if (localOnly) {
-    const comments = commentsForApi(storedComments);
+    // Tombstone (deletedAt) отдаём клиенту: иначе после F5 Kaiten ingest воскрешает удаление.
+    const comments = commentsForApi(storedComments, { includeDeleted: true });
     const kaitenCardId = orderHeader?.kaitenCardId;
     if (
-      comments.length === 0 &&
+      storedComments.length === 0 &&
       kaitenCardId != null &&
       Number.isFinite(kaitenCardId)
     ) {

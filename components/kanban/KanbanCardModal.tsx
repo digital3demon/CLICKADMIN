@@ -25,6 +25,7 @@ import {
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { mergeKaitenSnapshotIntoCardComments } from "@/lib/kanban/chat-sync";
 import { mergeKanbanOrderComments } from "@/lib/kanban/kanban-order-comments";
+import { needsOrderListKaitenChatFallback } from "@/lib/kanban/order-list-chat-hydrate";
 import {
   forgetOptimisticKaitenBlock,
   OPTIMISTIC_KAITEN_BLOCK_SHORT_TTL_MS,
@@ -904,12 +905,19 @@ export function KanbanCardModal({
       card?.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
 
     void (async () => {
-      try {
-        const detailRes = await fetch(
+      // Фаза 1: описание/файлы/чат из CRM параллельно — оверлей снимаем после неё.
+      const [detailRes, storedAct, snap] = await Promise.all([
+        fetch(
           `/api/kanban/linked-orders?ids=${encodeURIComponent(linkedOrderId)}&detail=1`,
           { credentials: "include" },
-        );
-        if (!cancelled && detailRes.ok) {
+        ).catch(() => null),
+        readClientState("tenant", kanbanOrderActivityStateKey(linkedOrderId)),
+        fetchKanbanMirrorCommentsForOrder(linkedOrderId),
+      ]);
+      if (cancelled) return;
+
+      try {
+        if (detailRes?.ok) {
           const detailJson = (await detailRes.json()) as {
             orders?: KaitenLinkedOrderForKanban[];
           };
@@ -924,8 +932,6 @@ export function KanbanCardModal({
               if (fc.card.linkedOrderId !== linkedOrderId) return;
               mergeOrderAttachmentsIntoLinkedCard(fc.card, linkedOrderId, row);
               const desc = resolveLinkedOrderKanbanDescription(row, isDemo);
-              // Всегда из этого наряда: иначе «orders[0]» мог записать чужой текст
-              // и условие «только если пусто» оставляло его на всех карточках.
               if (desc.trim()) {
                 fc.card.description = desc;
               }
@@ -933,25 +939,20 @@ export function KanbanCardModal({
           }
         }
       } catch {
-        /* offline */
+        /* offline / bad json */
       }
-
       if (cancelled) return;
 
-      const storedAct = await readClientState("tenant", kanbanOrderActivityStateKey(linkedOrderId));
-      if (!cancelled) {
-        const fromStore = parseStoredKanbanOrderActivity(storedAct);
-        onApplyRef.current((b) => {
-          const fc = findCard(b, cardId);
-          if (!fc) return;
-          fc.card.activity = seedKanbanCreatedActivity({
-            ...fc.card,
-            activity: mergeKanbanOrderActivity(fc.card.activity, fromStore),
-          });
+      const fromStore = parseStoredKanbanOrderActivity(storedAct);
+      onApplyRef.current((b) => {
+        const fc = findCard(b, cardId);
+        if (!fc) return;
+        fc.card.activity = seedKanbanCreatedActivity({
+          ...fc.card,
+          activity: mergeKanbanOrderActivity(fc.card.activity, fromStore),
         });
-      }
-      const snap = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
-      if (cancelled) return;
+      });
+
       const closedFlags = snap.ok ? snap.comments : [];
       if (snap.ok) {
         onApplyRef.current((b) => {
@@ -980,15 +981,22 @@ export function KanbanCardModal({
           }
         });
       }
-      const pullKaiten = alreadyLinked || (snap.ok && snap.linkedKaiten);
-      if (pullKaiten) {
-        const actorId = chatActorUserIdRef.current;
-        const [kaiten, head] = await Promise.all([
-          fetchOrderKaitenCommentsForKanban(linkedOrderId, actorId),
-          fetchOrderKaitenCardHeadForKanban(linkedOrderId),
-        ]);
-        if (cancelled) return;
-        if (head.ok) {
+
+      if (cancelled) return;
+      setLinkedDetailLoading(false);
+
+      const linkedKaiten = alreadyLinked || (snap.ok && snap.linkedKaiten);
+      const needsKaitenChat =
+        linkedKaiten &&
+        needsOrderListKaitenChatFallback({
+          mirrorOk: snap.ok,
+          commentCount: snap.ok ? snap.comments.length : 0,
+        });
+
+      // card-head (участники/срок) — в фоне, не держит оверлей.
+      if (linkedKaiten) {
+        void fetchOrderKaitenCardHeadForKanban(linkedOrderId).then((head) => {
+          if (cancelled || !head.ok) return;
           onApplyRef.current((b) => {
             const fc = findCard(b, cardId);
             if (!fc) return;
@@ -1004,7 +1012,41 @@ export function KanbanCardModal({
               setKanbanStageDue(fc.card, head.stageDue);
             }
           });
+        });
+      }
+
+      const applyKaitenChat = async (force: boolean) => {
+        if (!linkedKaiten) return;
+        if (!force && !needsKaitenChat) {
+          // Тёплое зеркало: фоновый refresh без блокировки UI.
+          const actorId = chatActorUserIdRef.current;
+          void fetchOrderKaitenCommentsForKanban(linkedOrderId, actorId).then(
+            (kaiten) => {
+              if (cancelled || !kaiten.ok || kaiten.comments.length === 0) return;
+              onApplyRef.current((b) => {
+                const fc = findCard(b, cardId);
+                if (!fc) return;
+                fc.card.comments = withImagePlaceholders(
+                  mergeRequestClosedFlags(
+                    mergeKaitenSnapshotIntoCardComments(
+                      fc.card.comments || [],
+                      kaiten.comments,
+                    ),
+                    closedFlags,
+                  ),
+                  fc.card,
+                );
+              });
+            },
+          );
+          return;
         }
+        const actorId = chatActorUserIdRef.current;
+        const kaiten = await fetchOrderKaitenCommentsForKanban(
+          linkedOrderId,
+          actorId,
+        );
+        if (cancelled) return;
         if (kaiten.ok && kaiten.comments.length > 0) {
           onApplyRef.current((b) => {
             const fc = findCard(b, cardId);
@@ -1021,9 +1063,10 @@ export function KanbanCardModal({
             );
           });
         }
-        const again = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
-        if (cancelled) return;
-        if (again.ok) {
+        // Повторное зеркало — только после cold ingest (store был пуст).
+        if (force || needsKaitenChat) {
+          const again = await fetchKanbanMirrorCommentsForOrder(linkedOrderId);
+          if (cancelled || !again.ok) return;
           onApplyRef.current((b) => {
             const fc = findCard(b, cardId);
             if (!fc) return;
@@ -1038,23 +1081,25 @@ export function KanbanCardModal({
             );
           });
         }
+      };
+
+      try {
+        await applyKaitenChat(false);
+      } finally {
+        if (!cancelled) {
+          setKaitenChatLoading(false);
+          linkedHydrateKeyRef.current = hydrateKey;
+        }
       }
+    })().catch(() => {
       if (!cancelled) {
-        linkedHydrateKeyRef.current = hydrateKey;
-      }
-    })()
-      .catch(() => {
-        /* network */
-      })
-      .finally(() => {
-        if (cancelled) return;
         setLinkedDetailLoading(false);
         setKaitenChatLoading(false);
-      });
+      }
+    });
 
     return () => {
       cancelled = true;
-      // Не помечаем ключ «готово» — при смене сессии/deps гидрация повторится.
     };
   }, [cardId, linkedOrderId, isDemo]);
 

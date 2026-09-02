@@ -1042,19 +1042,10 @@ export function KanbanListView({
                       : "bg-[var(--kanban-card-bg)]"
                   }`}
                   style={{ borderLeftColor: accent }}
-                  role="button"
-                  tabIndex={0}
                   aria-expanded={expandedCardId === card.id}
                   onClick={(e) => {
                     if (eventTargetsListRowControl(e.target)) return;
                     toggleExpandedCard(card.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      if (eventTargetsListRowControl(e.target)) return;
-                      e.preventDefault();
-                      toggleExpandedCard(card.id);
-                    }
                   }}
                 >
                   <div

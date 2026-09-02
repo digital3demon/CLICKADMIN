@@ -238,12 +238,17 @@ export function commentBodyDedupKey(text: string): string {
 }
 
 function commentKeepScore(row: CardComment): number {
-  if (row.source === "CRM" && row.syncStatus === "synced") return 5;
-  if (row.source === "CRM" && String(row.externalCommentId || "").trim()) return 4;
-  if (row.source === "KAITEN" && row.syncStatus === "synced") return 3;
-  if (String(row.id || "").startsWith("kt-")) return 2;
-  if (row.source === "CRM") return 1;
-  return 0;
+  let score = 0;
+  // Tombstone / правка важнее источника — иначе compact схлопывает DELETE/PATCH.
+  if (String(row.deletedAt || "").trim()) score += 100;
+  if (String(row.editedAt || "").trim()) score += 50;
+  if (row.source === "CRM" && row.syncStatus === "synced") score += 5;
+  else if (row.source === "CRM" && String(row.externalCommentId || "").trim())
+    score += 4;
+  else if (row.source === "KAITEN" && row.syncStatus === "synced") score += 3;
+  else if (String(row.id || "").startsWith("kt-")) score += 2;
+  else if (row.source === "CRM") score += 1;
+  return score;
 }
 
 function commentsNearDuplicate(a: CardComment, b: CardComment): boolean {
@@ -322,8 +327,13 @@ export function compactCardComments(comments: CardComment[]): CardComment[] {
       if (!dupImg) out.push(row);
       continue;
     }
-    const duplicate = out.some((existing) => commentsNearDuplicate(existing, row));
-    if (duplicate) continue;
+    const dupIdx = out.findIndex((existing) => commentsNearDuplicate(existing, row));
+    if (dupIdx >= 0) {
+      if (commentKeepScore(row) > commentKeepScore(out[dupIdx]!)) {
+        out[dupIdx] = row;
+      }
+      continue;
+    }
     out.push(row);
   }
 

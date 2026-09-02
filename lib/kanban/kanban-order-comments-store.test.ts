@@ -127,6 +127,72 @@ describe("mergeKanbanOrderComments", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]?.syncStatus).toBe("synced");
   });
+
+  it("tombstone побеждает stale synced без deletedAt (кириллица в тексте)", () => {
+    const merged = mergeKanbanOrderComments(
+      [
+        cm({
+          id: "cm-del",
+          text: "уберу комментарий",
+          syncStatus: "synced",
+          deletedAt: "2026-09-02T12:00:00.000Z",
+        }),
+      ],
+      [
+        cm({
+          id: "cm-del",
+          text: "уберу комментарий",
+          syncStatus: "synced",
+        }),
+      ],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.deletedAt).toBe("2026-09-02T12:00:00.000Z");
+  });
+
+  it("store tombstone побеждает live на карточке при hydrate", () => {
+    const merged = mergeKanbanOrderComments(
+      [
+        cm({
+          id: "cm-del",
+          text: "старое",
+          syncStatus: "synced",
+        }),
+      ],
+      [
+        cm({
+          id: "cm-del",
+          text: "старое",
+          syncStatus: "synced",
+          deletedAt: "2026-09-02T12:05:00.000Z",
+        }),
+      ],
+    );
+    expect(merged[0]?.deletedAt).toBe("2026-09-02T12:05:00.000Z");
+  });
+
+  it("правка с editedAt побеждает stale synced текст", () => {
+    const merged = mergeKanbanOrderComments(
+      [
+        cm({
+          id: "cm-edit",
+          text: "исправленный текст",
+          syncStatus: "synced",
+          editedAt: "2026-09-02T12:10:00.000Z",
+        }),
+      ],
+      [
+        cm({
+          id: "cm-edit",
+          text: "черновик до правки",
+          syncStatus: "synced",
+        }),
+      ],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.text).toBe("исправленный текст");
+    expect(merged[0]?.editedAt).toBe("2026-09-02T12:10:00.000Z");
+  });
 });
 
 describe("mergeIncomingKaitenIntoKanbanComments", () => {
