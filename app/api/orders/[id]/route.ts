@@ -1475,6 +1475,13 @@ export async function PATCH(
             lines,
             linesAdmin,
             parseMode: "HTML",
+            actionContext: session?.sub
+              ? {
+                  initiatorUserId: session.sub,
+                  chatUrl: cardUrl,
+                  orderId,
+                }
+              : null,
           });
         } catch (e) {
           console.error("[PATCH order] telegram kanban notify", e);

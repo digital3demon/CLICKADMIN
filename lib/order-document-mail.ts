@@ -16,8 +16,8 @@ import {
 } from "@/lib/finance-office-debt-settings";
 import { looksLikeDebtNotifyEmail } from "@/lib/finance-office-debts";
 import {
-  extractReplyParentMessageIds,
-  normalizeMailMessageId,
+  extractDocumentThreadParentMessageIds,
+  mailMessageIdLookupVariants,
 } from "@/lib/mail/in-reply-to";
 import {
   newMailAttachmentId,
@@ -143,24 +143,31 @@ async function persistOutboundAndLink(opts: {
   return email;
 }
 
+/**
+ * Привязка входящего ответа к наряду — только если непосредственный родитель
+ * это исходящее письмо документов (счёт/УПД), уже связанное с нарядом.
+ * Ответ на автоответ «Благодарим за заказ» не привязываем: In-Reply-To указывает
+ * на автоответ без связи, а в References часто лежит исходное письмо заказа.
+ */
 export async function linkInboundEmailToDocumentThread(
   db: PrismaClient,
   tenantId: string,
   emailId: string,
   rawHeaders: unknown,
 ): Promise<void> {
-  const parentIds = extractReplyParentMessageIds(rawHeaders);
+  const parentIds = extractDocumentThreadParentMessageIds(rawHeaders);
   if (parentIds.length === 0) return;
-  const variants = parentIds.flatMap((id) => {
-    const n = normalizeMailMessageId(id);
-    const bare = n.replace(/^<|>$/g, "");
-    return [n, bare];
-  });
+  const variants = mailMessageIdLookupVariants(parentIds);
+  if (variants.length === 0) return;
+
   const parent = await db.email.findFirst({
     where: {
       tenantId,
-      messageId: { in: [...new Set(variants)] },
+      messageId: { in: variants },
+      direction: "OUTBOUND",
       sourceOrderLinks: { some: {} },
+      // Автоответ создания заказа (даже если когда-то привязали).
+      autoReplySourceLinks: { none: {} },
     },
     select: {
       threadId: true,

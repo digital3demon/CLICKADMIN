@@ -313,6 +313,7 @@ function notifyKanbanColumnTelegram(
     parseMode: "HTML",
     targetUserIds: kanbanCardTelegramMemberIds(card),
     orderId: oid || undefined,
+    cardId: card.id,
     lines: built.lines,
     linesSelf: built.linesSelf,
     ...(built.linesAdmin ? { linesAdmin: built.linesAdmin } : {}),
@@ -2996,6 +2997,7 @@ export function KanbanApp({
           const linkHtml = telegramHtmlLink(url, titleT);
           postKanbanTelegramNotify({
             event: "tg_production_new_card",
+            cardId: childId,
             lines: [
               `Новая карточка производства, дорожка «${laneName}»: ${linkHtml}`,
             ],
@@ -3662,6 +3664,7 @@ export function KanbanApp({
                       const linkHtml = telegramHtmlLink(url, titleT);
                       postKanbanTelegramNotify({
                         event: "tg_production_new_card",
+                        cardId: row.childId,
                         lines: [
                           `Новая карточка производства, дорожка «${row.laneName}»: ${linkHtml}`,
                         ],

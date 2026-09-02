@@ -148,6 +148,15 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
     (id) => !(hasProductionTag && prodTargets.includes(id)),
   );
 
+  const initiatorId = String(opts.actorUserId || "").trim();
+  const actionContext = initiatorId
+    ? {
+        initiatorUserId: initiatorId,
+        chatUrl: kanbanCardAbsoluteUrl,
+        orderId: opts.orderId,
+      }
+    : null;
+
   if (prodTargets.length > 0) {
     await notifyKanbanTelegramTargetUsers(prisma, {
       event: "tg_production_mentioned",
@@ -159,6 +168,7 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       tenantId: opts.tenantId,
       // ЛС ок; общий админ-чат даёт второй push «упомянул вас» тем же ботом.
       skipTenantSharedChat: true,
+      actionContext,
     });
   }
 
@@ -173,6 +183,8 @@ export async function notifyTelegramForKanbanChatMentions(opts: {
       parseMode: "HTML",
       tenantId: opts.tenantId,
       skipTenantSharedChat: true,
+      // Кнопки от живого автора даже при actorUserId: null (исключение из prefs).
+      actionContext,
     });
   }
   return mentionedAll;
@@ -212,6 +224,7 @@ export async function notifyTelegramForKanbanChatCommentAdded(opts: {
     opts.tenantId,
     opts.orderId,
   );
+  const initiatorId = String(opts.actorUserId || "").trim();
   await notifyKanbanTelegramSubscribers(prisma, {
     event: "tg_comment_added",
     actorUserId: opts.actorUserId,
@@ -222,5 +235,12 @@ export async function notifyTelegramForKanbanChatCommentAdded(opts: {
       `${who} оставил(а) комментарий к ${cardWord} и ${orderWord}${tail}`,
     ],
     parseMode: "HTML",
+    actionContext: initiatorId
+      ? {
+          initiatorUserId: initiatorId,
+          chatUrl: cardUrl,
+          orderId: opts.orderId,
+        }
+      : null,
   });
 }

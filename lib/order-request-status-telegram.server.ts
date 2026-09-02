@@ -46,6 +46,7 @@ export async function notifyOrderRequestStatusTelegram(opts: {
   const cardWord = telegramHtmlLink(cardUrl, "карточке");
   const orderWord = telegramHtmlLink(orderPageUrl, "заказе");
   const onlyUserIds = await loadOrderKanbanTelegramMemberIds(tenantId, orderId);
+  const initiatorId = String(opts.actorUserId || "").trim();
   await notifyKanbanTelegramSubscribersAndTenantSharedChat(clientsPrisma, {
     tenantId,
     event,
@@ -54,5 +55,12 @@ export async function notifyOrderRequestStatusTelegram(opts: {
     lines: [`В ${linkHtml} ${phrase}`],
     linesAdmin: [`В ${cardWord} и ${orderWord} ${phrase}`],
     parseMode: "HTML",
+    actionContext: initiatorId
+      ? {
+          initiatorUserId: initiatorId,
+          chatUrl: cardUrl,
+          orderId,
+        }
+      : null,
   });
 }

@@ -26,6 +26,7 @@ function postMemberTelegram(opts: {
   alternatePrefKeys?: KanbanTelegramPrefKey[];
   targetUserIds: string[];
   orderId?: string;
+  cardId?: string;
   lines: string[];
   linesAdmin?: string[];
   linesSelf?: string[];
@@ -40,6 +41,7 @@ function postMemberTelegram(opts: {
     targetUserIds: opts.targetUserIds,
     parseMode: "HTML",
     ...(opts.orderId ? { orderId: opts.orderId } : {}),
+    ...(opts.cardId ? { cardId: opts.cardId } : {}),
     lines: opts.lines,
     ...(opts.linesAdmin ? { linesAdmin: opts.linesAdmin } : {}),
     ...(opts.linesSelf ? { linesSelf: opts.linesSelf } : {}),
@@ -129,6 +131,7 @@ export function notifyKanbanCardMemberChange(args: {
           alternatePrefKeys: ["tg_person_added_to_card"],
           targetUserIds: added,
           orderId: oid || undefined,
+          cardId,
           lines,
           linesAdmin,
           linesSelf,
@@ -149,6 +152,7 @@ export function notifyKanbanCardMemberChange(args: {
           event: "tg_person_removed_from_card",
           targetUserIds: removed,
           orderId: oid || undefined,
+          cardId,
           lines,
           linesAdmin,
           linesSelf,
@@ -172,6 +176,7 @@ export function notifyKanbanCardMemberChange(args: {
           event: "tg_person_added_to_card",
           targetUserIds: added,
           orderId: oid || undefined,
+          cardId,
           lines,
           linesAdmin,
           linesSelf,
@@ -192,6 +197,7 @@ export function notifyKanbanCardMemberChange(args: {
           event: "tg_person_removed_from_card",
           targetUserIds: removed,
           orderId: oid || undefined,
+          cardId,
           lines,
           linesAdmin,
           linesSelf,
@@ -252,6 +258,7 @@ export function notifyKanbanCardDueChange(args: {
     parseMode: "HTML",
     ...(targetUserIds.length ? { targetUserIds } : {}),
     ...(oid ? { orderId: oid } : {}),
+    cardId,
     lines,
     ...(linesAdmin ? { linesAdmin } : {}),
     ...(linesSelf ? { linesSelf } : {}),

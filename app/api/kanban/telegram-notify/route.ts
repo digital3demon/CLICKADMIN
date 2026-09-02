@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
+import { crmPublicBaseUrl } from "@/lib/crm-public-base-url";
 import {
   buildKanbanMentionInCommentTelegramHtmlLines,
   type KanbanMentionTelegramContext,
 } from "@/lib/kanban-mention-telegram-html";
+import { kanbanOrderDeepLinkPath } from "@/lib/kanban-order-card-url";
 import {
   parseKanbanTelegramPrefKey,
   type KanbanTelegramPrefKey,
@@ -17,6 +19,7 @@ import {
   mergeTelegramSelfActorIntoTargets,
   uniqTelegramTargetUserIds,
 } from "@/lib/telegram-kanban-card-scope";
+import type { KanbanTelegramActionContext } from "@/lib/telegram-kanban-action-keyboard";
 import {
   notifyKanbanTelegramSubscribers,
   notifyKanbanTelegramTargetUsers,
@@ -24,6 +27,37 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function firstHttpsHrefFromLines(lines: string[]): string {
+  for (const line of lines) {
+    const m = /href="(https?:\/\/[^"]+)"/i.exec(line);
+    if (m?.[1]) return m[1];
+  }
+  return "";
+}
+
+function buildActionContext(opts: {
+  initiatorUserId: string;
+  orderId: string;
+  cardId: string;
+  mentionCtx: KanbanMentionTelegramContext | null;
+  lines: string[];
+}): KanbanTelegramActionContext | null {
+  const initiatorUserId = opts.initiatorUserId.trim();
+  if (!initiatorUserId) return null;
+  const chatUrl =
+    opts.mentionCtx?.kanbanCardAbsoluteUrl?.trim() ||
+    (opts.orderId
+      ? `${crmPublicBaseUrl().replace(/\/+$/, "")}${kanbanOrderDeepLinkPath(opts.orderId)}`
+      : "") ||
+    firstHttpsHrefFromLines(opts.lines);
+  if (!chatUrl && !opts.orderId && !opts.cardId) return null;
+  return {
+    initiatorUserId,
+    chatUrl: chatUrl || "",
+    orderId: opts.orderId || null,
+    cardId: opts.cardId || null,
+  };
+}
 function parseMentionContextPayload(
   raw: unknown,
 ): KanbanMentionTelegramContext | null {
@@ -163,6 +197,14 @@ export async function POST(req: Request) {
   const tenantId = await getTenantIdForSession(session);
   const recipientRoles = parseRecipientRoles(o.recipientRoles);
   const orderId = typeof o.orderId === "string" ? o.orderId.trim() : "";
+  const cardId = typeof o.cardId === "string" ? o.cardId.trim() : "";
+  const actionContext = buildActionContext({
+    initiatorUserId: actorUserId,
+    orderId,
+    cardId,
+    mentionCtx,
+    lines: effectiveLines,
+  });
 
   if (
     isCardMemberScopedTelegramEvent(event) &&
@@ -195,6 +237,7 @@ export async function POST(req: Request) {
         linesSelf: effectiveLinesSelf,
         linesSelfAdmin: effectiveLinesSelfAdmin,
         tenantId: tenantId ?? undefined,
+        actionContext,
       });
     } else if (isCardMemberScopedTelegramEvent(event)) {
       /* Без людей на карточке не рассылаем всей лаборатории. */
@@ -207,6 +250,7 @@ export async function POST(req: Request) {
         parseMode,
         linesAdmin: effectiveLinesAdmin,
         onlyRoles: recipientRoles,
+        actionContext,
       });
     }
   } catch (e) {

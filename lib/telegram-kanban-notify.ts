@@ -9,11 +9,17 @@ import {
   shouldNotifyKanbanOwnActions,
   type KanbanTelegramPrefKey,
 } from "@/lib/kanban-telegram-prefs";
+import {
+  loadKanbanTelegramActionReplyMarkup,
+  type KanbanTelegramActionContext,
+} from "@/lib/telegram-kanban-action-keyboard";
 import { telegramSendMessage } from "@/lib/telegram-send-message";
 import {
   isCardMemberScopedTelegramEvent,
   uniqTelegramTargetUserIds,
 } from "@/lib/telegram-kanban-card-scope";
+
+export type { KanbanTelegramActionContext };
 
 /** Две ссылки (канбан + наряд): администратор, старший администратор, руководитель. */
 function linesHtmlForKanbanTelegramRecipient(
@@ -63,6 +69,8 @@ export async function notifyKanbanTelegramSubscribers(
      * Для card-scoped события без списка рассылка всем запрещена.
      */
     onlyUserIds?: string[];
+    /** Кнопки «чат / ответить» — только если инициатор человек. */
+    actionContext?: KanbanTelegramActionContext | null;
   },
 ): Promise<void> {
   if (opts.skip) return;
@@ -88,6 +96,11 @@ export async function notifyKanbanTelegramSubscribers(
     if (id) exclude.add(id);
   }
   const excludeIds = [...exclude];
+
+  const replyMarkup = await loadKanbanTelegramActionReplyMarkup(
+    prisma,
+    opts.actionContext,
+  );
 
   const users = await prisma.user.findMany({
     where: {
@@ -118,6 +131,7 @@ export async function notifyKanbanTelegramSubscribers(
     if (!text) continue;
     const r = await telegramSendMessage(token, u.telegramId.trim(), text, {
       parseMode: opts.parseMode,
+      ...(replyMarkup ? { replyMarkup } : {}),
     });
     if (!r.ok) {
       console.warn(
@@ -148,6 +162,7 @@ export async function notifyTenantAdminSharedTelegramChat(
     linesAdmin?: string[];
     parseMode?: "HTML";
     skip?: boolean;
+    actionContext?: KanbanTelegramActionContext | null;
   },
 ): Promise<void> {
   if (opts.skip) return;
@@ -181,8 +196,14 @@ export async function notifyTenantAdminSharedTelegramChat(
   ];
   if (!adminSharedMessengerAllowsEvent(merged, prefKeys)) return;
 
+  const replyMarkup = await loadKanbanTelegramActionReplyMarkup(
+    prisma,
+    opts.actionContext,
+  );
+
   const r = await telegramSendMessage(token, chatId, text, {
     parseMode: opts.parseMode,
+    ...(replyMarkup ? { replyMarkup } : {}),
   });
   if (!r.ok) {
     console.warn(
@@ -220,6 +241,8 @@ export async function notifyKanbanTelegramTargetUsers(
     tenantId?: string | null;
     /** Не слать в общий админ-чат (личные @упоминания — только в ЛС, иначе дубль «упомянул вас»). */
     skipTenantSharedChat?: boolean;
+    /** Кнопки «чат / ответить» — только если инициатор человек (не для linesSelf). */
+    actionContext?: KanbanTelegramActionContext | null;
   },
 ): Promise<void> {
   if (opts.skip) return;
@@ -252,6 +275,11 @@ export async function notifyKanbanTelegramTargetUsers(
     opts.event,
     ...(opts.alternatePrefKeys ?? []),
   ];
+
+  const replyMarkup = await loadKanbanTelegramActionReplyMarkup(
+    prisma,
+    opts.actionContext,
+  );
 
   const users = ids.length
     ? await prisma.user.findMany({
@@ -292,8 +320,15 @@ export async function notifyKanbanTelegramTargetUsers(
     );
     const text = mergedLines.join("\n").trim();
     if (!text) continue;
+    // Свои / самоуведомление инициатору — без кнопок; остальным — при живом инициаторе.
+    const initiatorId = String(opts.actionContext?.initiatorUserId || "").trim();
+    const markup =
+      isSelf || (initiatorId && u.id === initiatorId)
+        ? undefined
+        : replyMarkup ?? undefined;
     let r = await telegramSendMessage(token, u.telegramId.trim(), text, {
       parseMode: opts.parseMode,
+      ...(markup ? { replyMarkup: markup } : {}),
     });
     if (!r.ok && opts.parseMode === "HTML") {
       const err = r.error.toLowerCase();
@@ -302,7 +337,9 @@ export async function notifyKanbanTelegramTargetUsers(
           .replace(/<a href="[^"]*">([^<]*)<\/a>/gi, "$1")
           .replace(/<\/?b>/gi, "")
           .replace(/<[^>]+>/g, "");
-        r = await telegramSendMessage(token, u.telegramId.trim(), plain);
+        r = await telegramSendMessage(token, u.telegramId.trim(), plain, {
+          ...(markup ? { replyMarkup: markup } : {}),
+        });
       }
     }
     if (!r.ok) {
@@ -325,6 +362,7 @@ export async function notifyKanbanTelegramTargetUsers(
       linesAdmin: opts.linesAdmin,
       parseMode: opts.parseMode,
       skip: opts.skip,
+      actionContext: opts.actionContext,
     });
   }
 }
@@ -341,6 +379,7 @@ export async function notifyKanbanTelegramSubscribersAndTenantSharedChat(
     parseMode?: "HTML";
     skip?: boolean;
     onlyUserIds?: string[];
+    actionContext?: KanbanTelegramActionContext | null;
   },
 ): Promise<void> {
   await notifyKanbanTelegramSubscribers(prisma, {
@@ -351,6 +390,7 @@ export async function notifyKanbanTelegramSubscribersAndTenantSharedChat(
     parseMode: opts.parseMode,
     skip: opts.skip,
     onlyUserIds: opts.onlyUserIds,
+    actionContext: opts.actionContext,
   });
   await notifyTenantAdminSharedTelegramChat(prisma, {
     tenantId: opts.tenantId,
@@ -359,5 +399,6 @@ export async function notifyKanbanTelegramSubscribersAndTenantSharedChat(
     linesAdmin: opts.linesAdmin,
     parseMode: opts.parseMode,
     skip: opts.skip,
+    actionContext: opts.actionContext,
   });
 }
