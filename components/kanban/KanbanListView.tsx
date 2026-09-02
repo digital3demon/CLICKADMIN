@@ -29,7 +29,6 @@ const LIST_OVERSCAN = 10;
 import { IconBrick, IconLink, IconListCheck, IconMail, IconPlus, IconUnlock } from "./kanban-icons";
 import { KanbanPersonAvatar } from "./KanbanPersonAvatar";
 import { KanbanMemberPickerDialog } from "./KanbanMemberPickerDialog";
-import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
 import { extractOrderNumberLabelFromKanbanCardTitle } from "@/lib/kanban-mention-telegram-html";
@@ -85,7 +84,7 @@ function IconChevronLeft(props: { className?: string }) {
   );
 }
 
-/** Ячейка «Колонка»: select + стрелки назад/вперёд. */
+/** Ячейка «Колонка»: кастомный список (тёмная тема) + стрелки назад/вперёд + СТОП. */
 function ListColumnCell({
   columnTitle,
   columnId,
@@ -95,6 +94,7 @@ function ListColumnCell({
   onRetreat,
   onAdvance,
   onMoveToColumn,
+  onRequestStop,
   compact = false,
 }: {
   columnTitle: string;
@@ -105,16 +105,37 @@ function ListColumnCell({
   onRetreat?: () => void;
   onAdvance?: () => void;
   onMoveToColumn?: (columnId: string) => void;
+  onRequestStop?: () => void;
   compact?: boolean;
 }) {
-  const canEdit = Boolean(onMoveToColumn || onAdvance || onRetreat);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const canEdit = Boolean(onMoveToColumn || onAdvance || onRetreat || onRequestStop);
   const iconCls = compact ? "h-3.5 w-3.5" : "h-4 w-4";
   const btnCls = compact
     ? "shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
     : "shrink-0 rounded p-1.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35";
   const titleCls = compact
-    ? "min-w-0 flex-1 whitespace-normal break-words text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)]"
-    : "min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]";
+    ? "min-w-0 max-w-[9.5rem] whitespace-normal break-words text-left text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)]"
+    : "min-w-0 flex-1 truncate text-left text-[0.75rem] leading-tight text-[var(--kanban-text)]";
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!(e.target instanceof Node)) return;
+      if (menuRef.current?.contains(e.target)) return;
+      setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   if (!canEdit) {
     return <span className={titleCls}>{columnTitle}</span>;
@@ -139,6 +160,7 @@ function ListColumnCell({
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
+            setMenuOpen(false);
             onRetreat?.();
           }}
         >
@@ -146,36 +168,86 @@ function ListColumnCell({
         </button>
       ) : null}
       {onMoveToColumn && columns.length > 0 ? (
-        <label className={`relative min-w-0 ${compact ? "max-w-[9.5rem]" : "flex-1"}`}>
-          <select
-            className={`${titleCls} w-full cursor-pointer appearance-none rounded border border-transparent bg-transparent py-0.5 pe-4 hover:border-[var(--kanban-border)] hover:bg-black/[0.04] focus:border-[var(--kanban-accent)] focus:outline-none dark:hover:bg-white/[0.06]`}
-            value={columnId}
+        <div
+          ref={menuRef}
+          className={`relative min-w-0 ${compact ? "" : "flex-1"}`}
+        >
+          <button
+            type="button"
+            data-no-touch-expand
+            data-list-row-control
+            className={`${titleCls} inline-flex w-full cursor-pointer items-center gap-1 rounded border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] px-1.5 py-0.5 pe-1 hover:border-[var(--kanban-accent)] focus:border-[var(--kanban-accent)] focus:outline-none`}
             title="Выбрать колонку"
             aria-label="Колонка"
-            onChange={(e) => {
-              const next = e.target.value;
-              if (next && next !== columnId) onMoveToColumn(next);
+            aria-haspopup="listbox"
+            aria-expanded={menuOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
             }}
           >
-            {columns.map((col) => (
-              <option key={col.id} value={col.id}>
-                {col.title}
-              </option>
-            ))}
-          </select>
-          <span
-            className="pointer-events-none absolute inset-y-0 right-0 flex items-center pe-0.5 text-[var(--kanban-text-muted)]"
-            aria-hidden
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+            <span className="min-w-0 flex-1 truncate">{columnTitle}</span>
+            <svg
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-3 w-3 shrink-0 text-[var(--kanban-text-muted)]"
+              aria-hidden
+            >
               <path
                 fillRule="evenodd"
                 d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
                 clipRule="evenodd"
               />
             </svg>
-          </span>
-        </label>
+          </button>
+          {menuOpen ? (
+            <ul
+              role="listbox"
+              className="absolute left-0 top-[calc(100%+2px)] z-[80] max-h-56 min-w-[12rem] overflow-y-auto rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-card-bg)] py-1 text-[0.75rem] text-[var(--kanban-text)] shadow-[var(--kanban-shadow-elevated)]"
+            >
+              {columns.map((col) => {
+                const active = col.id === columnId;
+                return (
+                  <li key={col.id} role="option" aria-selected={active}>
+                    <button
+                      type="button"
+                      className={`flex w-full px-2.5 py-1.5 text-left hover:bg-black/[0.06] dark:hover:bg-white/[0.08] ${
+                        active
+                          ? "bg-[color-mix(in_srgb,var(--kanban-accent)_18%,transparent)] font-medium text-[var(--kanban-accent)]"
+                          : ""
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(false);
+                        if (col.id !== columnId) onMoveToColumn(col.id);
+                      }}
+                    >
+                      {col.title}
+                    </button>
+                  </li>
+                );
+              })}
+              {onRequestStop ? (
+                <li
+                  role="option"
+                  className="mt-0.5 border-t border-[var(--kanban-border)] pt-0.5"
+                >
+                  <button
+                    type="button"
+                    className="flex w-full px-2.5 py-1.5 text-left font-medium text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpen(false);
+                      onRequestStop();
+                    }}
+                  >
+                    СТОП
+                  </button>
+                </li>
+              ) : null}
+            </ul>
+          ) : null}
+        </div>
       ) : (
         <span className={titleCls}>{columnTitle}</span>
       )}
@@ -191,6 +263,7 @@ function ListColumnCell({
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
+            setMenuOpen(false);
             onAdvance?.();
           }}
         >
@@ -606,6 +679,8 @@ type KanbanListViewProps = {
   onRetreatCardColumn?: (cardId: string) => void;
   /** Произвольная колонка (выпадающий список в ячейке). */
   onMoveCardToColumn?: (cardId: string, columnId: string) => void;
+  /** Перенос в СТОП из выпадающего списка колонки. */
+  onRequestStopCard?: (cardId: string) => void;
   canManageAssignees?: boolean;
   canManageParticipants?: boolean;
   onUpdateCardMembers?: (
@@ -636,6 +711,7 @@ export function KanbanListView({
   onAdvanceCardColumn,
   onRetreatCardColumn,
   onMoveCardToColumn,
+  onRequestStopCard,
   canManageAssignees = true,
   canManageParticipants = true,
   onUpdateCardMembers,
@@ -686,11 +762,6 @@ export function KanbanListView({
     },
     [onSortChangeProp],
   );
-
-  const { onPreviewMove, onPreviewLeave, previewNode } = useKanbanCardHoverPreview(true);
-  useEffect(() => {
-    if (expandedCardId) onPreviewLeave();
-  }, [expandedCardId, onPreviewLeave]);
 
   const rows = useMemo(
     () =>
@@ -889,6 +960,18 @@ export function KanbanListView({
               title: c.title,
             }));
             const initials = (ct?.name || "?").trim().slice(0, 1).toUpperCase();
+            const stopFromList = onRequestStopCard
+              ? () => {
+                  if (
+                    !window.confirm(
+                      "Перенести карточку в СТОП? Она исчезнет с дорожки, пока её не вернут.",
+                    )
+                  ) {
+                    return;
+                  }
+                  onRequestStopCard(card.id);
+                }
+              : undefined;
             const columnCell = (
               <ListColumnCell
                 columnTitle={columnTitle}
@@ -911,6 +994,7 @@ export function KanbanListView({
                     ? (nextColId) => onMoveCardToColumn(card.id, nextColId)
                     : undefined
                 }
+                onRequestStop={stopFromList}
               />
             );
             const columnCellCompact = (
@@ -936,6 +1020,7 @@ export function KanbanListView({
                     ? (nextColId) => onMoveCardToColumn(card.id, nextColId)
                     : undefined
                 }
+                onRequestStop={stopFromList}
               />
             );
 
@@ -951,11 +1036,6 @@ export function KanbanListView({
                   role="button"
                   tabIndex={0}
                   aria-expanded={expandedCardId === card.id}
-                  onMouseMove={(event) => {
-                    if (expandedCardId === card.id) return;
-                    onPreviewMove(card, event);
-                  }}
-                  onMouseLeave={onPreviewLeave}
                   onClick={(e) => {
                     if (eventTargetsListRowControl(e.target)) return;
                     toggleExpandedCard(card.id);
@@ -1324,7 +1404,6 @@ export function KanbanListView({
           }}
         />
       ) : null}
-      {previewNode}
       {mailOrder ? (
         <OrderSourceEmailsModal
           orderId={mailOrder.orderId}

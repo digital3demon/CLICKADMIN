@@ -3725,6 +3725,13 @@ export function KanbanApp({
                     }
                   : undefined
               }
+              onRequestStopCard={
+                kanbanCardPerms.stop
+                  ? (cardId) => {
+                      stopCard(cardId);
+                    }
+                  : undefined
+              }
               canManageAssignees={kanbanCardPerms.manageAssignees}
               canManageParticipants={kanbanCardPerms.manageParticipants}
               onUpdateCardMembers={applyCardMembersFromList}

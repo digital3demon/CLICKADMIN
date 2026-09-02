@@ -2842,7 +2842,13 @@ export function KanbanCardModal({
                     </button>
                   )}
                 </div>
-                <div className="grid min-h-0 gap-2 crm-t2:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)] crm-t2:items-start">
+                <div
+                  className={`grid min-h-0 gap-2 crm-t2:items-start ${
+                    embed
+                      ? "crm-t2:grid-cols-[minmax(0,1fr)_auto_minmax(10.5rem,34%)]"
+                      : "crm-t2:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)]"
+                  }`}
+                >
                   <div className="relative min-w-0">
                     <div
                       ref={descMeasureRef}
@@ -2930,68 +2936,67 @@ export function KanbanCardModal({
                     )}
                     </div>
                   </div>
+                  {embed ? (
+                    <div
+                      className="flex shrink-0 flex-row items-center justify-center gap-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 crm-t2:flex-col crm-t2:self-start"
+                      role="toolbar"
+                      aria-label="Действия карточки"
+                    >
+                      <button
+                        type="button"
+                        data-no-touch-expand
+                        title={
+                          canManageKanbanBlock
+                            ? blocked
+                              ? "Снять блокировку"
+                              : "Заблокировать карточку"
+                            : KANBAN_BLOCK_PERM_HINT
+                        }
+                        aria-label={
+                          blocked ? "Снять блокировку" : "Заблокировать карточку"
+                        }
+                        disabled={!canManageKanbanBlock}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={handleKanbanBlockToggle}
+                      >
+                        {blocked ? (
+                          <IconUnlock className="h-5 w-5" />
+                        ) : (
+                          <IconBrick className="h-5 w-5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        data-no-touch-expand
+                        title={
+                          showOrderMailButton
+                            ? (card.sourceEmailCount ?? 0) > 0
+                              ? `Письма наряда (${card.sourceEmailCount})`
+                              : "Письма наряда"
+                            : "Нет связанного наряда"
+                        }
+                        aria-label="Письма наряда"
+                        disabled={!showOrderMailButton}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setOrderMailOpen(true)}
+                      >
+                        <IconMail className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        data-no-touch-expand
+                        title="Скопировать ссылку на карточку"
+                        aria-label="Поделиться — копировать ссылку"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)]"
+                        onClick={() => onCopyCardLink(cardId)}
+                      >
+                        <IconLink className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ) : null}
                   <aside
                     className="flex min-h-[100px] flex-col rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 sm:min-h-[120px]"
                   >
-                    {embed ? (
-                      <div className="mb-2 flex shrink-0 flex-wrap items-stretch gap-1">
-                        <button
-                          type="button"
-                          data-no-touch-expand
-                          title={
-                            canManageKanbanBlock
-                              ? blocked
-                                ? "Снять блокировку"
-                                : "Заблокировать карточку"
-                              : KANBAN_BLOCK_PERM_HINT
-                          }
-                          aria-label={
-                            blocked ? "Снять блокировку" : "Заблокировать карточку"
-                          }
-                          disabled={!canManageKanbanBlock}
-                          className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-1.5 py-1 text-[0.62rem] font-medium leading-tight text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] disabled:cursor-not-allowed disabled:opacity-40"
-                          onClick={handleKanbanBlockToggle}
-                        >
-                          {blocked ? (
-                            <IconUnlock className="h-3.5 w-3.5 shrink-0" />
-                          ) : (
-                            <IconBrick className="h-3.5 w-3.5 shrink-0" />
-                          )}
-                          <span className="truncate">
-                            {blocked ? "Разблок." : "Блок."}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          data-no-touch-expand
-                          title={
-                            showOrderMailButton
-                              ? (card.sourceEmailCount ?? 0) > 0
-                                ? `Письма наряда (${card.sourceEmailCount})`
-                                : "Письма наряда"
-                              : "Нет связанного наряда"
-                          }
-                          aria-label="Письма наряда"
-                          disabled={!showOrderMailButton}
-                          className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-1.5 py-1 text-[0.62rem] font-medium leading-tight text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] disabled:cursor-not-allowed disabled:opacity-40"
-                          onClick={() => setOrderMailOpen(true)}
-                        >
-                          <IconMail className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">Письма</span>
-                        </button>
-                        <button
-                          type="button"
-                          data-no-touch-expand
-                          title="Скопировать ссылку на карточку"
-                          aria-label="Поделиться — копировать ссылку"
-                          className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-1.5 py-1 text-[0.62rem] font-medium leading-tight text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)]"
-                          onClick={() => onCopyCardLink(cardId)}
-                        >
-                          <IconLink className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">Ссылка</span>
-                        </button>
-                      </div>
-                    ) : null}
                     <div className="mb-1 shrink-0 text-[0.55rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                       Файлы наряда и чата
                     </div>
