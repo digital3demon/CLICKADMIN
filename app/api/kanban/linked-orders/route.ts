@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   ConstructionCategory,
   type KaitenTrackLane,
@@ -32,6 +32,7 @@ import {
  * GET linked-orders:
  * — без q: recent 200 + ids на доске + ?lanes= (наряды дорожки из БД, без поиска);
  * — q≥2: текст/суффикс, hydrateWhere (в т.ч. «Kaiten позже»);
+ * — detail=1: полный ряд + вложения; Kaiten mirror/files/ingest — только в after();
  * goneIds только по запрошенным ids (архив/отмена/нет в БД).
  */
 export const dynamic = "force-dynamic";
@@ -321,32 +322,38 @@ export async function GET(request: Request) {
           .filter(Boolean),
       ),
     ) as string[];
-    const [doctors, cardTypes, priceItems] = await Promise.all([
-      clientsPrisma.doctor.findMany({
-        where: { id: { in: doctorIds } },
-        select: { id: true, fullName: true },
-      }),
-      cardTypeIds.length
-        ? clientsPrisma.kaitenCardType.findMany({
-            where: { id: { in: cardTypeIds } },
-            select: { id: true, name: true },
-          })
-        : Promise.resolve([]),
-      priceListItemIds.length
-        ? pricingPrisma.priceListItem.findMany({
-            where: { id: { in: priceListItemIds } },
-            select: { id: true, name: true },
-          })
-        : Promise.resolve([]),
-    ]);
+    const [doctors, cardTypes, priceItems, tenantTagRow, existenceRows] =
+      await Promise.all([
+        clientsPrisma.doctor.findMany({
+          where: { id: { in: doctorIds } },
+          select: { id: true, fullName: true },
+        }),
+        cardTypeIds.length
+          ? clientsPrisma.kaitenCardType.findMany({
+              where: { id: { in: cardTypeIds } },
+              select: { id: true, name: true },
+            })
+          : Promise.resolve([]),
+        priceListItemIds.length
+          ? pricingPrisma.priceListItem.findMany({
+              where: { id: { in: priceListItemIds } },
+              select: { id: true, name: true },
+            })
+          : Promise.resolve([]),
+        ordersPrisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { kanbanAdminMentionTag: true },
+        }),
+        boardOrderIds.length > 0
+          ? ordersPrisma.order.findMany({
+              where: { tenantId, id: { in: boardOrderIds } },
+              select: { id: true, archivedAt: true, status: true },
+            })
+          : Promise.resolve([]),
+      ]);
     const doctorById = new Map(doctors.map((x) => [x.id, x]));
     const cardTypeById = new Map(cardTypes.map((x) => [x.id, x]));
     const priceItemById = new Map(priceItems.map((x) => [x.id, x]));
-
-    const tenantTagRow = await ordersPrisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { kanbanAdminMentionTag: true },
-    });
 
     const orders: KaitenLinkedOrderForKanban[] = rows.map((o) => {
       const invId = o.invoiceAttachmentId;
@@ -437,77 +444,76 @@ export async function GET(request: Request) {
       };
     });
 
-    if (detailHydrate) {
-    void (async () => {
-      try {
-        const auth = getKaitenRestAuth();
-        if (!auth) return;
-        const missingMirror = rows
-          .filter((row) => {
-            if (row.kaitenCardId == null || !("kaitenCardDescriptionMirror" in row)) {
-              return false;
+    // Фон после ответа: не конкурировать с detail=1 за Kaiten/БД до JSON.
+    after(() => {
+      void (async () => {
+        if (detailHydrate) {
+          try {
+            const auth = getKaitenRestAuth();
+            if (auth) {
+              const missingMirror = rows
+                .filter((row) => {
+                  if (
+                    row.kaitenCardId == null ||
+                    !("kaitenCardDescriptionMirror" in row)
+                  ) {
+                    return false;
+                  }
+                  const mirror = row.kaitenCardDescriptionMirror;
+                  return typeof mirror !== "string" || !mirror.trim();
+                })
+                .map((o) => o.id)
+                .slice(0, 5);
+              if (missingMirror.length > 0) {
+                await syncKaitenColumnTitlesForOrderIds(
+                  ordersPrisma,
+                  auth,
+                  missingMirror,
+                  { includeComments: false },
+                );
+              }
             }
-            const mirror = row.kaitenCardDescriptionMirror;
-            return typeof mirror !== "string" || !mirror.trim();
-          })
-          .map((o) => o.id)
-          .slice(0, 5);
-        if (missingMirror.length > 0) {
-          await syncKaitenColumnTitlesForOrderIds(ordersPrisma, auth, missingMirror, {
-            includeComments: false,
-          });
+          } catch (e) {
+            console.error("[kanban/linked-orders] description mirror sync", e);
+          }
+          try {
+            const pullIds = rows
+              .filter((o) => o.kaitenCardId != null)
+              .map((o) => o.id)
+              .slice(0, 3);
+            for (const id of pullIds) {
+              await importMissingKaitenFilesForOrder(id, {
+                prisma: ordersPrisma,
+                limit: 4,
+              });
+            }
+          } catch (e) {
+            console.error("[kanban/linked-orders] kaiten file import", e);
+          }
         }
-      } catch (e) {
-        console.error("[kanban/linked-orders] description mirror sync", e);
-      }
-    })();
-
-    void (async () => {
-      try {
-        const pullIds = rows
-          .filter((o) => o.kaitenCardId != null)
-          .map((o) => o.id)
-          .slice(0, 3);
-        for (const id of pullIds) {
-          await importMissingKaitenFilesForOrder(id, { prisma: ordersPrisma, limit: 4 });
+        try {
+          const labTag = tenantTagRow?.kanbanAdminMentionTag;
+          for (const o of rows) {
+            if (o.kaitenCardId == null) continue;
+            const snap = getKaitenSnapshotCache(o.id);
+            if (snap == null) continue;
+            const comm = kaitenCommentsForSyncFromSnapshotPayload(snap);
+            await ingestKaitenCommentsForOrder({
+              prisma: ordersPrisma,
+              tenantId,
+              orderId: o.id,
+              parsed: comm,
+              kanbanAdminMentionTag: labTag,
+              skipCorrections: true,
+              skipProsthetics: true,
+              skipKanbanMirror: true,
+            });
+          }
+        } catch (e) {
+          console.error("[kanban/linked-orders] lab mention from snapshot", e);
         }
-      } catch (e) {
-        console.error("[kanban/linked-orders] kaiten file import", e);
-      }
-    })();
-    }
-
-    void (async () => {
-      try {
-        const labTag = tenantTagRow?.kanbanAdminMentionTag;
-        for (const o of rows) {
-          if (o.kaitenCardId == null) continue;
-          const snap = getKaitenSnapshotCache(o.id);
-          if (snap == null) continue;
-          const comm = kaitenCommentsForSyncFromSnapshotPayload(snap);
-          await ingestKaitenCommentsForOrder({
-            prisma: ordersPrisma,
-            tenantId,
-            orderId: o.id,
-            parsed: comm,
-            kanbanAdminMentionTag: labTag,
-            skipCorrections: true,
-            skipProsthetics: true,
-            skipKanbanMirror: true,
-          });
-        }
-      } catch (e) {
-        console.error("[kanban/linked-orders] lab mention from snapshot", e);
-      }
-    })();
-
-    const existenceRows =
-      boardOrderIds.length > 0
-        ? await ordersPrisma.order.findMany({
-            where: { tenantId, id: { in: boardOrderIds } },
-            select: { id: true, archivedAt: true, status: true },
-          })
-        : [];
+      })();
+    });
 
     return NextResponse.json({
       orders,

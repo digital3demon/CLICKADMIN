@@ -56,7 +56,6 @@ import { stripPersonalKanbanUiForTenant } from "@/lib/kanban/user-board-ui-state
 import { stripLinkedOrderCardsForTenantChrome } from "@/lib/kanban/kanban-tenant-chrome";
 import { clientStatePayloadTooLarge } from "@/lib/client-state-limits";
 import { kanbanCardMatchesSearch } from "@/lib/kanban/kanban-card-search";
-import { normalizeCrmUserIds } from "@/lib/kanban/crm-board-tile";
 import {
   collectCardTypeDefaultLanes,
   defaultTrackLaneForCardTypeName,
@@ -3094,6 +3093,21 @@ type KanbanMembersSnap = {
   stageDue: string;
 };
 
+/** Локально: нельзя импортировать из crm-board-tile (цикл model ↔ tile). */
+function normalizeLinkedOrderMemberIds(
+  raw: readonly string[] | null | undefined,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw || []) {
+    const id = String(item || "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 function snapshotKanbanMembersByOrderId(
   state: KanbanAppState,
 ): Map<string, KanbanMembersSnap> {
@@ -3260,16 +3274,20 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       restoreKanbanMembersFromSnap(foundEff.card, membersByOrder.get(row.id));
       if (
         !hasKanbanCardMembers(foundEff.card) &&
-        (normalizeCrmUserIds(row.assignees).length > 0 ||
-          normalizeCrmUserIds(row.participants).length > 0)
+        (normalizeLinkedOrderMemberIds(row.assignees).length > 0 ||
+          normalizeLinkedOrderMemberIds(row.participants).length > 0)
       ) {
-        foundEff.card.assignees = normalizeCrmUserIds(row.assignees);
-        foundEff.card.participants = normalizeCrmUserIds(row.participants);
+        foundEff.card.assignees = normalizeLinkedOrderMemberIds(row.assignees);
+        foundEff.card.participants = normalizeLinkedOrderMemberIds(
+          row.participants,
+        );
       }
     } else {
       const kept = membersByOrder.get(row.id);
-      const fromOrderAssignees = normalizeCrmUserIds(row.assignees);
-      const fromOrderParticipants = normalizeCrmUserIds(row.participants);
+      const fromOrderAssignees = normalizeLinkedOrderMemberIds(row.assignees);
+      const fromOrderParticipants = normalizeLinkedOrderMemberIds(
+        row.participants,
+      );
       const card = createCard({
         id: cardDbId,
         title,

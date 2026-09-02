@@ -899,25 +899,25 @@ export function KanbanCardModal({
     if (linkedHydrateKeyRef.current === hydrateKey) return;
 
     let cancelled = false;
-    setLinkedDetailLoading(true);
+    // Оверлей только если на карточке ещё нет описания/файлов — иначе мешает читать.
+    const hasWarmDetail =
+      Boolean((card?.description || "").trim()) ||
+      (Array.isArray(card?.files) && card.files.length > 0);
+    setLinkedDetailLoading(!hasWarmDetail);
     setKaitenChatLoading(true);
     const alreadyLinked =
       card?.kaitenCardId != null && Number.isFinite(card.kaitenCardId);
 
     void (async () => {
-      // Фаза 1: описание/файлы/чат из CRM параллельно — оверлей снимаем после неё.
-      const [detailRes, storedAct, snap] = await Promise.all([
-        fetch(
+      // Фаза 1: detail (файлы/описание) — оверлей снимаем сразу после него.
+      // Активность и зеркало чата идут параллельно, но не держат «Загрузка…».
+      const detailPromise = (async () => {
+        const detailRes = await fetch(
           `/api/kanban/linked-orders?ids=${encodeURIComponent(linkedOrderId)}&detail=1`,
           { credentials: "include" },
-        ).catch(() => null),
-        readClientState("tenant", kanbanOrderActivityStateKey(linkedOrderId)),
-        fetchKanbanMirrorCommentsForOrder(linkedOrderId),
-      ]);
-      if (cancelled) return;
-
-      try {
-        if (detailRes?.ok) {
+        ).catch(() => null);
+        if (cancelled || !detailRes?.ok) return;
+        try {
           const detailJson = (await detailRes.json()) as {
             orders?: KaitenLinkedOrderForKanban[];
           };
@@ -937,10 +937,18 @@ export function KanbanCardModal({
               }
             });
           }
+        } catch {
+          /* offline / bad json */
         }
-      } catch {
-        /* offline / bad json */
-      }
+      })().finally(() => {
+        if (!cancelled) setLinkedDetailLoading(false);
+      });
+
+      const [storedAct, snap] = await Promise.all([
+        readClientState("tenant", kanbanOrderActivityStateKey(linkedOrderId)),
+        fetchKanbanMirrorCommentsForOrder(linkedOrderId),
+      ]);
+      await detailPromise;
       if (cancelled) return;
 
       const fromStore = parseStoredKanbanOrderActivity(storedAct);
@@ -983,7 +991,6 @@ export function KanbanCardModal({
       }
 
       if (cancelled) return;
-      setLinkedDetailLoading(false);
 
       const linkedKaiten = alreadyLinked || (snap.ok && snap.linkedKaiten);
       const needsKaitenChat =

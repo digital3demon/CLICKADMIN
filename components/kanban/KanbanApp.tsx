@@ -843,53 +843,86 @@ export function KanbanApp({
   }, [appState, isDemo, kanbanStateReady]);
 
   useEffect(() => {
-    try {
-      const loaded = loadKanbanState(isDemo);
-      const params = new URLSearchParams(window.location.search);
-      const bid = params.get("board");
-      let next = isDemo ? normalizeDemoKanbanAppState(loaded) : loaded;
-      if (!isDemo) {
-        const uiLocal = loadKanbanBoardUiLocal();
-        if (uiLocal) {
-          next = applyKanbanBoardUiState(next, uiLocal);
-          if (uiLocal.lastRealBoardId) lastRealBoardIdRef.current = uiLocal.lastRealBoardId;
-        }
-      }
-      if (
-        !isDemo &&
-        bid &&
-        (next.boards.some((b) => b.id === bid) || isKanbanAggregateBoardId(bid))
-      ) {
-        next = structuredClone(next);
-        next.activeBoardId = bid;
-      }
-      if (!isDemo) {
-        applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
-        const cachedTiles = loadCrmBoardTilesCache(next.activeBoardId);
-        if (cachedTiles.length > 0) {
-          const replaceBoardId = isKanbanAggregateBoardId(next.activeBoardId)
-            ? null
-            : next.activeBoardId;
-          next = applyCrmBoardTilesToAppState(next, cachedTiles, { replaceBoardId });
-          applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
-          const snaps = appointmentSnapsFromCrmTiles(cachedTiles);
-          if (snaps.size > 0) {
-            setLinkedAppointmentByOrderId(snaps);
+    let cancelled = false;
+    let tilesTimer: number | null = null;
+    /**
+     * Не блокируем первый кадр «Загрузка…» парсом localStorage + CRM tiles.
+     * Цикл model↔crm-board-tile уже снят; здесь — мягкий cold start.
+     */
+    const bootTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      try {
+        const loaded = loadKanbanState(isDemo);
+        const params = new URLSearchParams(window.location.search);
+        const bid = params.get("board");
+        let next = isDemo ? normalizeDemoKanbanAppState(loaded) : loaded;
+        if (!isDemo) {
+          const uiLocal = loadKanbanBoardUiLocal();
+          if (uiLocal) {
+            next = applyKanbanBoardUiState(next, uiLocal);
+            if (uiLocal.lastRealBoardId) {
+              lastRealBoardIdRef.current = uiLocal.lastRealBoardId;
+            }
           }
         }
+        if (
+          !isDemo &&
+          bid &&
+          (next.boards.some((b) => b.id === bid) || isKanbanAggregateBoardId(bid))
+        ) {
+          next = structuredClone(next);
+          next.activeBoardId = bid;
+        }
+        if (!isDemo) {
+          applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
+        }
+        const c = kanbanCardIdFromSearchParams(params);
+        const pending = listPendingKanbanColumnMoves();
+        setAppState(applyPendingKanbanColumnMoves(next, pending));
+        if (c) setCardModalId(c);
+
+        if (!isDemo) {
+          const boardIdForTiles = next.activeBoardId;
+          tilesTimer = window.setTimeout(() => {
+            if (cancelled) return;
+            const cachedTiles = loadCrmBoardTilesCache(boardIdForTiles);
+            if (cachedTiles.length === 0) return;
+            const snaps = appointmentSnapsFromCrmTiles(cachedTiles);
+            if (snaps.size > 0) setLinkedAppointmentByOrderId(snaps);
+            setAppState((prev) => {
+              if (!prev || cancelled) return prev;
+              const replaceBoardId = isKanbanAggregateBoardId(prev.activeBoardId)
+                ? null
+                : prev.activeBoardId;
+              const merged = applyCrmBoardTilesToAppState(prev, cachedTiles, {
+                replaceBoardId,
+              });
+              applyKanbanCardHeadsCache(merged, loadKanbanCardHeadsCache());
+              return applyPendingKanbanColumnMoves(
+                merged,
+                listPendingKanbanColumnMoves(),
+              );
+            });
+          }, 0);
+        }
+      } catch (err) {
+        console.error("[kanban] local hydrate failed", err);
+        if (cancelled) return;
+        setAppState(
+          applyPendingKanbanColumnMoves(
+            isDemo
+              ? normalizeDemoKanbanAppState(defaultAppState())
+              : defaultAppState(),
+            listPendingKanbanColumnMoves(),
+          ),
+        );
       }
-      const c = kanbanCardIdFromSearchParams(params);
-      setAppState(applyPendingKanbanColumnMoves(next, listPendingKanbanColumnMoves()));
-      if (c) setCardModalId(c);
-    } catch (err) {
-      console.error("[kanban] local hydrate failed", err);
-      setAppState(
-        applyPendingKanbanColumnMoves(
-          isDemo ? normalizeDemoKanbanAppState(defaultAppState()) : defaultAppState(),
-          listPendingKanbanColumnMoves(),
-        ),
-      );
-    }
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(bootTimer);
+      if (tilesTimer != null) window.clearTimeout(tilesTimer);
+    };
   }, [isDemo]);
 
   useEffect(() => {
@@ -1429,18 +1462,15 @@ export function KanbanApp({
       canUserAccessBoard(b, kanbanSessionUserId, kanbanSessionRole),
     );
   }, [appState, kanbanSessionUserId, kanbanSessionRole]);
-  const searchView = useMemo(
-    () =>
-      appState
-        ? buildKanbanDisplayView(appState, {
-            sessionUserId: kanbanSessionUserId,
-            sessionUserRole: kanbanSessionRole,
-            stickyLinkedOrderIds,
-            memberHeads: loadKanbanCardHeadsCache(),
-          })
-        : null,
-    [appState, kanbanSessionUserId, kanbanSessionRole, stickyLinkedOrderIds],
-  );
+  const searchView = useMemo(() => {
+    if (!appState) return null;
+    return buildKanbanDisplayView(appState, {
+      sessionUserId: kanbanSessionUserId,
+      sessionUserRole: kanbanSessionRole,
+      stickyLinkedOrderIds,
+      memberHeads: loadKanbanCardHeadsCache(),
+    });
+  }, [appState, kanbanSessionUserId, kanbanSessionRole, stickyLinkedOrderIds]);
   const displayBoard = searchView?.displayBoard ?? null;
   const cardHomeBoardId = searchView?.cardHomeBoardId;
 
