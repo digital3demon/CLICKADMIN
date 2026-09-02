@@ -3712,6 +3712,19 @@ export function KanbanApp({
               onAdvanceCardColumn={
                 kanbanCardPerms.moveColumns ? moveCardToNextStage : undefined
               }
+              onRetreatCardColumn={
+                kanbanCardPerms.moveColumns ? moveCardToPrevStage : undefined
+              }
+              onMoveCardToColumn={
+                kanbanCardPerms.moveColumns
+                  ? (cardId, columnId) => {
+                      moveCardToColumn(cardId, columnId);
+                      setListExpandedCardId((cur) =>
+                        cur === cardId ? cardId : cur,
+                      );
+                    }
+                  : undefined
+              }
               canManageAssignees={kanbanCardPerms.manageAssignees}
               canManageParticipants={kanbanCardPerms.manageParticipants}
               onUpdateCardMembers={applyCardMembersFromList}

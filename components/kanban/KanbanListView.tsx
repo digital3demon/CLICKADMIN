@@ -68,6 +68,139 @@ function IconChevronRight(props: { className?: string }) {
   );
 }
 
+function IconChevronLeft(props: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className={props.className}
+      aria-hidden
+    >
+      <path
+        fillRule="evenodd"
+        d="M11.78 5.22a.75.75 0 010 1.06L8.06 10l3.72 3.72a.75.75 0 11-1.06 1.06l-4.25-4.25a.75.75 0 010-1.06l4.25-4.25a.75.75 0 011.06 0z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+/** Ячейка «Колонка»: select + стрелки назад/вперёд. */
+function ListColumnCell({
+  columnTitle,
+  columnId,
+  columns,
+  canRetreat,
+  canAdvance,
+  onRetreat,
+  onAdvance,
+  onMoveToColumn,
+  compact = false,
+}: {
+  columnTitle: string;
+  columnId: string;
+  columns: Array<{ id: string; title: string }>;
+  canRetreat: boolean;
+  canAdvance: boolean;
+  onRetreat?: () => void;
+  onAdvance?: () => void;
+  onMoveToColumn?: (columnId: string) => void;
+  compact?: boolean;
+}) {
+  const canEdit = Boolean(onMoveToColumn || onAdvance || onRetreat);
+  const iconCls = compact ? "h-3.5 w-3.5" : "h-4 w-4";
+  const btnCls = compact
+    ? "shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
+    : "shrink-0 rounded p-1.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35";
+  const titleCls = compact
+    ? "min-w-0 flex-1 whitespace-normal break-words text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)]"
+    : "min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]";
+
+  if (!canEdit) {
+    return <span className={titleCls}>{columnTitle}</span>;
+  }
+
+  return (
+    <div
+      className={`inline-flex min-w-0 items-center gap-0.5 ${compact ? "" : "w-full"}`}
+      data-list-row-control
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {onRetreat || onAdvance ? (
+        <button
+          type="button"
+          data-no-touch-expand
+          data-list-row-control
+          className={btnCls}
+          title="Предыдущая колонка"
+          aria-label="Переместить в предыдущую колонку"
+          disabled={!onRetreat || !canRetreat}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetreat?.();
+          }}
+        >
+          <IconChevronLeft className={iconCls} />
+        </button>
+      ) : null}
+      {onMoveToColumn && columns.length > 0 ? (
+        <label className={`relative min-w-0 ${compact ? "max-w-[9.5rem]" : "flex-1"}`}>
+          <select
+            className={`${titleCls} w-full cursor-pointer appearance-none rounded border border-transparent bg-transparent py-0.5 pe-4 hover:border-[var(--kanban-border)] hover:bg-black/[0.04] focus:border-[var(--kanban-accent)] focus:outline-none dark:hover:bg-white/[0.06]`}
+            value={columnId}
+            title="Выбрать колонку"
+            aria-label="Колонка"
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next && next !== columnId) onMoveToColumn(next);
+            }}
+          >
+            {columns.map((col) => (
+              <option key={col.id} value={col.id}>
+                {col.title}
+              </option>
+            ))}
+          </select>
+          <span
+            className="pointer-events-none absolute inset-y-0 right-0 flex items-center pe-0.5 text-[var(--kanban-text-muted)]"
+            aria-hidden
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+              <path
+                fillRule="evenodd"
+                d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </span>
+        </label>
+      ) : (
+        <span className={titleCls}>{columnTitle}</span>
+      )}
+      {onRetreat || onAdvance ? (
+        <button
+          type="button"
+          data-no-touch-expand
+          data-list-row-control
+          className={btnCls}
+          title="Следующая колонка"
+          aria-label="Переместить в следующую колонку"
+          disabled={!onAdvance || !canAdvance}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdvance?.();
+          }}
+        >
+          <IconChevronRight className={iconCls} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function ListInlineExpandedBody({ card }: { card: KanbanCard }) {
   const body = kanbanCardHoverPreviewBody(card);
   const blockReason = kanbanCardHoverPreviewBlockReason(card);
@@ -469,6 +602,10 @@ type KanbanListViewProps = {
   cardHomeBoardId?: Map<string, string>;
   /** Следующая колонка на доске-владельце (как «вперёд» на доске). */
   onAdvanceCardColumn?: (cardId: string) => void;
+  /** Предыдущая колонка на доске-владельце. */
+  onRetreatCardColumn?: (cardId: string) => void;
+  /** Произвольная колонка (выпадающий список в ячейке). */
+  onMoveCardToColumn?: (cardId: string, columnId: string) => void;
   canManageAssignees?: boolean;
   canManageParticipants?: boolean;
   onUpdateCardMembers?: (
@@ -497,6 +634,8 @@ export function KanbanListView({
   board,
   cardHomeBoardId,
   onAdvanceCardColumn,
+  onRetreatCardColumn,
+  onMoveCardToColumn,
   canManageAssignees = true,
   canManageParticipants = true,
   onUpdateCardMembers,
@@ -724,7 +863,7 @@ export function KanbanListView({
           {listPadTop > 0 ? (
             <div className="sm:col-span-full" style={{ height: listPadTop }} aria-hidden />
           ) : null}
-          {listSlice.map(({ card, columnTitle, homeBoardId }) => {
+          {listSlice.map(({ card, columnTitle, columnId, homeBoardId }) => {
             const rowBoard =
               appState.boards.find((b) => b.id === homeBoardId) ?? board;
             const accent = getCardTypeAccent(rowBoard, card.cardTypeId);
@@ -739,15 +878,75 @@ export function KanbanListView({
             const participants = card.participants || [];
             const stageDue = getKanbanStageDue(card);
             const homeColIdx = homeColumnIndexForCard(rowBoard, card.id);
+            const canRetreat = homeColIdx > 0;
             const canAdvance =
               homeColIdx >= 0 &&
               homeColIdx < rowBoard.columns.length - 1;
+            const homeColumnId =
+              homeColIdx >= 0 ? rowBoard.columns[homeColIdx].id : columnId;
+            const columnOptions = rowBoard.columns.map((c) => ({
+              id: c.id,
+              title: c.title,
+            }));
             const initials = (ct?.name || "?").trim().slice(0, 1).toUpperCase();
+            const columnCell = (
+              <ListColumnCell
+                columnTitle={columnTitle}
+                columnId={homeColumnId}
+                columns={columnOptions}
+                canRetreat={canRetreat}
+                canAdvance={canAdvance}
+                onRetreat={
+                  onRetreatCardColumn
+                    ? () => onRetreatCardColumn(card.id)
+                    : undefined
+                }
+                onAdvance={
+                  onAdvanceCardColumn
+                    ? () => onAdvanceCardColumn(card.id)
+                    : undefined
+                }
+                onMoveToColumn={
+                  onMoveCardToColumn
+                    ? (nextColId) => onMoveCardToColumn(card.id, nextColId)
+                    : undefined
+                }
+              />
+            );
+            const columnCellCompact = (
+              <ListColumnCell
+                compact
+                columnTitle={columnTitle}
+                columnId={homeColumnId}
+                columns={columnOptions}
+                canRetreat={canRetreat}
+                canAdvance={canAdvance}
+                onRetreat={
+                  onRetreatCardColumn
+                    ? () => onRetreatCardColumn(card.id)
+                    : undefined
+                }
+                onAdvance={
+                  onAdvanceCardColumn
+                    ? () => onAdvanceCardColumn(card.id)
+                    : undefined
+                }
+                onMoveToColumn={
+                  onMoveCardToColumn
+                    ? (nextColId) => onMoveCardToColumn(card.id, nextColId)
+                    : undefined
+                }
+              />
+            );
 
             return (
                 <article
                   key={card.id}
-                  className="relative w-full min-w-0 cursor-pointer overflow-x-hidden overflow-y-visible rounded-md border-y border-r border-black/[0.1] border-l-[3px] bg-[var(--kanban-card-bg)] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-center sm:overflow-x-visible"
+                  className={`relative w-full min-w-0 cursor-pointer overflow-x-hidden overflow-y-visible rounded-md border-y border-r border-black/[0.1] border-l-[3px] shadow-[var(--kanban-shadow)] transition-[box-shadow,border-color] hover:border-y-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:border-r-[color-mix(in_srgb,var(--kanban-accent)_22%,transparent)] hover:shadow-[var(--kanban-shadow-elevated)] dark:border-y-white/[0.1] dark:border-r-white/[0.1] sm:col-span-full sm:grid sm:grid-cols-subgrid sm:items-center sm:overflow-x-visible ${
+                    expandedCardId === card.id
+                      ? "bg-transparent"
+                      : "bg-[var(--kanban-card-bg)]"
+                  }`}
                   style={{ borderLeftColor: accent }}
                   role="button"
                   tabIndex={0}
@@ -769,7 +968,13 @@ export function KanbanListView({
                     }
                   }}
                 >
-                  <div className={LIST_ROW_INNER}>
+                  <div
+                    className={`${LIST_ROW_INNER} ${
+                      expandedCardId === card.id
+                        ? "rounded-t-md bg-[var(--kanban-card-bg)]"
+                        : ""
+                    }`}
+                  >
                     {/* Mobile: тип | контент; отв./участн. справа сверху */}
                     <div className="flex min-w-0 sm:contents">
                       <div
@@ -899,27 +1104,7 @@ export function KanbanListView({
                                 aria-hidden
                               />
                               <span className="inline-flex min-w-0 items-center gap-0.5">
-                                <span className="whitespace-normal break-words text-[0.72rem] font-semibold leading-tight text-[var(--kanban-text)]">
-                                  {columnTitle}
-                                </span>
-                                {onAdvanceCardColumn ? (
-                                  <button
-                                    type="button"
-                                    data-no-touch-expand
-                                    data-list-row-control
-                                    className="shrink-0 rounded p-0.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:opacity-30"
-                                    title="Следующая колонка"
-                                    aria-label="Переместить в следующую колонку"
-                                    disabled={!canAdvance}
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onAdvanceCardColumn(card.id);
-                                    }}
-                                  >
-                                    <IconChevronRight className="h-3.5 w-3.5" />
-                                  </button>
-                                ) : null}
+                                {columnCellCompact}
                               </span>
                             </div>
                           </div>
@@ -1029,26 +1214,7 @@ export function KanbanListView({
                       </div>
                     </div>
                     <div className="hidden min-h-[2rem] sm:flex sm:min-w-0 sm:items-center sm:gap-1 sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1.5 sm:py-1">
-                      <span className="min-w-0 flex-1 truncate text-[0.75rem] leading-tight text-[var(--kanban-text)]">
-                        {columnTitle}
-                      </span>
-                      {onAdvanceCardColumn ? (
-                        <button
-                          type="button"
-                          data-list-row-control
-                          className="shrink-0 rounded p-1.5 text-[var(--kanban-text-muted)] hover:bg-black/[0.06] hover:text-[var(--kanban-accent)] dark:hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-35"
-                          title="Следующая колонка"
-                          aria-label="Переместить в следующую колонку"
-                          disabled={!canAdvance}
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAdvanceCardColumn(card.id);
-                          }}
-                        >
-                          <IconChevronRight className="h-4 w-4" />
-                        </button>
-                      ) : null}
+                      {columnCell}
                     </div>
                     <div
                       className="hidden sm:flex sm:items-center sm:self-stretch sm:border-l sm:border-[var(--kanban-border)] sm:px-1 sm:py-1"
@@ -1118,7 +1284,7 @@ export function KanbanListView({
                   </div>
                   {expandedCardId === card.id ? (
                     <div
-                      className="w-full max-w-full border-t border-[var(--kanban-border)] shell-laptop:w-[70%] shell-laptop:max-w-[70%] sm:col-span-full"
+                      className="w-fit max-w-full border-t border-[var(--kanban-border)] bg-[var(--kaiten-modal-bg)] sm:col-span-full sm:justify-self-start"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
                     >

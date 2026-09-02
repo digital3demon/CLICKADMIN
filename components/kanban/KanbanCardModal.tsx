@@ -784,6 +784,12 @@ export function KanbanCardModal({
 
   const recomputeDescCollapse = useCallback(() => {
     if (descUserOverrideRef.current) return;
+    // Список (embed): описание всегда развёрнуто — карточка растёт по высоте.
+    if (embed) {
+      setDescCanCollapse(false);
+      setDescExpanded(true);
+      return;
+    }
     const overlay = overlayRef.current;
     const measure = descMeasureRef.current;
     const box = descBoxRef.current;
@@ -808,7 +814,7 @@ export function KanbanCardModal({
     const needs = kanbanCardDescriptionNeedsCollapse(fullH, available);
     setDescCanCollapse(needs);
     setDescExpanded(!needs);
-  }, [descDraft]);
+  }, [descDraft, embed]);
 
   useLayoutEffect(() => {
     recomputeDescCollapse();
@@ -2001,7 +2007,7 @@ export function KanbanCardModal({
       ref={overlayRef}
       className={
         embed
-          ? "kanban-root relative z-0 flex min-h-0 w-full flex-col overflow-visible bg-transparent p-0"
+          ? "kanban-root relative z-0 flex min-h-0 w-fit max-w-full flex-col overflow-visible bg-transparent p-0"
           : "kanban-root fixed inset-0 z-[200] flex overflow-hidden max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
       }
       role={embed ? "region" : "dialog"}
@@ -2187,7 +2193,7 @@ export function KanbanCardModal({
         ref={panelRef}
         className={
           embed
-            ? "flex w-full min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
+            ? "flex w-fit min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
             : "relative flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         }
         onMouseDown={(e) => e.stopPropagation()}
@@ -2274,7 +2280,7 @@ export function KanbanCardModal({
         <div
           className={
             embed
-              ? "relative flex min-h-0 w-full max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
+              ? "relative flex min-h-0 w-fit max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
               : `relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
                   blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
                 }`
@@ -2529,13 +2535,13 @@ export function KanbanCardModal({
 
           <div
             className={`flex min-h-0 max-sm:flex-col sm:flex-row sm:items-stretch ${
-              embed ? "w-full min-w-0 max-w-full" : "flex-1"
+              embed ? "w-fit min-w-0 max-w-full" : "flex-1"
             }`}
           >
             <div
               className={`flex min-h-0 min-w-0 flex-col ${
                 embed
-                  ? "overflow-visible"
+                  ? "w-[min(100%,28rem)] overflow-visible sm:w-[min(36rem,52vw)] sm:max-w-[36rem] sm:shrink-0"
                   : "sm:flex-1 sm:overflow-y-auto sm:overscroll-contain"
               } ${rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"}`}
             >
@@ -2849,7 +2855,7 @@ export function KanbanCardModal({
                     {descExpanded ? (
                       <LinkifiedTextarea
                         className={baseInput}
-                        rows={3}
+                        rows={embed ? 8 : 3}
                         value={descDraft}
                         onChange={setDescDraft}
                         onBlur={() => {
@@ -3243,7 +3249,11 @@ export function KanbanCardModal({
             </div>
 
             <div
-              className={`flex w-full min-h-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l sm:border-t-0 ${
+              className={`flex w-full min-h-0 flex-col overflow-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:border-l sm:border-t-0 ${
+                embed
+                  ? "sm:w-[22.5rem] sm:max-w-[22.5rem] sm:shrink-0"
+                  : "sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0"
+              } ${
                 rightTab === "card"
                   ? "max-sm:hidden"
                   : embed
@@ -3696,7 +3706,7 @@ function ChatPanel({
   onFilesDropped,
   onOpenAttachment,
 }: {
-  /** Список: фикс. высота ленты ~2–3 сообщения, без раздува карточки. */
+  /** Список: фикс. высота ленты ~5–7 сообщений. */
   compact?: boolean;
   card: KanbanCard;
   board: KanbanBoard;
@@ -3914,7 +3924,7 @@ function ChatPanel({
       ) : null}
       <div
         className={`min-h-0 overflow-y-auto overscroll-contain px-2 py-2 ${
-          compact ? "h-[12rem] max-h-[12rem] shrink-0" : "flex-1"
+          compact ? "h-[26rem] max-h-[26rem] shrink-0" : "flex-1"
         }`}
       >
         {chatBlocks.map((block) => {
