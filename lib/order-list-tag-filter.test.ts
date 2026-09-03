@@ -10,6 +10,7 @@ import {
   parseKaitenTrackLaneValue,
   parseListTagParam,
   relatedOrdersListTagQuickFilters,
+  LIST_TAG_KAITEN_BLOCKED,
   LIST_TAG_PROSTHETICS_PENDING,
   LIST_TAG_WAIT_PAYMENT,
 } from "@/lib/order-list-tag-filter";
@@ -74,6 +75,16 @@ describe("parseListTagParam / urgent", () => {
     });
     expect(humanListTagLabel({ kind: "waitPayment" })).toBe("ЖДЕМ ОПЛАТУ");
     expect(listTagWhere({ kind: "waitPayment" }).listCustomTags).toBeTruthy();
+  });
+
+  it("kaiten-blocked: фильтр и подпись «ЗАБЛОКИРОВАНО»", () => {
+    expect(parseListTagParam(LIST_TAG_KAITEN_BLOCKED)).toEqual({
+      kind: "kaitenBlocked",
+    });
+    expect(humanListTagLabel({ kind: "kaitenBlocked" })).toBe("ЗАБЛОКИРОВАНО");
+    expect(listTagWhere({ kind: "kaitenBlocked" })).toEqual({
+      kaitenBlocked: true,
+    });
   });
 });
 

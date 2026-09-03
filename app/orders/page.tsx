@@ -534,8 +534,9 @@ export default async function OrdersPage({
 
   let labMentionCount = 0;
   let waitPaymentCount = 0;
+  let blockedCount = 0;
   if (tenantId) {
-    [labMentionCount, waitPaymentCount] = await Promise.all([
+    [labMentionCount, waitPaymentCount, blockedCount] = await Promise.all([
       countOrdersWithPendingKaitenLabMentionForUser(
         ordersPrisma,
         statusChipCountWhere,
@@ -543,6 +544,9 @@ export default async function OrdersPage({
       ),
       ordersPrisma.order.count({
         where: { AND: [statusChipCountWhere, waitPaymentListTagWhere()] },
+      }),
+      ordersPrisma.order.count({
+        where: { AND: [statusChipCountWhere, { kaitenBlocked: true }] },
       }),
     ]);
   }
@@ -896,6 +900,26 @@ export default async function OrdersPage({
               </span>
             </Link>
           ) : null}
+          <Link
+            href={ordersListHref({
+              limit: pageSize,
+              ...listHrefCommon,
+              tag: LIST_TAG_KAITEN_BLOCKED,
+            })}
+            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
+              activeFilter?.kind === "kaitenBlocked"
+                ? "border-red-500 bg-red-500 text-white ring-2 ring-red-400/90 dark:border-red-400 dark:bg-red-600 dark:text-red-50 dark:ring-red-400/80"
+                : "border-red-400/80 bg-red-200/90 text-red-950 hover:bg-red-200 dark:border-red-500/70 dark:bg-red-950/50 dark:text-red-100 dark:hover:bg-red-950/70"
+            }`}
+            title="Наряды с заблокированной карточкой"
+          >
+            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+              ЗАБЛОКИРОВАНО
+            </span>
+            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+              {blockedCount}
+            </span>
+          </Link>
           {showAdminChip ? (
             <Link
               href={ordersListHref({
