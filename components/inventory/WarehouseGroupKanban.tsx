@@ -83,7 +83,6 @@ export function WarehouseGroupKanban({
   groups,
   membersOf,
   renderHeader,
-  renderMember,
   onMove,
   onAddGroup,
 }: {
