@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/PrefixSearchCombobox";
 import { comboboxSearchPrefixesFromText } from "@/lib/prefix-search-match";
 import { WarehouseTreeView } from "@/components/inventory/WarehouseTreeView";
+import { ModuleFrame } from "@/components/layout/ModuleFrame";
 
 const WAREHOUSE_LAYOUT_STORAGE_KEY = "warehouse-layout";
 type WarehouseLayout = "tree" | "classic";
@@ -134,6 +135,18 @@ export function InventoryWarehouseClient() {
     { id: string; sku: string | null; name: string; unit: string }[]
   >([]);
   const [movements, setMovements] = useState<MovementRow[]>([]);
+  const [inventoryGroups, setInventoryGroups] = useState<
+    {
+      id: string;
+      warehouseId: string;
+      ownerKind: "WAREHOUSE" | "MANUFACTURER";
+      ownerKey: string;
+      name: string;
+      manufacturerKeys: string[];
+      manufacturerNames?: Record<string, string>;
+      itemIds: string[];
+    }[]
+  >([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -177,6 +190,7 @@ export function InventoryWarehouseClient() {
   const [manufacturerFilter, setManufacturerFilter] = useState("");
   const [layout, setLayout] = useState<WarehouseLayout>("tree");
   const [layoutReady, setLayoutReady] = useState(false);
+  const [treeSearchQuery, setTreeSearchQuery] = useState("");
 
   useEffect(() => {
     try {
@@ -210,6 +224,16 @@ export function InventoryWarehouseClient() {
         balances: BalanceRow[];
         itemsNeverTouched: typeof itemsNeverTouched;
         movements: MovementRow[];
+        groups?: {
+          id: string;
+          warehouseId: string;
+          ownerKind: "WAREHOUSE" | "MANUFACTURER";
+          ownerKey: string;
+          name: string;
+          manufacturerKeys: string[];
+          manufacturerNames?: Record<string, string>;
+          itemIds: string[];
+        }[];
       };
       const w = snap.warehouses;
       const i = snap.items;
@@ -220,6 +244,7 @@ export function InventoryWarehouseClient() {
       const m = snap.movements;
       setWarehouses(w);
       setItems(i);
+      setInventoryGroups(snap.groups ?? []);
       setBalances(b.balances);
       setItemsNeverTouched(b.itemsNeverTouched);
       setMovements(
@@ -692,6 +717,54 @@ export function InventoryWarehouseClient() {
   };
 
   return (
+    <ModuleFrame
+      title="Склад"
+      headerClassName="mb-3 sm:mb-4 landscape:max-lg:mb-3"
+      titleBesideEnd={
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <button
+            type="button"
+            onClick={() =>
+              setLayout((prev) => (prev === "tree" ? "classic" : "tree"))
+            }
+            className="w-fit rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-muted)]"
+          >
+            {layout === "tree" ? "Старый вид склада" : "Новый вид склада"}
+          </button>
+          <span className="text-sm font-normal text-[var(--text-secondary)]">
+            Новые склады и учётные позиции:{" "}
+            <Link
+              href="/directory/warehouse"
+              className="font-medium text-[var(--sidebar-blue)] hover:underline"
+            >
+              Конфигурация → Склад
+            </Link>
+            . Журнал движений:{" "}
+            <Link
+              href="/orders/history?tab=stock"
+              className="font-medium text-[var(--sidebar-blue)] hover:underline"
+            >
+              История → Склад
+            </Link>
+            .
+          </span>
+        </span>
+      }
+      headerAfterTitle={
+        layout === "tree" ? (
+          <input
+            type="search"
+            value={treeSearchQuery}
+            onChange={(e) => setTreeSearchQuery(e.target.value)}
+            placeholder="Поиск. Склад, производитель, артикул…"
+            aria-label="Поиск"
+            className="mx-auto block w-full max-w-3xl rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2.5 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)]"
+            autoComplete="off"
+          />
+        ) : null
+      }
+      description="Остатки, приход и расход, связь с нарядами. Закупка — средневзвешенная. Реализация позиции идёт в сверку как стоимость работы."
+    >
     <div className={layout === "tree" ? "space-y-5" : "space-y-10"}>
       {loadError ? (
         <div
@@ -701,41 +774,6 @@ export function InventoryWarehouseClient() {
           {loadError}
         </div>
       ) : null}
-
-      <div
-        className={
-          layout === "tree"
-            ? "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-            : "flex flex-wrap items-center gap-3"
-        }
-      >
-        <button
-          type="button"
-          onClick={() =>
-            setLayout((prev) => (prev === "tree" ? "classic" : "tree"))
-          }
-          className="w-fit rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-muted)]"
-        >
-          {layout === "tree" ? "Старый вид склада" : "Новый вид склада"}
-        </button>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Новые склады и учётные позиции:{" "}
-          <Link
-            href="/directory/warehouse"
-            className="font-medium text-[var(--sidebar-blue)] hover:underline"
-          >
-            Конфигурация → Склад
-          </Link>
-          . Журнал движений:{" "}
-          <Link
-            href="/orders/history?tab=stock"
-            className="font-medium text-[var(--sidebar-blue)] hover:underline"
-          >
-            История → Склад
-          </Link>
-          .
-        </p>
-      </div>
 
       {layout === "tree" ? (
         <WarehouseTreeView
@@ -747,7 +785,9 @@ export function InventoryWarehouseClient() {
             item: { id: b.item.id },
             warehouse: { id: b.warehouse.id },
           }))}
+          groups={inventoryGroups}
           onRefresh={refresh}
+          searchQuery={treeSearchQuery}
         />
       ) : null}
 
@@ -1334,5 +1374,6 @@ export function InventoryWarehouseClient() {
       </>
       ) : null}
     </div>
+    </ModuleFrame>
   );
 }

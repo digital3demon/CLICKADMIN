@@ -82,7 +82,32 @@ export type WarehouseTreeModalState =
       currentName: string;
       itemIds: string[];
     }
-  | { type: "rename-article"; article: WarehouseTreeArticle };
+  | { type: "rename-article"; article: WarehouseTreeArticle }
+  | {
+      type: "create-group";
+      warehouseId: string;
+      ownerKind: "WAREHOUSE" | "MANUFACTURER";
+      ownerKey: string;
+    }
+  | { type: "rename-group"; groupId: string; name: string }
+  | {
+      type: "assign-manufacturer-groups";
+      warehouseId: string;
+      manufacturerName: string;
+      manufacturerKey: string;
+      options: {
+        id: string;
+        name: string;
+        selected: boolean;
+        manufacturerKeys: string[];
+        manufacturerNames: Record<string, string>;
+      }[];
+    }
+  | {
+      type: "assign-article-groups";
+      article: WarehouseTreeArticle;
+      options: { id: string; name: string; selected: boolean; itemIds: string[] }[];
+    };
 
 type Props = {
   state: WarehouseTreeModalState | null;
@@ -482,6 +507,8 @@ export function WarehouseTreeModals({
     sale: number | null;
   }>({ purchase: null, sale: null });
   const [minusQtyMode, setMinusQtyMode] = useState<"unit" | "supply">("unit");
+  const [groupName, setGroupName] = useState("");
+  const [checkedGroupIds, setCheckedGroupIds] = useState<string[]>([]);
 
   const minusArticles = useMemo(() => {
     if (!state) return [];
@@ -540,6 +567,15 @@ export function WarehouseTreeModals({
     if (state.type === "rename-article") {
       setArticleName(state.article.name);
       setSku(state.article.sku ?? "");
+    }
+    setGroupName(state.type === "rename-group" ? state.name : "");
+    if (
+      state.type === "assign-manufacturer-groups" ||
+      state.type === "assign-article-groups"
+    ) {
+      setCheckedGroupIds(state.options.filter((o) => o.selected).map((o) => o.id));
+    } else {
+      setCheckedGroupIds([]);
     }
 
     if (state.type === "article-plus" || state.type === "article-minus") {
@@ -701,6 +737,26 @@ export function WarehouseTreeModals({
       case "rename-article":
         return {
           title: "Изменить артикул",
+          description: state.article.name,
+        };
+      case "create-group":
+        return {
+          title: "Новая группа",
+          description:
+            state.ownerKind === "WAREHOUSE"
+              ? "Группа склада"
+              : "Группа производителя",
+        };
+      case "rename-group":
+        return { title: "Переименовать группу", description: state.name };
+      case "assign-manufacturer-groups":
+        return {
+          title: "Группы склада",
+          description: state.manufacturerName,
+        };
+      case "assign-article-groups":
+        return {
+          title: "Группы производителя",
           description: state.article.name,
         };
     }
@@ -1026,6 +1082,19 @@ export function WarehouseTreeModals({
               return;
             }
           }
+          const rekey = await fetch("/api/inventory/groups/rekey-manufacturer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              warehouseId: state.warehouseId,
+              fromName: state.currentName,
+              toName: name,
+            }),
+          });
+          if (!rekey.ok) {
+            setError(await readApiError(rekey));
+            return;
+          }
           break;
         }
         case "rename-article": {
@@ -1058,6 +1127,113 @@ export function WarehouseTreeModals({
           }
           break;
         }
+        case "create-group": {
+          const name = groupName.trim();
+          if (!name) {
+            setError("Укажите название группы");
+            return;
+          }
+          const res = await fetch("/api/inventory/groups", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              warehouseId: state.warehouseId,
+              ownerKind: state.ownerKind,
+              ownerKey: state.ownerKey,
+              name,
+            }),
+          });
+          if (!res.ok) {
+            setError(await readApiError(res));
+            return;
+          }
+          break;
+        }
+        case "rename-group": {
+          const name = groupName.trim();
+          if (!name) {
+            setError("Укажите название группы");
+            return;
+          }
+          if (name === state.name.trim()) {
+            onClose();
+            return;
+          }
+          if (
+            !window.confirm(`Переименовать группу «${state.name}» в «${name}»?`)
+          ) {
+            return;
+          }
+          const res = await fetch(`/api/inventory/groups/${state.groupId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          if (!res.ok) {
+            setError(await readApiError(res));
+            return;
+          }
+          break;
+        }
+        case "assign-manufacturer-groups": {
+          if (
+            !window.confirm(
+              `Сохранить группы для производителя «${state.manufacturerName}»?`,
+            )
+          ) {
+            return;
+          }
+          const selected = new Set(checkedGroupIds);
+          for (const option of state.options) {
+            const should = selected.has(option.id);
+            const currently = option.selected;
+            if (should === currently) continue;
+            const keys = should
+              ? [...new Set([...option.manufacturerKeys, state.manufacturerKey])]
+              : option.manufacturerKeys.filter((k) => k !== state.manufacturerKey);
+            const res = await fetch(`/api/inventory/groups/${option.id}/members`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                manufacturerKeys: keys,
+                manufacturerNames: {
+                  ...option.manufacturerNames,
+                  [state.manufacturerKey]: state.manufacturerName,
+                },
+              }),
+            });
+            if (!res.ok) {
+              setError(await readApiError(res));
+              return;
+            }
+          }
+          break;
+        }
+        case "assign-article-groups": {
+          if (
+            !window.confirm(`Сохранить группы для «${state.article.name}»?`)
+          ) {
+            return;
+          }
+          const selected = new Set(checkedGroupIds);
+          for (const option of state.options) {
+            const should = selected.has(option.id);
+            if (should === option.selected) continue;
+            const itemIds = should
+              ? [...new Set([...option.itemIds, state.article.id])]
+              : option.itemIds.filter((id) => id !== state.article.id);
+            const res = await fetch(`/api/inventory/groups/${option.id}/members`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ itemIds }),
+            });
+            if (!res.ok) {
+              setError(await readApiError(res));
+              return;
+            }
+          }
+          break;
+        }
       }
       await finishSuccess();
     } catch (err) {
@@ -1084,6 +1260,10 @@ export function WarehouseTreeModals({
       case "rename-warehouse":
       case "rename-manufacturer":
       case "rename-article":
+      case "create-group":
+      case "rename-group":
+      case "assign-manufacturer-groups":
+      case "assign-article-groups":
         return "Сохранить";
     }
   })();
@@ -1166,6 +1346,89 @@ export function WarehouseTreeModals({
               autoFocus
             />
           </label>
+        ) : null}
+
+        {state.type === "create-group" || state.type === "rename-group" ? (
+          <label className={labelClass}>
+            <span>Название группы</span>
+            <input
+              type="text"
+              className={inputClass}
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              autoFocus
+            />
+          </label>
+        ) : null}
+
+        {state.type === "rename-group" ? (
+          <button
+            type="button"
+            className="self-start text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
+            disabled={busy}
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  `Удалить группу «${state.name}»? Позиции останутся на складе.`,
+                )
+              ) {
+                return;
+              }
+              setBusy(true);
+              setError(null);
+              try {
+                const res = await fetch(`/api/inventory/groups/${state.groupId}`, {
+                  method: "DELETE",
+                });
+                if (!res.ok) {
+                  setError(await readApiError(res));
+                  return;
+                }
+                await finishSuccess();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Ошибка");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Удалить группу
+          </button>
+        ) : null}
+
+        {state.type === "assign-manufacturer-groups" ||
+        state.type === "assign-article-groups" ? (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm font-medium text-[var(--text-strong)]">
+              Группы
+            </legend>
+            {state.options.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">
+                Сначала добавьте группу в режиме «Группы».
+              </p>
+            ) : (
+              state.options.map((option) => (
+                <label
+                  key={option.id}
+                  className="flex items-center gap-2 text-sm text-[var(--app-text)]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checkedGroupIds.includes(option.id)}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setCheckedGroupIds((prev) =>
+                        on
+                          ? [...prev, option.id]
+                          : prev.filter((id) => id !== option.id),
+                      );
+                    }}
+                  />
+                  <span>{option.name}</span>
+                </label>
+              ))
+            )}
+          </fieldset>
         ) : null}
 
         {state.type === "rename-article" ? (

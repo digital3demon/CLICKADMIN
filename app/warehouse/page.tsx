@@ -10,18 +10,18 @@ const InventoryWarehouseClient = nextDynamic(
     })),
   {
     loading: () => (
-      <p className="text-sm text-[var(--text-muted)]">Загрузка модуля склада…</p>
+      <ModuleFrame
+        title="Склад"
+        description="Остатки, приход и расход, связь с нарядами. Закупка — средневзвешенная. Реализация позиции идёт в сверку как стоимость работы."
+      >
+        <p className="text-sm text-[var(--text-muted)]">
+          Загрузка модуля склада…
+        </p>
+      </ModuleFrame>
     ),
   },
 );
 
 export default function WarehousePage() {
-  return (
-    <ModuleFrame
-      title="Склад"
-      description="Остатки, приход и расход, связь с нарядами. Закупка — средневзвешенная. Реализация позиции идёт в сверку как стоимость работы."
-    >
-      <InventoryWarehouseClient />
-    </ModuleFrame>
-  );
+  return <InventoryWarehouseClient />;
 }

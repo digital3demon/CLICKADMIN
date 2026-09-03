@@ -101,6 +101,35 @@ export async function GET() {
           },
         }),
       ]);
+
+    let groups: Array<{
+      id: string;
+      warehouseId: string;
+      ownerKind: "WAREHOUSE" | "MANUFACTURER";
+      ownerKey: string;
+      name: string;
+      manufacturerLinks: { manufacturerKey: string; manufacturerName: string }[];
+      itemLinks: { itemId: string }[];
+    }> = [];
+    try {
+      groups = await prisma.inventoryGroup.findMany({
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          warehouseId: true,
+          ownerKind: true,
+          ownerKey: true,
+          name: true,
+          manufacturerLinks: {
+            select: { manufacturerKey: true, manufacturerName: true },
+          },
+          itemLinks: { select: { itemId: true } },
+        },
+      });
+    } catch (groupErr) {
+      console.warn("inventory groups snapshot skipped (миграция?)", groupErr);
+    }
+
     const orderRefs = await loadOrderRefsByIds(movements.map((x) => x.orderId));
 
     return NextResponse.json({
@@ -117,6 +146,18 @@ export async function GET() {
       movements: movements.map((x) => ({
         ...x,
         order: x.orderId ? orderRefs.get(x.orderId) ?? null : null,
+      })),
+      groups: groups.map((g) => ({
+        id: g.id,
+        warehouseId: g.warehouseId,
+        ownerKind: g.ownerKind,
+        ownerKey: g.ownerKey,
+        name: g.name,
+        manufacturerKeys: g.manufacturerLinks.map((l) => l.manufacturerKey),
+        manufacturerNames: Object.fromEntries(
+          g.manufacturerLinks.map((l) => [l.manufacturerKey, l.manufacturerName]),
+        ),
+        itemIds: g.itemLinks.map((l) => l.itemId),
       })),
     });
   } catch (e) {

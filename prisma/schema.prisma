@@ -2030,6 +2030,7 @@ model Warehouse {
   items     InventoryItem[]
   balances  StockBalance[]
   movements StockMovement[]
+  groups    InventoryGroup[]
 }
 
 /// Учётная позиция склада (SKU), привязана к одному складу.
@@ -2058,11 +2059,60 @@ model InventoryItem {
 
   balances  StockBalance[]
   movements StockMovement[]
+  groupLinks InventoryGroupItem[]
 
   @@unique([warehouseId, sku])
   @@index([warehouseId])
   @@index([isActive, sortOrder])
   @@index([name])
+}
+
+/// Родитель группы в новом виде склада (склады сами в группы не входят).
+enum InventoryGroupOwnerKind {
+  WAREHOUSE
+  MANUFACTURER
+}
+
+/// Группа карточек: у склада — производители, у производителя — артикулы.
+model InventoryGroup {
+  id          String                   @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse                @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  ownerKind   InventoryGroupOwnerKind
+  /// Пусто для группы склада; иначе нормализованное имя производителя (lower).
+  ownerKey    String                   @default("")
+  name        String
+  createdAt   DateTime                 @default(now())
+
+  manufacturerLinks InventoryGroupManufacturer[]
+  itemLinks         InventoryGroupItem[]
+
+  @@unique([warehouseId, ownerKind, ownerKey, name])
+  @@index([warehouseId, ownerKind, ownerKey])
+}
+
+/// Производитель в группе склада (производитель — строка, не сущность).
+model InventoryGroupManufacturer {
+  id               String         @id @default(cuid())
+  groupId          String
+  group            InventoryGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  warehouseId      String
+  manufacturerKey  String
+  manufacturerName String
+
+  @@unique([groupId, manufacturerKey])
+  @@index([warehouseId, manufacturerKey])
+}
+
+/// Артикул в группе производителя.
+model InventoryGroupItem {
+  groupId String
+  group   InventoryGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  itemId  String
+  item    InventoryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, itemId])
+  @@index([itemId])
 }
 
 /// Агрегат остатка по позиции и складу (обновляется только через движения)

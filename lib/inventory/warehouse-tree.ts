@@ -1,6 +1,6 @@
 /**
- * Дерево склада для UI: склады → производители → артикулы.
- * Вход — снимок (warehouses, items, balances) из API/Prisma, без записи в БД.
+ * Дерево склада для UI: склады → (группы | производители) → (группы | артикулы).
+ * Вход — снимок (warehouses, items, balances, groups) из API/Prisma, без записи в БД.
  * Остатки quantityOnHand берутся из balances; timezone не используется.
  * Неактивные склады и позиции (isActive === false) исключаются при сборке.
  */
@@ -18,7 +18,32 @@ export type WarehouseTreeArticle = {
   saleUnitPriceRub: number | null;
   /** Средняя закупка с остатка (из старых приходов). */
   averageUnitCostRub: number | null;
+  groupIds: string[];
 };
+
+export const UNGROUPED_GROUP_NAME = "не сгруппировано";
+
+export type WarehouseTreeGroup = {
+  id: string;
+  warehouseId: string;
+  ownerKind: "WAREHOUSE" | "MANUFACTURER";
+  ownerKey: string;
+  name: string;
+  memberCount: number;
+  quantityOnHand: number;
+  manufacturerKeys: string[];
+  articleIds: string[];
+  /** Только UI: нет в БД, появляется если есть члены вне групп. */
+  isVirtualUngrouped?: boolean;
+};
+
+export function ungroupedWarehouseGroupId(warehouseId: string): string {
+  return `ungrouped:wh:${warehouseId}`;
+}
+
+export function ungroupedManufacturerGroupId(manufacturerKey: string): string {
+  return `ungrouped:mf:${manufacturerKey}`;
+}
 
 export type WarehouseTreeManufacturer = {
   key: string;
@@ -27,6 +52,8 @@ export type WarehouseTreeManufacturer = {
   articleCount: number;
   quantityOnHand: number;
   articles: WarehouseTreeArticle[];
+  groups: WarehouseTreeGroup[];
+  warehouseGroupIds: string[];
 };
 
 export type WarehouseTreeWarehouse = {
@@ -39,6 +66,7 @@ export type WarehouseTreeWarehouse = {
   quantityOnHand: number;
   manufacturers: WarehouseTreeManufacturer[];
   orphanArticles: WarehouseTreeArticle[];
+  groups: WarehouseTreeGroup[];
 };
 
 export type WarehouseTreeSnapshot = {
@@ -66,6 +94,15 @@ export type WarehouseTreeSnapshot = {
     warehouseId: string;
     quantityOnHand: number;
     averageUnitCostRub?: number | null;
+  }>;
+  groups?: Array<{
+    id: string;
+    warehouseId: string;
+    ownerKind: "WAREHOUSE" | "MANUFACTURER";
+    ownerKey: string;
+    name: string;
+    manufacturerKeys?: string[];
+    itemIds?: string[];
   }>;
 };
 
@@ -116,10 +153,103 @@ function sumQuantity(articles: WarehouseTreeArticle[]): number {
   return articles.reduce((sum, a) => sum + a.quantityOnHand, 0);
 }
 
+function manufacturerOwnerKeyFromName(name: string): string {
+  return normalizeManufacturerName(name).toLowerCase();
+}
+
+function realGroupsOnly(groups: WarehouseTreeGroup[]): WarehouseTreeGroup[] {
+  return groups.filter((g) => !g.isVirtualUngrouped);
+}
+
+function attachUngroupedManufacturerGroups(
+  manufacturer: WarehouseTreeManufacturer,
+): WarehouseTreeManufacturer {
+  const real = realGroupsOnly(manufacturer.groups);
+  const groupedIds = new Set(real.flatMap((g) => g.articleIds));
+  const ungrouped = manufacturer.articles.filter((a) => !groupedIds.has(a.id));
+  if (ungrouped.length === 0) {
+    return { ...manufacturer, groups: sortByName(real) };
+  }
+  const virtual: WarehouseTreeGroup = {
+    id: ungroupedManufacturerGroupId(manufacturer.key),
+    warehouseId: manufacturer.warehouseId,
+    ownerKind: "MANUFACTURER",
+    ownerKey: manufacturerOwnerKeyFromName(manufacturer.name),
+    name: UNGROUPED_GROUP_NAME,
+    memberCount: ungrouped.length,
+    quantityOnHand: sumQuantity(ungrouped),
+    manufacturerKeys: [],
+    articleIds: ungrouped.map((a) => a.id),
+    isVirtualUngrouped: true,
+  };
+  return { ...manufacturer, groups: [...sortByName(real), virtual] };
+}
+
+function attachUngroupedWarehouseGroups(
+  warehouse: WarehouseTreeWarehouse,
+): WarehouseTreeWarehouse {
+  const manufacturers = warehouse.manufacturers.map(
+    attachUngroupedManufacturerGroups,
+  );
+  const real = realGroupsOnly(warehouse.groups);
+  const groupedKeys = new Set(real.flatMap((g) => g.manufacturerKeys));
+  const ungroupedMfs = manufacturers.filter(
+    (m) => !groupedKeys.has(manufacturerOwnerKeyFromName(m.name)),
+  );
+  const orphans = warehouse.orphanArticles;
+  const groups = sortByName(real);
+  if (ungroupedMfs.length > 0 || orphans.length > 0) {
+    groups.push({
+      id: ungroupedWarehouseGroupId(warehouse.id),
+      warehouseId: warehouse.id,
+      ownerKind: "WAREHOUSE",
+      ownerKey: "",
+      name: UNGROUPED_GROUP_NAME,
+      memberCount: ungroupedMfs.length + orphans.length,
+      quantityOnHand:
+        ungroupedMfs.reduce((sum, m) => sum + m.quantityOnHand, 0) +
+        sumQuantity(orphans),
+      manufacturerKeys: ungroupedMfs.map((m) =>
+        manufacturerOwnerKeyFromName(m.name),
+      ),
+      articleIds: orphans.map((a) => a.id),
+      isVirtualUngrouped: true,
+    });
+  }
+  return { ...warehouse, manufacturers, groups };
+}
+
+export function isInventoryGroupNameTaken(
+  groups: NonNullable<WarehouseTreeSnapshot["groups"]>,
+  opts: {
+    warehouseId: string;
+    ownerKind: "WAREHOUSE" | "MANUFACTURER";
+    ownerKey: string;
+    name: string;
+    excludeId?: string;
+  },
+): boolean {
+  const name = opts.name.replace(/\s+/g, " ").trim();
+  const ownerKey =
+    opts.ownerKind === "WAREHOUSE" ? "" : opts.ownerKey.trim().toLowerCase();
+  return groups.some(
+    (g) =>
+      g.warehouseId === opts.warehouseId &&
+      g.ownerKind === opts.ownerKind &&
+      (g.ownerKey ?? "") === ownerKey &&
+      g.name.replace(/\s+/g, " ").trim() === name &&
+      g.id !== opts.excludeId,
+  );
+}
+
 function buildManufacturer(
   warehouseId: string,
   name: string,
   articles: WarehouseTreeArticle[],
+  extras?: {
+    groups?: WarehouseTreeGroup[];
+    warehouseGroupIds?: string[];
+  },
 ): WarehouseTreeManufacturer {
   const sorted = sortByName(articles);
   return {
@@ -129,12 +259,15 @@ function buildManufacturer(
     articleCount: sorted.length,
     quantityOnHand: sumQuantity(sorted),
     articles: sorted,
+    groups: extras?.groups ?? [],
+    warehouseGroupIds: extras?.warehouseGroupIds ?? [],
   };
 }
 
 function buildWarehouseNode(
   warehouse: WarehouseTreeSnapshot["warehouses"][number],
   articles: WarehouseTreeArticle[],
+  rawGroups: NonNullable<WarehouseTreeSnapshot["groups"]>,
 ): WarehouseTreeWarehouse {
   const byManufacturer = new Map<string, WarehouseTreeArticle[]>();
   const displayNames = new Map<string, string>();
@@ -156,17 +289,81 @@ function buildWarehouseNode(
     byManufacturer.set(key, bucket);
   }
 
+  const qtyByArticleId = new Map(articles.map((a) => [a.id, a.quantityOnHand]));
+  const qtyByOwnerKey = new Map<string, number>();
+  for (const [treeKey, groupArticles] of byManufacturer) {
+    const ownerKey = manufacturerOwnerKeyFromName(displayNames.get(treeKey) ?? "");
+    qtyByOwnerKey.set(ownerKey, sumQuantity(groupArticles));
+  }
+
+  const warehouseGroups: WarehouseTreeGroup[] = [];
+  const manufacturerGroupsByOwner = new Map<string, WarehouseTreeGroup[]>();
+  const warehouseGroupIdsByOwner = new Map<string, string[]>();
+
+  for (const raw of rawGroups.filter((g) => g.warehouseId === warehouse.id)) {
+    if (raw.ownerKind === "WAREHOUSE") {
+      const manufacturerKeys = [...new Set(raw.manufacturerKeys ?? [])];
+      const quantityOnHand = manufacturerKeys.reduce(
+        (sum, key) => sum + (qtyByOwnerKey.get(key) ?? 0),
+        0,
+      );
+      const group: WarehouseTreeGroup = {
+        id: raw.id,
+        warehouseId: warehouse.id,
+        ownerKind: "WAREHOUSE",
+        ownerKey: "",
+        name: raw.name,
+        memberCount: manufacturerKeys.length,
+        quantityOnHand,
+        manufacturerKeys,
+        articleIds: [],
+      };
+      warehouseGroups.push(group);
+      for (const key of manufacturerKeys) {
+        const ids = warehouseGroupIdsByOwner.get(key) ?? [];
+        ids.push(raw.id);
+        warehouseGroupIdsByOwner.set(key, ids);
+      }
+      continue;
+    }
+
+    const articleIds = [...new Set(raw.itemIds ?? [])];
+    const quantityOnHand = articleIds.reduce(
+      (sum, id) => sum + (qtyByArticleId.get(id) ?? 0),
+      0,
+    );
+    const group: WarehouseTreeGroup = {
+      id: raw.id,
+      warehouseId: warehouse.id,
+      ownerKind: "MANUFACTURER",
+      ownerKey: raw.ownerKey,
+      name: raw.name,
+      memberCount: articleIds.length,
+      quantityOnHand,
+      manufacturerKeys: [],
+      articleIds,
+    };
+    const bucket = manufacturerGroupsByOwner.get(raw.ownerKey) ?? [];
+    bucket.push(group);
+    manufacturerGroupsByOwner.set(raw.ownerKey, bucket);
+  }
+
   const manufacturers = sortByName(
-    [...byManufacturer.entries()].map(([key, group]) =>
-      buildManufacturer(warehouse.id, displayNames.get(key) ?? "", group),
-    ),
+    [...byManufacturer.entries()].map(([key, group]) => {
+      const display = displayNames.get(key) ?? "";
+      const ownerKey = manufacturerOwnerKeyFromName(display);
+      return buildManufacturer(warehouse.id, display, group, {
+        groups: sortByName(manufacturerGroupsByOwner.get(ownerKey) ?? []),
+        warehouseGroupIds: warehouseGroupIdsByOwner.get(ownerKey) ?? [],
+      });
+    }),
   );
   const sortedOrphans = sortByName(orphanArticles);
   const allArticles = [...articles].sort((a, b) =>
     a.name.localeCompare(b.name, "ru"),
   );
 
-  return {
+  return attachUngroupedWarehouseGroups({
     id: warehouse.id,
     name: warehouse.name,
     warehouseType: warehouse.warehouseType,
@@ -176,7 +373,8 @@ function buildWarehouseNode(
     quantityOnHand: sumQuantity(allArticles),
     manufacturers,
     orphanArticles: sortedOrphans,
-  };
+    groups: sortByName(warehouseGroups),
+  });
 }
 
 export function buildWarehouseTree(
@@ -201,15 +399,36 @@ export function buildWarehouseTree(
       referenceUnitPriceRub: item.referenceUnitPriceRub,
       saleUnitPriceRub: item.saleUnitPriceRub ?? null,
       averageUnitCostRub: avgMap.get(balanceKey) ?? null,
+      groupIds: [],
     };
     const bucket = itemsByWarehouse.get(item.warehouseId) ?? [];
     bucket.push(article);
     itemsByWarehouse.set(item.warehouseId, bucket);
   }
 
+  const groups = input.groups ?? [];
+  const itemGroupIds = new Map<string, string[]>();
+  for (const group of groups) {
+    if (group.ownerKind !== "MANUFACTURER") continue;
+    for (const itemId of group.itemIds ?? []) {
+      const ids = itemGroupIds.get(itemId) ?? [];
+      ids.push(group.id);
+      itemGroupIds.set(itemId, ids);
+    }
+  }
+  for (const bucket of itemsByWarehouse.values()) {
+    for (const article of bucket) {
+      article.groupIds = itemGroupIds.get(article.id) ?? [];
+    }
+  }
+
   return sortByName(
     activeWarehouses.map((warehouse) =>
-      buildWarehouseNode(warehouse, itemsByWarehouse.get(warehouse.id) ?? []),
+      buildWarehouseNode(
+        warehouse,
+        itemsByWarehouse.get(warehouse.id) ?? [],
+        groups,
+      ),
     ),
   );
 }
@@ -240,6 +459,13 @@ function manufacturerOwnFieldsMatch(
   return textMatchesQuery(manufacturer.name, queryLower);
 }
 
+function groupOwnFieldsMatch(
+  group: WarehouseTreeGroup,
+  queryLower: string,
+): boolean {
+  return textMatchesQuery(group.name, queryLower);
+}
+
 function warehouseOwnFieldsMatch(
   warehouse: WarehouseTreeWarehouse,
   queryLower: string,
@@ -257,16 +483,53 @@ function filterArticles(
   return articles.filter((a) => articleOwnFieldsMatch(a, queryLower));
 }
 
+function filterManufacturerGroups(
+  manufacturer: WarehouseTreeManufacturer,
+  articles: WarehouseTreeArticle[],
+  queryLower: string,
+  keepAll: boolean,
+): WarehouseTreeGroup[] {
+  const articleIds = new Set(articles.map((a) => a.id));
+  return realGroupsOnly(manufacturer.groups).filter((group) => {
+    if (keepAll || groupOwnFieldsMatch(group, queryLower)) return true;
+    return group.articleIds.some((id) => articleIds.has(id));
+  });
+}
+
 function filterManufacturerNode(
   manufacturer: WarehouseTreeManufacturer,
   queryLower: string,
 ): WarehouseTreeManufacturer | null {
-  if (manufacturerOwnFieldsMatch(manufacturer, queryLower)) {
-    return manufacturer;
+  const nameHit = manufacturerOwnFieldsMatch(manufacturer, queryLower);
+  const groupHits = manufacturer.groups.filter((g) =>
+    groupOwnFieldsMatch(g, queryLower),
+  );
+  if (nameHit) {
+    return attachUngroupedManufacturerGroups(manufacturer);
   }
-  const articles = filterArticles(manufacturer.articles, queryLower);
-  if (articles.length === 0) return null;
-  return buildManufacturer(manufacturer.warehouseId, manufacturer.name, articles);
+  const articlesFromGroups = manufacturer.articles.filter((a) =>
+    groupHits.some((g) => g.articleIds.includes(a.id)),
+  );
+  const articles = [
+    ...new Map(
+      [
+        ...filterArticles(manufacturer.articles, queryLower),
+        ...articlesFromGroups,
+      ].map((a) => [a.id, a]),
+    ).values(),
+  ];
+  if (articles.length === 0 && groupHits.length === 0) return null;
+  return attachUngroupedManufacturerGroups(
+    buildManufacturer(manufacturer.warehouseId, manufacturer.name, articles, {
+      groups: filterManufacturerGroups(
+        manufacturer,
+        articles,
+        queryLower,
+        false,
+      ),
+      warehouseGroupIds: manufacturer.warehouseGroupIds,
+    }),
+  );
 }
 
 function filterWarehouseNode(
@@ -277,12 +540,32 @@ function filterWarehouseNode(
     return warehouse;
   }
 
+  const groupHits = warehouse.groups.filter((g) =>
+    groupOwnFieldsMatch(g, queryLower),
+  );
+  const extraKeys = new Set(groupHits.flatMap((g) => g.manufacturerKeys));
+
   const manufacturers = warehouse.manufacturers
-    .map((m) => filterManufacturerNode(m, queryLower))
+    .map((m) => {
+      const ownerKey = manufacturerOwnerKeyFromName(m.name);
+      if (extraKeys.has(ownerKey)) return m;
+      return filterManufacturerNode(m, queryLower);
+    })
     .filter((m): m is WarehouseTreeManufacturer => m !== null);
   const orphanArticles = filterArticles(warehouse.orphanArticles, queryLower);
+  const remainingOwnerKeys = new Set(
+    manufacturers.map((m) => manufacturerOwnerKeyFromName(m.name)),
+  );
+  const groups = realGroupsOnly(warehouse.groups).filter((g) => {
+    if (groupOwnFieldsMatch(g, queryLower)) return true;
+    return g.manufacturerKeys.some((k) => remainingOwnerKeys.has(k));
+  });
 
-  if (manufacturers.length === 0 && orphanArticles.length === 0) {
+  if (
+    manufacturers.length === 0 &&
+    orphanArticles.length === 0 &&
+    groups.length === 0
+  ) {
     return null;
   }
 
@@ -291,7 +574,7 @@ function filterWarehouseNode(
     ...orphanArticles,
   ];
 
-  return {
+  return attachUngroupedWarehouseGroups({
     id: warehouse.id,
     name: warehouse.name,
     warehouseType: warehouse.warehouseType,
@@ -301,7 +584,8 @@ function filterWarehouseNode(
     quantityOnHand: sumQuantity(allArticles),
     manufacturers,
     orphanArticles,
-  };
+    groups,
+  });
 }
 
 export function filterWarehouseTree(
@@ -328,9 +612,19 @@ export function warehouseTreeSearchHits(
     if (warehouseOwnFieldsMatch(warehouse, queryLower)) {
       hits.add(`wh:${warehouse.id}`);
     }
+    for (const group of warehouse.groups) {
+      if (groupOwnFieldsMatch(group, queryLower)) {
+        hits.add(`gr:${group.id}`);
+      }
+    }
     for (const manufacturer of warehouse.manufacturers) {
       if (manufacturerOwnFieldsMatch(manufacturer, queryLower)) {
         hits.add(`mf:${manufacturer.key}`);
+      }
+      for (const group of manufacturer.groups) {
+        if (groupOwnFieldsMatch(group, queryLower)) {
+          hits.add(`gr:${group.id}`);
+        }
       }
       for (const article of manufacturer.articles) {
         if (articleOwnFieldsMatch(article, queryLower)) {

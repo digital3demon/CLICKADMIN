@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  UNGROUPED_GROUP_NAME,
   buildWarehouseTree,
   collectExpandKeys,
   filterWarehouseTree,
+  isInventoryGroupNameTaken,
   manufacturerTreeKey,
+  ungroupedManufacturerGroupId,
+  ungroupedWarehouseGroupId,
   warehouseTreeSearchHits,
 } from "@/lib/inventory/warehouse-tree";
 
@@ -167,6 +171,153 @@ describe("warehouseTreeSearchHits", () => {
   it("пустой запрос → пустой набор", () => {
     const tree = buildWarehouseTree(sampleSnapshot());
     expect(warehouseTreeSearchHits(tree, "")).toEqual(new Set());
+  });
+});
+
+describe("inventory groups", () => {
+  const groups = [
+    {
+      id: "g-wh-14",
+      warehouseId: "wh-main",
+      ownerKind: "WAREHOUSE" as const,
+      ownerKey: "",
+      name: "14мм",
+      manufacturerKeys: ["ооо керамко"],
+    },
+    {
+      id: "g-mf-a",
+      warehouseId: "wh-main",
+      ownerKind: "MANUFACTURER" as const,
+      ownerKey: "ооо керамко",
+      name: "Циркон",
+      itemIds: ["item-1"],
+    },
+    {
+      id: "g-mf-b",
+      warehouseId: "wh-main",
+      ownerKind: "MANUFACTURER" as const,
+      ownerKey: "ооо керамко",
+      name: "Общее",
+      itemIds: ["item-1"],
+    },
+  ];
+
+  it("имя группы уникально только среди соседей родителя", () => {
+    expect(
+      isInventoryGroupNameTaken(groups, {
+        warehouseId: "wh-main",
+        ownerKind: "WAREHOUSE",
+        ownerKey: "",
+        name: "14мм",
+      }),
+    ).toBe(true);
+    expect(
+      isInventoryGroupNameTaken(groups, {
+        warehouseId: "wh-spare",
+        ownerKind: "WAREHOUSE",
+        ownerKey: "",
+        name: "14мм",
+      }),
+    ).toBe(false);
+    expect(
+      isInventoryGroupNameTaken(groups, {
+        warehouseId: "wh-main",
+        ownerKind: "MANUFACTURER",
+        ownerKey: "dentium",
+        name: "Циркон",
+      }),
+    ).toBe(false);
+  });
+
+  it("артикул может быть в двух группах производителя; кириллица в имени", () => {
+    const tree = buildWarehouseTree({ ...sampleSnapshot(), groups });
+    const mf = tree.find((w) => w.id === "wh-main")!.manufacturers[0];
+    expect(mf.groups.map((g) => g.name).sort()).toEqual(["Общее", "Циркон"]);
+    const article = mf.articles[0];
+    expect(article.groupIds.sort()).toEqual(["g-mf-a", "g-mf-b"]);
+    expect(mf.warehouseGroupIds).toEqual(["g-wh-14"]);
+
+    const byCyrillic = filterWarehouseTree(tree, "циркон");
+    expect(byCyrillic[0].manufacturers[0].groups.some((g) => g.name === "Циркон")).toBe(
+      true,
+    );
+    expect(warehouseTreeSearchHits(tree, "14мм")).toEqual(new Set(["gr:g-wh-14"]));
+  });
+
+  it("карточка «не сгруппировано» только если есть члены вне групп", () => {
+    const tree = buildWarehouseTree({ ...sampleSnapshot(), groups });
+    const main = tree.find((w) => w.id === "wh-main")!;
+    const ungroupedWh = main.groups.find((g) => g.isVirtualUngrouped);
+    expect(ungroupedWh).toBeDefined();
+    expect(ungroupedWh!.name).toBe(UNGROUPED_GROUP_NAME);
+    expect(ungroupedWh!.id).toBe(ungroupedWarehouseGroupId("wh-main"));
+    expect(ungroupedWh!.manufacturerKeys).toEqual([]);
+    expect(ungroupedWh!.articleIds).toEqual(["item-2"]);
+
+    const mf = main.manufacturers[0];
+    expect(mf.groups.some((g) => g.isVirtualUngrouped)).toBe(false);
+
+    const spare = tree.find((w) => w.id === "wh-spare")!;
+    expect(spare.groups).toHaveLength(1);
+    expect(spare.groups[0].isVirtualUngrouped).toBe(true);
+    expect(spare.groups[0].manufacturerKeys).toEqual(["dentium"]);
+
+    const allGrouped = buildWarehouseTree({
+      ...sampleSnapshot(),
+      items: sampleSnapshot().items.filter((it) => it.id !== "item-2"),
+      groups: [
+        ...groups,
+        {
+          id: "g-wh-spare",
+          warehouseId: "wh-spare",
+          ownerKind: "WAREHOUSE" as const,
+          ownerKey: "",
+          name: "Импланты",
+          manufacturerKeys: ["dentium"],
+        },
+      ],
+    });
+    expect(
+      allGrouped
+        .find((w) => w.id === "wh-main")!
+        .groups.some((g) => g.isVirtualUngrouped),
+    ).toBe(false);
+    expect(
+      allGrouped
+        .find((w) => w.id === "wh-spare")!
+        .groups.some((g) => g.isVirtualUngrouped),
+    ).toBe(false);
+  });
+
+  it("не сгруппировано у производителя, если артикул без группы; кириллица вокруг имени", () => {
+    const tree = buildWarehouseTree({
+      ...sampleSnapshot(),
+      items: [
+        ...sampleSnapshot().items,
+        {
+          id: "item-extra",
+          warehouseId: "wh-main",
+          name: "Масса обжиг",
+          sku: null,
+          unit: "г",
+          manufacturer: "ООО Керамко",
+          isActive: true,
+          unitsPerSupply: null,
+          referenceUnitPriceRub: null,
+        },
+      ],
+      groups,
+    });
+    const mf = tree.find((w) => w.id === "wh-main")!.manufacturers[0];
+    const ungrouped = mf.groups.find((g) => g.isVirtualUngrouped);
+    expect(ungrouped?.name).toBe(UNGROUPED_GROUP_NAME);
+    expect(ungrouped?.articleIds).toEqual(["item-extra"]);
+    expect(ungrouped?.id).toBe(ungroupedManufacturerGroupId(mf.key));
+
+    const filtered = filterWarehouseTree(tree, "сгруппировано");
+    expect(
+      filtered[0].manufacturers[0].groups.some((g) => g.isVirtualUngrouped),
+    ).toBe(true);
   });
 });
 

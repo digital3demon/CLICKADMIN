@@ -14,6 +14,8 @@ type ModuleFrameProps = {
   titleBesideEnd?: ReactNode;
   /** Кнопки в той же строке, что заголовок (обычно справа, напр. «Сохранить»). */
   titleRowEnd?: ReactNode;
+  /** Сразу под строкой заголовка (поиск), до описания. */
+  headerAfterTitle?: ReactNode;
   /**
    * `center` — заголовок и подстрочник по центру, accessory одной строкой под ними
    * (компактная шапка наряда).
@@ -40,6 +42,7 @@ export function ModuleFrame({
   titleAccessory,
   titleBesideEnd,
   titleRowEnd,
+  headerAfterTitle,
   titleAlign = "start",
   description,
   descriptionClassName,
@@ -189,6 +192,9 @@ export function ModuleFrame({
           >
             {description}
           </p>
+        ) : null}
+        {headerAfterTitle ? (
+          <div className={centered ? "mt-2" : "mt-3"}>{headerAfterTitle}</div>
         ) : null}
       </header>
       <div className="relative z-0 min-w-0">{children}</div>

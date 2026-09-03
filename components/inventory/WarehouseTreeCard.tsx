@@ -2,7 +2,11 @@
 
 import type React from "react";
 
-export type WarehouseTreeCardLevel = "warehouse" | "manufacturer" | "article";
+export type WarehouseTreeCardLevel =
+  | "warehouse"
+  | "manufacturer"
+  | "article"
+  | "group";
 
 const LEVEL_DIMENSIONS: Record<
   WarehouseTreeCardLevel,
@@ -11,6 +15,7 @@ const LEVEL_DIMENSIONS: Record<
   warehouse: { width: 221, height: 312, tierLabel: "Склад" },
   manufacturer: { width: 187, height: 264, tierLabel: "Производитель" },
   article: { width: 170, height: 240, tierLabel: "Артикул" },
+  group: { width: 187, height: 264, tierLabel: "Группа" },
 };
 
 /** Портретное соотношение сторон (width / height = 1000 / 1414). */
@@ -18,6 +23,7 @@ const LEVEL_ACCENT: Record<WarehouseTreeCardLevel, string> = {
   warehouse: "#0ea5e9",
   manufacturer: "#f59e0b",
   article: "#64748b",
+  group: "#8b5cf6",
 };
 
 function levelRingClass(
@@ -191,6 +197,10 @@ export function WarehouseTreeCard(props: {
   onRename?: (e: React.MouseEvent) => void;
   onPlus: (e: React.MouseEvent) => void;
   onMinus: (e: React.MouseEvent) => void;
+  /** Переключатель Группы / Производители (склад) или Группы / Артикулы. */
+  modeToggle?: { label: string; onClick: (e: React.MouseEvent) => void };
+  /** Мультивыбор групп на производителе или артикуле. */
+  onGroups?: (e: React.MouseEvent) => void;
 }): React.ReactElement {
   const {
     level,
@@ -203,6 +213,8 @@ export function WarehouseTreeCard(props: {
     onRename,
     onPlus,
     onMinus,
+    modeToggle,
+    onGroups,
   } = props;
   const { tierLabel } = LEVEL_DIMENSIONS[level];
   const accent = LEVEL_ACCENT[level];
@@ -285,10 +297,34 @@ export function WarehouseTreeCard(props: {
           ))}
         </dl>
 
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        <div className="mt-auto flex items-center justify-between gap-1.5 pt-2">
           <StockActionButton ariaLabel="Приход" onClick={onPlus}>
             <PlusIcon className="h-4 w-4" />
           </StockActionButton>
+          {modeToggle ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                modeToggle.onClick(e);
+              }}
+              className="min-w-0 flex-1 truncate rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1.5 text-[11px] font-semibold leading-tight text-[var(--app-text)] hover:border-[var(--sidebar-blue)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
+            >
+              {modeToggle.label}
+            </button>
+          ) : null}
+          {onGroups ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onGroups(e);
+              }}
+              className="shrink-0 rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1.5 text-[11px] font-semibold text-[var(--app-text)] hover:border-[var(--sidebar-blue)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
+            >
+              Группы
+            </button>
+          ) : null}
           <StockActionButton ariaLabel="Списание" onClick={onMinus}>
             <MinusIcon className="h-4 w-4" />
           </StockActionButton>
