@@ -721,17 +721,19 @@ export function InventoryWarehouseClient() {
       title="Склад"
       headerClassName="mb-3 sm:mb-4 landscape:max-lg:mb-3"
       titleBesideEnd={
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <button
-            type="button"
-            onClick={() =>
-              setLayout((prev) => (prev === "tree" ? "classic" : "tree"))
-            }
-            className="w-fit rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-muted)]"
-          >
-            {layout === "tree" ? "Старый вид склада" : "Новый вид склада"}
-          </button>
-          <span className="text-sm font-normal text-[var(--text-secondary)]">
+        <button
+          type="button"
+          onClick={() =>
+            setLayout((prev) => (prev === "tree" ? "classic" : "tree"))
+          }
+          className="w-fit rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-muted)]"
+        >
+          {layout === "tree" ? "Старый вид склада" : "Новый вид склада"}
+        </button>
+      }
+      titleAccessory={
+        <span className="flex min-w-0 max-w-3xl flex-col gap-0.5 text-sm font-normal leading-snug text-[var(--text-secondary)]">
+          <span>
             Новые склады и учётные позиции:{" "}
             <Link
               href="/directory/warehouse"
@@ -748,6 +750,11 @@ export function InventoryWarehouseClient() {
             </Link>
             .
           </span>
+          <span>
+            Остатки, приход и расход, связь с нарядами. Закупка —
+            средневзвешенная. Реализация позиции идёт в сверку как стоимость
+            работы.
+          </span>
         </span>
       }
       headerAfterTitle={
@@ -758,12 +765,11 @@ export function InventoryWarehouseClient() {
             onChange={(e) => setTreeSearchQuery(e.target.value)}
             placeholder="Поиск. Склад, производитель, артикул…"
             aria-label="Поиск"
-            className="mx-auto block w-full max-w-3xl rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2.5 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)]"
+            className="block w-full max-w-3xl rounded-lg border border-[var(--input-border)] bg-[var(--card-bg)] px-3 py-2.5 text-sm text-[var(--app-text)] placeholder:text-[var(--text-muted)]"
             autoComplete="off"
           />
         ) : null
       }
-      description="Остатки, приход и расход, связь с нарядами. Закупка — средневзвешенная. Реализация позиции идёт в сверку как стоимость работы."
     >
     <div className={layout === "tree" ? "space-y-5" : "space-y-10"}>
       {loadError ? (

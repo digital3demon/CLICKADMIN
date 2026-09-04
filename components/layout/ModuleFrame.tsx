@@ -158,8 +158,8 @@ export function ModuleFrame({
             </div>
             {sublineNode}
             {titleAccessory ? (
-              <div className="relative z-50 order-3 min-w-0 w-full max-w-full lg:order-2 lg:w-auto lg:max-w-[min(100%,56rem)]">
-                <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-start">
+              <div className="relative z-50 order-3 min-w-0 w-full max-w-full shell-laptop:order-2 shell-laptop:w-auto shell-laptop:max-w-[min(100%,56rem)]">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 shell-laptop:justify-start">
                   {titleAccessory}
                 </div>
               </div>
