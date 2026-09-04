@@ -1171,6 +1171,10 @@ export function createCard(partial: Partial<KanbanCard> & { id?: string }): Kanb
       partial.timerParkedRemainingMs === undefined
         ? null
         : partial.timerParkedRemainingMs ?? null,
+    timerStopColumnId:
+      partial.timerStopColumnId === undefined
+        ? null
+        : partial.timerStopColumnId ?? null,
     ...(partial.sourceEmailCount != null && Number.isFinite(partial.sourceEmailCount)
       ? { sourceEmailCount: Math.max(0, Math.trunc(partial.sourceEmailCount)) }
       : {}),
@@ -2010,7 +2014,18 @@ export function applyKanbanTimerOnColumnMove(
   board: KanbanBoard,
   activityActorLabel?: string,
 ): boolean {
-  const result = applyKanbanTimerOnColumnMoveCore(card, fromColumnIndex, toColumnIndex);
+  const fromColumnId = board.columns[fromColumnIndex]?.id;
+  const toColumnId = board.columns[toColumnIndex]?.id;
+  const stopColumnId =
+    String(card.timerStopColumnId || board.defaultTimerStopColumnId || "").trim() ||
+    null;
+  const result = applyKanbanTimerOnColumnMoveCore(
+    card,
+    fromColumnIndex,
+    toColumnIndex,
+    Date.now(),
+    { fromColumnId, toColumnId, stopColumnId },
+  );
   if (result === "none") return false;
   const uid = (sessionUserId ?? "").trim() || actorUserId(board);
   if (result === "parked") {

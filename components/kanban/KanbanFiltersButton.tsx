@@ -17,7 +17,9 @@ import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import { IconFilter } from "./kanban-icons";
 import { mergeKanbanPickerUsers, pickerRowLabel } from "./KanbanPersonAvatar";
 
-const MAX_TEMPLATES = 20;
+import { KANBAN_FILTER_QUICK_ACCESS_MAX } from "@/lib/kanban/filter-templates";
+
+const MAX_TEMPLATES = KANBAN_FILTER_QUICK_ACCESS_MAX;
 
 const selectClass =
   "mt-1 w-full rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 py-1.5 text-[0.85rem] text-[var(--kanban-text)]";
@@ -44,14 +46,25 @@ type KanbanFiltersButtonProps = {
   board: KanbanBoard;
   filters: KanbanFilters;
   filterTemplates: KanbanFilterTemplate[];
+  viewMode: KanbanAppState["viewMode"];
   patchApp: (fn: (s: KanbanAppState) => void) => void;
   showToast: (text: string, err?: boolean) => void;
 };
+
+const VIEW_MODE_OPTIONS: {
+  id: KanbanAppState["viewMode"];
+  label: string;
+}[] = [
+  { id: "board", label: "Доска" },
+  { id: "calendar", label: "Календарь" },
+  { id: "list", label: "Список" },
+];
 
 export function KanbanFiltersButton({
   board,
   filters,
   filterTemplates,
+  viewMode,
   patchApp,
   showToast,
 }: KanbanFiltersButtonProps) {
@@ -139,10 +152,14 @@ export function KanbanFiltersButton({
       showToast("Введите название шаблона", true);
       return;
     }
+    if (filterTemplates.length >= MAX_TEMPLATES) {
+      showToast(
+        `Можно сохранить не больше ${MAX_TEMPLATES} фильтров. Удалите лишний в списке шаблонов.`,
+        true,
+      );
+      return;
+    }
     patchApp((s) => {
-      if (s.filterTemplates.length >= MAX_TEMPLATES) {
-        s.filterTemplates = s.filterTemplates.slice(1);
-      }
       s.filterTemplates.push({
         id: generateId("ftpl"),
         name: name.slice(0, 80),
@@ -169,7 +186,7 @@ export function KanbanFiltersButton({
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[0.75rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:w-auto sm:px-3 sm:text-[0.8125rem] ${
+        className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[0.75rem] font-medium text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:h-9 sm:w-auto sm:rounded-md sm:px-3 sm:text-[0.8125rem] ${
           open ? "ring-1 ring-[var(--kanban-accent)]/40" : ""
         }`}
         aria-expanded={open}
@@ -318,6 +335,34 @@ export function KanbanFiltersButton({
               «и» / «или».
             </p>
 
+            <div className="border-t border-[var(--kanban-border)] pt-3">
+              <div className="mb-1.5 font-medium text-[var(--kanban-text-muted)]">
+                Вид по умолчанию
+              </div>
+              <div
+                className="flex flex-wrap gap-1.5"
+                role="group"
+                aria-label="Вид по умолчанию"
+              >
+                {VIEW_MODE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={peopleJoinBtnClass(viewMode === opt.id)}
+                    aria-pressed={viewMode === opt.id}
+                    onClick={() => {
+                      if (viewMode === opt.id) return;
+                      patchApp((s) => {
+                        s.viewMode = opt.id;
+                      });
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2 border-t border-[var(--kanban-border)] pt-3">
               <button
                 type="button"
@@ -355,13 +400,13 @@ export function KanbanFiltersButton({
               {filterTemplates.length === 0 ? (
                 <p className="mt-2 text-[0.72rem] text-[var(--kanban-text-muted)]">
                   Нет сохранённых шаблонов — настройте фильтры и нажмите «Сохранить».
-                  Первые 4 появятся рядом с поиском.
+                  Можно сохранить до {MAX_TEMPLATES} фильтров.
                 </p>
               ) : (
                 <ul className="mt-2 max-h-[11rem] space-y-1 overflow-y-auto pr-0.5">
-                  {filterTemplates.length > 4 ? (
+                  {filterTemplates.length >= MAX_TEMPLATES ? (
                     <li className="px-0.5 text-[0.68rem] text-[var(--kanban-text-muted)]">
-                      Первые 4 — кнопки рядом с поиском.
+                      Лимит {MAX_TEMPLATES} — удалите шаблон, чтобы сохранить новый.
                     </li>
                   ) : null}
                   {filterTemplates.map((t) => (

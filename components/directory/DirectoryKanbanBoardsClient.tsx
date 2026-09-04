@@ -33,6 +33,7 @@ import { LabDueSlotsTenantSettings } from "@/components/directory/LabDueSlotsTen
 import { KaitenIntegrationTenantSettings } from "@/components/directory/KaitenIntegrationTenantSettings";
 import { OrderArchiveRetentionTenantSettings } from "@/components/directory/OrderArchiveRetentionTenantSettings";
 import { KanbanCrmUsersProvider } from "@/components/kanban/kanban-crm-users-context";
+import { KanbanMembersBackfillButton } from "@/components/kanban/KanbanMembersBackfillButton";
 import { IconBoard, IconPlus } from "@/components/kanban/kanban-icons";
 import {
   readClientState,
@@ -40,8 +41,18 @@ import {
   writeClientState,
 } from "@/lib/client-state-client";
 import { adoptRemoteKanbanCards } from "@/lib/kanban/adopt-remote-kanban-cards";
-import { flushLinkedOrderCommentsFromState } from "@/lib/kanban/persist-kanban-comments-client";
+import { applyKaitenRefreshPatchesToState } from "@/lib/kanban/apply-kaiten-refresh-patches";
+import {
+  flushLinkedOrderCommentsFromState,
+  writePersistedKanbanStateNow,
+} from "@/lib/kanban/persist-kanban-comments-client";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
+import { collectKanbanKaitenRefreshTargets } from "@/lib/kanban/kanban-linked-order-ids";
+import { showKanbanKaitenRefreshButton } from "@/lib/kaiten-integration/ui";
+import {
+  commitKanbanColumnFromKaitenRefresh,
+  persistCrmBoardFieldsFromKaitenRefreshPatches,
+} from "@/lib/kanban/persist-crm-board-fields-client";
 import { shouldSkipSparseKanbanTenantWrite } from "@/lib/kanban/kanban-tenant-write-guard";
 import {
   applyKanbanArchiveSettings,
@@ -121,6 +132,8 @@ export function DirectoryKanbanBoardsClient({
   const canSetPrivateBoards =
     !isDemo && (sessionRole === "OWNER" || sessionRole === "MANAGER");
   const canEditKaitenIntegration = !isDemo && sessionRole === "OWNER";
+  const [kaitenIntegrationActive, setKaitenIntegrationActive] = useState(false);
+  const kanbanPersistPausedRef = useRef(false);
   const canEditKanbanAdminTag =
     !isDemo &&
     (sessionRole === "OWNER" ||
@@ -161,6 +174,7 @@ export function DirectoryKanbanBoardsClient({
 
   useEffect(() => {
     if (!kanbanStateReady) return;
+    if (kanbanPersistPausedRef.current) return;
     saveKanbanState(appState, isDemo);
     if (
       !isDemo &&
@@ -530,6 +544,25 @@ export function DirectoryKanbanBoardsClient({
     }, 4200);
   }, []);
 
+  useEffect(() => {
+    if (isDemo || sessionRole !== "OWNER") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/tenant/kaiten-integration");
+        const j = (await res.json()) as { active?: boolean };
+        if (!cancelled && res.ok) {
+          setKaitenIntegrationActive(j.active !== false);
+        }
+      } catch {
+        /* кнопка просто скрыта */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo, sessionRole]);
+
   const applyToBoard = useCallback((fn: (b: KanbanBoard) => void) => {
     setAppState((s) => withActiveBoard(s, fn));
   }, []);
@@ -764,6 +797,70 @@ export function DirectoryKanbanBoardsClient({
       <div className="space-y-8">
         {!isDemo ? (
           <KaitenIntegrationTenantSettings canEdit={canEditKaitenIntegration} />
+        ) : null}
+        {showKanbanKaitenRefreshButton({
+          isDemo,
+          kaitenIntegrationActive,
+          sessionRole,
+        }) ? (
+          <section className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-sm">
+            <h2 className="m-0 text-base font-semibold text-[var(--app-text)]">
+              Обновить с Kaiten
+            </h2>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Подтянуть с Kaiten карточки активной доски (колонка, сроки, срочность,
+              участники). Раньше кнопка была на экране канбана.
+            </p>
+            <div className="mt-4 flex flex-wrap items-start gap-2">
+              <KanbanMembersBackfillButton
+                refreshTargets={collectKanbanKaitenRefreshTargets(
+                  appState,
+                  board.id,
+                )}
+                onBeforeRefresh={async () => {
+                  if (isDemo) return;
+                  const cur = appStateRef.current;
+                  if (kanbanStateSaveTimerRef.current) {
+                    clearTimeout(kanbanStateSaveTimerRef.current);
+                    kanbanStateSaveTimerRef.current = null;
+                  }
+                  if (!tenantKanbanWriteAllowedRef.current) return;
+                  await writePersistedKanbanStateNow(cur, false);
+                }}
+                onRunningChange={(running) => {
+                  kanbanPersistPausedRef.current = running;
+                  if (running && kanbanStateSaveTimerRef.current) {
+                    clearTimeout(kanbanStateSaveTimerRef.current);
+                    kanbanStateSaveTimerRef.current = null;
+                  }
+                }}
+                onComplete={async (patches) => {
+                  persistCrmBoardFieldsFromKaitenRefreshPatches(patches);
+                  for (const p of patches) {
+                    const oid = String(p.linkedOrderId || "").trim();
+                    const title = (p.columnTitle || "").trim();
+                    if (oid && title) {
+                      commitKanbanColumnFromKaitenRefresh({
+                        cardId: p.cardId,
+                        orderId: oid,
+                        columnTitle: title,
+                      });
+                    }
+                  }
+                  if (patches.length === 0) return;
+                  setAppState((prev) => {
+                    const { state } = applyKaitenRefreshPatchesToState(prev, patches);
+                    saveKanbanState(state, false);
+                    if (tenantKanbanWriteAllowedRef.current) {
+                      void writePersistedKanbanStateNow(state, false);
+                    }
+                    return state;
+                  });
+                }}
+                showToast={showToast}
+              />
+            </div>
+          </section>
         ) : null}
         {!isDemo ? (
           <LabDueSlotsTenantSettings canEdit={canEditKanbanAdminTag} />

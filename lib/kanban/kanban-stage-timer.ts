@@ -105,8 +105,16 @@ function restoreParkedTimer(card: KanbanCard, nowMs: number): KanbanTimerColumnM
   return "restored";
 }
 
+export type KanbanTimerColumnMoveOpts = {
+  fromColumnId?: string;
+  toColumnId?: string;
+  /** Если задано — отключать только на этой колонке, а не на любом шаге вперёд. */
+  stopColumnId?: string | null;
+};
+
 /**
  * Вперёд (любая следующая колонка) — снять живой таймер и запомнить остаток.
+ * Если задан stopColumnId — снимать только при входе на эту колонку.
  * Назад — не снимать; если есть снимок младше 45 мин, вернуть таймер с того остатка.
  */
 export function applyKanbanTimerOnColumnMove(
@@ -114,6 +122,7 @@ export function applyKanbanTimerOnColumnMove(
   fromColumnIndex: number,
   toColumnIndex: number,
   nowMs: number = Date.now(),
+  opts?: KanbanTimerColumnMoveOpts,
 ): KanbanTimerColumnMoveResult {
   if (
     !Number.isFinite(fromColumnIndex) ||
@@ -122,6 +131,19 @@ export function applyKanbanTimerOnColumnMove(
     toColumnIndex < 0 ||
     fromColumnIndex === toColumnIndex
   ) {
+    return "none";
+  }
+  const stopId = String(opts?.stopColumnId || "").trim();
+  const fromId = String(opts?.fromColumnId || "").trim();
+  const toId = String(opts?.toColumnId || "").trim();
+  if (stopId && fromId && toId) {
+    if (toId === stopId && fromId !== stopId) {
+      if (hasParkedTimer(card) && !hasLiveTimer(card)) return "none";
+      return parkLiveTimer(card, nowMs) ? "parked" : "none";
+    }
+    if (fromId === stopId && toId !== stopId) {
+      return restoreParkedTimer(card, nowMs);
+    }
     return "none";
   }
   if (toColumnIndex > fromColumnIndex) {

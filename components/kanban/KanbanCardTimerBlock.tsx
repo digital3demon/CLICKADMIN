@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
+import { KanbanTinyPlusButton } from "./KanbanTinyPlusButton";
 import {
   formatKanbanTimerCountdown,
   kanbanCardTimerDisplayNowMs,
@@ -43,6 +45,7 @@ function msFromParts(days: number, hours: number, minutes: number): number {
 export function KanbanCardTimerBlock({
   card,
   cardId,
+  board,
   onApply,
   activityActorLabel,
   canManage,
@@ -51,6 +54,7 @@ export function KanbanCardTimerBlock({
 }: {
   card: KanbanCard;
   cardId: string;
+  board?: Pick<KanbanBoard, "columns" | "defaultTimerStopColumnId">;
   onApply: (fn: (b: KanbanBoard) => void) => void;
   activityActorLabel?: string;
   canManage: boolean;
@@ -64,6 +68,12 @@ export function KanbanCardTimerBlock({
   const [daysDraft, setDaysDraft] = useState("0");
   const [hoursDraft, setHoursDraft] = useState("0");
   const [minutesDraft, setMinutesDraft] = useState("30");
+  const [stopColumnDraft, setStopColumnDraft] = useState("");
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -117,6 +127,11 @@ export function KanbanCardTimerBlock({
     setDaysDraft(String(p.days));
     setHoursDraft(String(p.hours));
     setMinutesDraft(String(empty ? 30 : Math.max(1, p.minutes)));
+    setStopColumnDraft(
+      String(
+        card.timerStopColumnId || board?.defaultTimerStopColumnId || "",
+      ).trim(),
+    );
     setSettingsOpen(true);
   };
 
@@ -134,6 +149,7 @@ export function KanbanCardTimerBlock({
       if (!fc) return;
       fc.card.timerDurationMs = ms;
       fc.card.timerFrozenAt = null;
+      fc.card.timerStopColumnId = stopColumnDraft.trim() || null;
       clearKanbanTimerPark(fc.card);
       if (opts.start) {
         fc.card.timerStartedAt = new Date().toISOString();
@@ -215,15 +231,11 @@ export function KanbanCardTimerBlock({
           Таймер
         </span>
         {canManage ? (
-          <button
-            type="button"
-            className="inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)]"
+          <KanbanTinyPlusButton
             onClick={() => (settingsOpen ? setSettingsOpen(false) : openSettings())}
-            aria-label="Добавить таймер"
+            ariaLabel="Добавить таймер"
             title="Добавить таймер"
-          >
-            <span className="text-[0.65rem] font-semibold leading-none">+</span>
-          </button>
+          />
         ) : null}
       </div>
       {started ? (
@@ -302,9 +314,10 @@ export function KanbanCardTimerBlock({
         </div>
       ) : null}
 
-      {settingsOpen && canManage ? (
+      {settingsOpen && canManage && portalReady
+        ? createPortal(
         <div
-          className="fixed inset-0 z-[240] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 p-4"
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setSettingsOpen(false);
@@ -354,6 +367,23 @@ export function KanbanCardTimerBlock({
                 />
               </label>
             </div>
+            <label className="mt-3 block text-[0.7rem]">
+              <span className="block text-[var(--kaiten-modal-muted)]">
+                Отключить на колонке
+              </span>
+              <select
+                className="mt-0.5 w-full rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-sm"
+                value={stopColumnDraft}
+                onChange={(e) => setStopColumnDraft(e.target.value)}
+              >
+                <option value="">Любой шаг вперёд</option>
+                {(board?.columns ?? []).map((col) => (
+                  <option key={col.id} value={col.id}>
+                    {col.title}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--kaiten-modal-border)] pt-3">
               <button
                 type="button"
@@ -387,7 +417,8 @@ export function KanbanCardTimerBlock({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

@@ -166,6 +166,37 @@ function KanbanBoardSettingsFormImpl({
         ) : null}
       </section>
 
+      <section>
+        <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
+          Таймер
+        </h3>
+        <label className="flex max-w-md flex-col gap-1 text-sm">
+          <span className="text-[var(--text-muted)]">
+            Колонка остановки по умолчанию
+          </span>
+          <select
+            value={board.defaultTimerStopColumnId || ""}
+            onChange={(e) =>
+              onPatchBoard((b) => {
+                b.defaultTimerStopColumnId = e.target.value || null;
+              })
+            }
+            className="h-9 rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-[var(--app-text)]"
+          >
+            <option value="">Любой шаг вперёд</option>
+            {(board.columns || []).map((col) => (
+              <option key={col.id} value={col.id}>
+                {col.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="mt-1.5 max-w-md text-xs text-[var(--text-muted)]">
+          При установке таймера на карточке подставится эта колонка. Можно сменить
+          в модалке. На выбранной колонке отсчёт отключается.
+        </p>
+      </section>
+
     </div>
   );
 }

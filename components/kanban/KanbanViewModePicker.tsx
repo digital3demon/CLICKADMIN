@@ -50,7 +50,7 @@ export function KanbanViewModePicker({
     <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
-        className="inline-flex min-h-[2.25rem] items-center justify-center gap-1 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-1 pl-1.5 pr-1.5 text-[0.68rem] font-semibold text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:min-h-[2.75rem] sm:gap-1.5 sm:py-2 sm:pl-3 sm:pr-2.5 sm:text-[0.8125rem] md:text-[0.875rem]"
+        className="inline-flex h-8 min-h-8 items-center justify-center gap-1 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-0 pl-1.5 pr-1.5 text-[0.68rem] font-semibold leading-none text-[var(--kanban-text)] hover:brightness-[0.98] dark:hover:brightness-110 sm:h-auto sm:min-h-[2.75rem] sm:gap-1.5 sm:rounded-md sm:py-2 sm:pl-3 sm:pr-2.5 sm:text-[0.8125rem] md:text-[0.875rem]"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Режим: ${viewModeLabel(viewMode)}`}

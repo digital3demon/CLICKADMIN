@@ -61,7 +61,6 @@ import {
   forEachKanbanCardInState,
   setKanbanStageDue,
 } from "@/lib/kanban/kanban-stage-due";
-import { applyKaitenRefreshPatchesToState } from "@/lib/kanban/apply-kaiten-refresh-patches";
 import { parseKanbanAppState } from "@/lib/kanban/chat-sync";
 import {
   applyKanbanMembersByOrderId,
@@ -76,7 +75,6 @@ import {
   patchOrderKaitenCard,
 } from "@/lib/kanban/kaiten-linked-kanban-sync";
 import { isKaitenIntegrationDisabledResponse } from "@/lib/kanban/kaiten-client-disabled";
-import { showKanbanKaitenRefreshButton } from "@/lib/kaiten-integration/ui";
 import { collectSharedArchivedCards } from "@/lib/kanban/collect-shared-archived-cards";
 import { collectSharedStoppedCards } from "@/lib/kanban/collect-shared-stopped-cards";
 import { buildKanbanStopViewBoard } from "@/lib/kanban/build-stop-view-board";
@@ -90,9 +88,7 @@ import {
 } from "@/lib/kanban/kanban-card-members-client";
 import {
   persistCrmBoardFieldsClient,
-  persistCrmBoardFieldsFromKaitenRefreshPatches,
   persistKanbanLinkedCardTimer,
-  commitKanbanColumnFromKaitenRefresh,
   rememberCrmKanbanColumnLocal,
   rememberCrmKanbanTrackLaneLocal,
   crmColumnPersistFromLinkedMove,
@@ -202,8 +198,6 @@ import { KanbanCardModal } from "./KanbanCardModal";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { KanbanMembersBackfillButton } from "./KanbanMembersBackfillButton";
-import { collectKanbanKaitenRefreshTargets } from "@/lib/kanban/kanban-linked-order-ids";
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
 import { BoardCanvas } from "./BoardCanvas";
@@ -369,12 +363,13 @@ function clampStopHoverPreviewPosition(x: number, y: number) {
 
 export function KanbanApp({
   isDemo = false,
-  kaitenIntegrationActive = true,
+  kaitenIntegrationActive: _kaitenIntegrationActive = true,
 }: {
   isDemo?: boolean;
-  /** Кнопка «Обновить» с Kaiten — только при живой интеграции. */
+  /** Устарело для UI: «Обновить» перенесено в Конфигурация → Канбан. */
   kaitenIntegrationActive?: boolean;
 }) {
+  void _kaitenIntegrationActive;
   /** null до монтирования: иначе SSR и первый клиентский кадр расходятся (server state vs default) → #418 и ломается Sortable. */
   const [appState, setAppState] = useState<KanbanAppState | null>(null);
   const [kanbanStateReady, setKanbanStateReady] = useState(isDemo);
@@ -3209,10 +3204,184 @@ export function KanbanApp({
     <KanbanCrmUsersProvider>
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
       <header className="flex max-w-full shrink-0 flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
-        <div className="flex min-w-0 max-w-full items-center gap-1.5 sm:gap-2">
-          <div className="relative max-md:ms-[var(--app-mobile-menu-inset,3.875rem)] md:ms-0">
+        {/* Мобилка: ряд 1 полный; ряды 2–3 + квадрат сохранённых фильтров справа */}
+        <div className="flex flex-col gap-1 ps-[var(--app-mobile-menu-inset,0.5rem)] sm:hidden">
+          <div className="flex min-w-0 items-center gap-1">
+            <div className="relative min-w-0 flex-1">
+              <select
+                className="inline-flex h-8 w-full min-w-0 appearance-none truncate rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-0 pl-2 pr-5 text-[0.7rem] font-semibold leading-none text-[var(--kanban-text)]"
+                value={
+                  isKanbanAggregateBoardId(appState.activeBoardId)
+                    ? ""
+                    : appState.activeBoardId
+                }
+                aria-label="Выбор доски"
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (!id) return;
+                  lastRealBoardIdRef.current = id;
+                  patchApp((s) => {
+                    s.activeBoardId = id;
+                  });
+                  const label = appState.boards.find((x) => x.id === id)?.title;
+                  if (label) showToast(`Доска: ${label}`);
+                }}
+              >
+                {isKanbanAggregateBoardId(appState.activeBoardId) ? (
+                  <option value="" disabled>
+                    {appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
+                      ? "Мои"
+                      : "Ответственный"}
+                  </option>
+                ) : null}
+                {visibleBoards.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.title}
+                  </option>
+                ))}
+              </select>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden
+                className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-[var(--kanban-text-muted)]"
+              >
+                <path
+                  d="M6 9l6 6 6-6"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <KanbanViewModePicker
+              viewMode={appState.viewMode}
+              onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
+            />
+            <button
+              type="button"
+              className={`inline-flex h-8 shrink-0 items-center justify-center rounded-full border px-2 text-[0.58rem] font-bold uppercase tracking-wide ${
+                appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
+                  ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
+                  : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)]"
+              }`}
+              onClick={() => activateAggregateBoard(KANBAN_BOARD_MY_CARDS_ID, "Доска: Мои")}
+            >
+              мои
+            </button>
+            <button
+              type="button"
+              className={`inline-flex h-8 shrink-0 items-center justify-center rounded-full border px-2 text-[0.58rem] font-bold uppercase tracking-wide ${
+                appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID
+                  ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
+                  : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)]"
+              }`}
+              title="Ответственный"
+              onClick={() =>
+                activateAggregateBoard(KANBAN_BOARD_DISTRIBUTE_ID, "Доска: Ответственный")
+              }
+            >
+              отвст
+            </button>
+          </div>
+          <div className="flex min-w-0 items-stretch gap-1.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="flex min-w-0 items-center gap-1">
+                <input
+                  type="search"
+                  placeholder="Поиск…"
+                  value={appState.search}
+                  onChange={(e) =>
+                    patchApp((s) => {
+                      s.search = e.target.value;
+                    })
+                  }
+                  className={`h-8 min-w-0 flex-1 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-2.5 text-[0.75rem] text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] ${
+                    actualFilterAvailable ? "" : "basis-[70%]"
+                  }`}
+                />
+                <KanbanFiltersButton
+                  board={board}
+                  filters={appState.filters}
+                  filterTemplates={appState.filterTemplates ?? []}
+                  viewMode={appState.viewMode}
+                  patchApp={patchApp}
+                  showToast={showToast}
+                />
+                {actualFilterAvailable ? (
+                  <button
+                    type="button"
+                    className={`inline-flex h-8 shrink-0 items-center justify-center rounded-lg border px-2 text-[0.65rem] font-semibold shadow-sm ${
+                      actualOn
+                        ? "border-white/70 bg-white text-black ring-2 ring-white/70"
+                        : "border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)]"
+                    }`}
+                    title="Карточки с датой записи как в заказах"
+                    aria-pressed={actualOn}
+                    onClick={() =>
+                      setActualAppointmentBoardId((cur) =>
+                        cur === board.id ? null : board.id,
+                      )
+                    }
+                  >
+                    Актуальное
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex min-w-0 items-center gap-1">
+                <button
+                  id="kanban-stop-drop-target"
+                  data-kanban-stop-drop
+                  type="button"
+                  className={`inline-flex h-8 shrink-0 items-center justify-center rounded-lg border px-2 text-[0.65rem] font-extrabold tracking-wide shadow-sm ${
+                    stopOpen
+                      ? "border-white/70 bg-white text-black ring-2 ring-white/70"
+                      : "border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] text-[var(--kanban-text)]"
+                  }`}
+                  onClick={() => {
+                    setStopHoverPreview(null);
+                    setStopOpen((v) => !v);
+                  }}
+                >
+                  СТОП {stoppedCards.length}
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-0.5 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-2 text-[0.65rem] font-medium text-[var(--kanban-text)]"
+                  title={`Архив (${archivedCards.length})`}
+                  aria-label={`Архив (${archivedCards.length})`}
+                  onClick={() => setArchiveOpen(true)}
+                >
+                  <IconArchiveBox className="h-3.5 w-3.5" />
+                  <span className="tabular-nums">{archivedCards.length}</span>
+                </button>
+                {!stopOpen &&
+                (appState.viewMode === "board" || appState.viewMode === "list") ? (
+                  <KanbanViewSortSelect
+                    pref={viewSort}
+                    showBoardManual={appState.viewMode === "board"}
+                    onChange={persistViewSort}
+                  />
+                ) : null}
+              </div>
+            </div>
+            <KanbanFilterQuickAccess
+              layout="square"
+              templates={appState.filterTemplates ?? []}
+              filters={appState.filters}
+              patchApp={patchApp}
+            />
+          </div>
+        </div>
+
+        {/* Desktop / tablet: доска + вид + мои / ответственный */}
+        <div className="hidden min-w-0 max-w-full items-center gap-1.5 sm:flex sm:gap-2">
+          <div className="relative">
             <select
-              className="inline-flex min-h-[2.25rem] max-w-[min(42vw,11rem)] appearance-none truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-1 pl-1.5 pr-6 text-[0.68rem] font-semibold leading-tight text-[var(--kanban-text)] sm:min-h-[2.75rem] sm:max-w-[14rem] sm:py-2 sm:pl-3 sm:pr-7 sm:text-[0.8125rem] md:max-w-[16rem] md:text-[0.875rem]"
+              className="inline-flex min-h-[2.75rem] max-w-[14rem] appearance-none truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-2 pl-3 pr-7 text-[0.8125rem] font-semibold leading-tight text-[var(--kanban-text)] md:max-w-[16rem] md:text-[0.875rem]"
               value={
                 isKanbanAggregateBoardId(appState.activeBoardId)
                   ? ""
@@ -3249,7 +3418,7 @@ export function KanbanApp({
               viewBox="0 0 24 24"
               fill="none"
               aria-hidden
-              className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--kanban-text-muted)] sm:right-2 sm:h-3.5 sm:w-3.5"
+              className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--kanban-text-muted)]"
             >
               <path
                 d="M6 9l6 6 6-6"
@@ -3260,54 +3429,47 @@ export function KanbanApp({
               />
             </svg>
           </div>
+          <KanbanViewModePicker
+            viewMode={appState.viewMode}
+            onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
+          />
           <div
-            className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-1.5"
+            className="flex shrink-0 items-center gap-1.5"
             role="group"
-            aria-label="Вид доски"
+            aria-label="Виртуальные доски"
           >
-            <KanbanViewModePicker
-              viewMode={appState.viewMode}
-              onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
-            />
+            <button
+              type="button"
+              className={`rounded-full border px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-wide transition-colors md:px-3.5 md:py-2 md:text-[0.68rem] ${
+                appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
+                  ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
+                  : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
+              }`}
+              onClick={() => activateAggregateBoard(KANBAN_BOARD_MY_CARDS_ID, "Доска: Мои")}
+            >
+              Мои
+            </button>
+            <button
+              type="button"
+              className={`rounded-full border px-3 py-1.5 text-[0.62rem] font-bold uppercase tracking-wide transition-colors md:px-3.5 md:py-2 md:text-[0.68rem] ${
+                appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID
+                  ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
+                  : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
+              }`}
+              title="Ответственный"
+              onClick={() =>
+                activateAggregateBoard(KANBAN_BOARD_DISTRIBUTE_ID, "Доска: Ответственный")
+              }
+            >
+              Ответственный
+            </button>
           </div>
         </div>
       </header>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:overflow-y-auto max-sm:overscroll-y-contain sm:overflow-hidden">
-          <div className="relative z-20 flex max-w-full shrink-0 flex-wrap items-center gap-1.5 overflow-x-auto border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] py-1.5 pe-2 ps-[var(--app-mobile-menu-inset,0.5rem)] sm:gap-2.5 sm:py-2.5 shell-laptop:overflow-visible shell-laptop:px-4">
-            <div
-              className="flex shrink-0 items-center gap-1 sm:gap-1.5"
-              role="group"
-              aria-label="Виртуальные доски"
-            >
-              <button
-                type="button"
-                className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
-                  appState.activeBoardId === KANBAN_BOARD_MY_CARDS_ID
-                    ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
-                    : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
-                }`}
-                onClick={() => activateAggregateBoard(KANBAN_BOARD_MY_CARDS_ID, "Доска: Мои")}
-              >
-                Мои
-              </button>
-              <button
-                type="button"
-                className={`rounded-full border px-1.5 py-1 text-[0.55rem] font-bold uppercase tracking-wide transition-colors sm:px-3 sm:py-1.5 sm:text-[0.62rem] md:px-3.5 md:py-2 md:text-[0.68rem] ${
-                  appState.activeBoardId === KANBAN_BOARD_DISTRIBUTE_ID
-                    ? "border-[var(--kanban-text)] bg-black/[0.08] text-[var(--kanban-text)] dark:bg-white/[0.12]"
-                    : "border-[var(--kanban-border)] text-[var(--kanban-text-muted)] hover:border-[var(--kanban-text)]/35 hover:text-[var(--kanban-text)]"
-                }`}
-                title="Ответственный"
-                onClick={() =>
-                  activateAggregateBoard(KANBAN_BOARD_DISTRIBUTE_ID, "Доска: Ответственный")
-                }
-              >
-                <span className="sm:hidden">отвст</span>
-                <span className="hidden sm:inline">Ответственный</span>
-              </button>
-            </div>
+          <div className="relative z-20 hidden max-w-full shrink-0 flex-wrap items-center gap-2.5 overflow-x-auto border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-4 py-2.5 shell-laptop:overflow-visible sm:flex">
             <input
               type="search"
               placeholder="Поиск…"
@@ -3317,7 +3479,7 @@ export function KanbanApp({
                   s.search = e.target.value;
                 })
               }
-              className="min-h-[2.25rem] min-w-0 flex-1 basis-[6.5rem] rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-2 py-1.5 text-[0.8125rem] text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] sm:min-h-[2.75rem] sm:max-w-[320px] sm:flex-[1_1_12rem] sm:basis-auto sm:px-3 sm:py-2 sm:text-base md:text-[0.875rem]"
+              className="min-h-[2.75rem] min-w-0 max-w-[320px] flex-[1_1_12rem] rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-3 py-2 text-base text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] md:text-[0.875rem]"
             />
             <KanbanFilterQuickAccess
               templates={appState.filterTemplates ?? []}
@@ -3328,6 +3490,7 @@ export function KanbanApp({
               board={board}
               filters={appState.filters}
               filterTemplates={appState.filterTemplates ?? []}
+              viewMode={appState.viewMode}
               patchApp={patchApp}
               showToast={showToast}
             />
@@ -3359,69 +3522,9 @@ export function KanbanApp({
                 Актуальное
               </button>
             ) : null}
-            {showKanbanKaitenRefreshButton({
-              isDemo,
-              kaitenIntegrationActive,
-              sessionRole: kanbanSessionRole,
-            }) ? (
-              <KanbanMembersBackfillButton
-                refreshTargets={collectKanbanKaitenRefreshTargets(
-                  appState,
-                  board.id,
-                )}
-                onBeforeRefresh={async () => {
-                  if (isDemo) return;
-                  const cur = appStateRef.current;
-                  if (!cur) return;
-                  if (kanbanStateSaveTimerRef.current) {
-                    clearTimeout(kanbanStateSaveTimerRef.current);
-                    kanbanStateSaveTimerRef.current = null;
-                  }
-                  if (!canPersistTenantKanban(cur)) return;
-                  await writePersistedKanbanStateNow(cur, false);
-                }}
-                onRunningChange={(running) => {
-                  kanbanPersistPausedRef.current = running;
-                  if (running && kanbanStateSaveTimerRef.current) {
-                    clearTimeout(kanbanStateSaveTimerRef.current);
-                    kanbanStateSaveTimerRef.current = null;
-                  }
-                }}
-                onComplete={async (patches) => {
-                  persistCrmBoardFieldsFromKaitenRefreshPatches(patches);
-                  for (const p of patches) {
-                    const oid = String(p.linkedOrderId || "").trim();
-                    const title = (p.columnTitle || "").trim();
-                    if (oid && title) {
-                      commitKanbanColumnFromKaitenRefresh({
-                        cardId: p.cardId,
-                        orderId: oid,
-                        columnTitle: title,
-                      });
-                    }
-                  }
-                  if (patches.length > 0) {
-                    setAppState((prev) => {
-                      if (!prev) return prev;
-                      const { state } = applyKaitenRefreshPatchesToState(
-                        prev,
-                        patches,
-                      );
-                      saveKanbanState(state, false);
-                      if (!isDemo && canPersistTenantKanban(state)) {
-                        writePersistedKanbanState(state, false);
-                      }
-                      return state;
-                    });
-                    return;
-                  }
-                  await reloadKanbanStateFromTenant();
-                }}
-                showToast={showToast}
-              />
-            ) : null}
             <button
-              id="kanban-stop-drop-target"
+              id="kanban-stop-drop-target-desktop"
+              data-kanban-stop-drop
               type="button"
               className={`inline-flex h-9 shrink-0 items-center justify-center rounded-md border px-2 text-[0.68rem] font-extrabold tracking-wide shadow-sm transition-[transform,box-shadow,background-color,border-color,color] duration-100 hover:brightness-[0.98] dark:hover:brightness-110 sm:px-3 sm:text-[0.8125rem] ${
                 stopOpen

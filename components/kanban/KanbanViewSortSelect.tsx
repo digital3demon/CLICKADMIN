@@ -29,7 +29,7 @@ export function KanbanViewSortSelect({
           ? "Порядок карточек, как сохранён на доске"
           : "Сортировка только для отображения. На доске перетаскивание внутри колонки отключено."
       }
-      className="inline-flex h-9 min-w-0 max-w-[10.5rem] shrink-0 rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-1.5 text-[0.68rem] font-medium text-[var(--kanban-text)] shadow-sm sm:max-w-[16rem] sm:px-2 sm:text-[0.8125rem]"
+      className="inline-flex h-8 min-w-0 flex-1 shrink rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] px-1 text-[0.55rem] font-medium leading-tight text-[var(--kanban-text)] shadow-sm sm:h-9 sm:max-w-[16rem] sm:flex-none sm:rounded-md sm:px-2 sm:text-[0.8125rem]"
       value={
         !showBoardManual && pref === BOARD_COLUMN_SORT_MANUAL
           ? sortToSelectValue({ key: "created", dir: "desc" })

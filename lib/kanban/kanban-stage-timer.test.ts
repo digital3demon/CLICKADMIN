@@ -64,6 +64,26 @@ describe("applyKanbanTimerOnColumnMove", () => {
     expect(card.timerParkedRemainingMs).toBe(12 * 60_000);
     expect(card.timerParkedAt).toBe(new Date(T0).toISOString());
   });
+
+  it("с колонкой остановки снимает только на ней (кириллица в id)", () => {
+    const card = cardWithTimer(9 * 60_000);
+    expect(
+      applyKanbanTimerOnColumnMove(card, 0, 1, T0, {
+        fromColumnId: "col-к-исполнению",
+        toColumnId: "col-производство",
+        stopColumnId: "col-готово",
+      }),
+    ).toBe("none");
+    expect(card.timerStartedAt).toBeTruthy();
+    expect(
+      applyKanbanTimerOnColumnMove(card, 1, 2, T0, {
+        fromColumnId: "col-производство",
+        toColumnId: "col-готово",
+        stopColumnId: "col-готово",
+      }),
+    ).toBe("parked");
+    expect(card.timerStartedAt).toBeNull();
+  });
 });
 
 describe("freeze / resume при блоке", () => {

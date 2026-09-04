@@ -150,10 +150,10 @@ const CARD_MENU_EST_HEIGHT = 150;
 const BOARD_COLUMN_WIDTH_FIXED =
   "w-[230px] sm:w-[240px] lg:w-[255px] xl:w-[270px]";
 /**
- * На ПК (shell-laptop) колонки — равные ячейки grid (`minmax(0,1fr)` / фиксированный min при скролле).
- * Mobile / низкое окно — прежние px + скролл.
+ * На ПК (shell-laptop) ширина колонки только от grid-трека (см. .kanban-columns-fit).
+ * Mobile / низкое окно — фиксированные px + горизонтальный скролл.
  */
-const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-full shell-laptop:min-w-0 shell-laptop:max-w-none shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:self-stretch`;
+const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-auto shell-laptop:!min-w-0 shell-laptop:!max-w-none shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:self-stretch`;
 
 /** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
 const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
@@ -179,7 +179,10 @@ function isPointerOverStopDropTarget(
   point: { x: number; y: number } | null,
   dragRect: DOMRect | { left: number; right: number; top: number; bottom: number } | null,
 ): boolean {
-  const stopButton = document.getElementById("kanban-stop-drop-target");
+  const stopButton =
+    Array.from(
+      document.querySelectorAll<HTMLElement>("[data-kanban-stop-drop]"),
+    ).find((el) => el.getClientRects().length > 0) ?? null;
   const stopRect = stopButton?.getBoundingClientRect();
   if (!stopRect) return false;
   const pointInside =

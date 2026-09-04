@@ -291,9 +291,12 @@ html {
   }
 
   .kanban-columns-fit {
-    display: grid;
-    /* Равные доли: 1fr при ширине от родителя. max-content + 1fr раздувал колонки по контенту. */
-    grid-template-columns: repeat(var(--kanban-col-count, 1), minmax(0, 1fr));
+    /* !important: иначе Tailwind `flex` в className перебивает grid → разная ширина колонок. */
+    display: grid !important;
+    grid-template-columns: repeat(
+      var(--kanban-col-count, 1),
+      minmax(0, 1fr)
+    );
     align-items: stretch;
     align-self: stretch;
     flex: 1 1 0%;
@@ -301,17 +304,31 @@ html {
     min-width: 0;
     height: 100%;
     min-height: 0;
+    gap: 0.375rem;
   }
 
-  /* Узкий main / крупный zoom браузера — фиксированная равная ширина + горизонтальный скролл. */
+  .kanban-columns-fit > .kanban-column {
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 100%;
+  }
+
+  /* Узкий main / крупный zoom — одинаковый фиксированный трек + горизонтальный скролл. */
   .kanban-columns-fit.kanban-columns-fit--scroll {
     flex: 0 0 auto;
     width: max-content;
     min-width: 100%;
     grid-template-columns: repeat(
       var(--kanban-col-count, 1),
-      minmax(var(--kanban-col-min, 200px), var(--kanban-col-min, 200px))
+      var(--kanban-col-min, 200px)
     );
+  }
+
+  .kanban-columns-fit.kanban-columns-fit--scroll > .kanban-column {
+    width: var(--kanban-col-min, 200px) !important;
+    min-width: var(--kanban-col-min, 200px) !important;
+    max-width: var(--kanban-col-min, 200px) !important;
   }
 }
 

@@ -174,6 +174,8 @@ export type KanbanCard = {
   /** Снимок при переносе вперёд: восстановление, если вернули назад за 45 мин. */
   timerParkedAt?: string | null;
   timerParkedRemainingMs?: number | null;
+  /** Колонка, при попадании на которую таймер отключается (иначе — default доски). */
+  timerStopColumnId?: string | null;
 };
 
 export type KanbanColumn = {
@@ -298,6 +300,8 @@ export type KanbanBoard = {
   cardTypes: CardTypeDef[];
   /** Правила автоматизации. Канон — tenant-ключ kanbanAutomationsV1. */
   automations?: KanbanAutomationRule[];
+  /** Колонка остановки таймера по умолчанию (конфигурация канбана). */
+  defaultTimerStopColumnId?: string | null;
   /** Автоархивация: выбор колонки и таймаут до архива. */
   autoArchiveRules?: KanbanAutoArchiveRule[];
   /** Сколько дней хранить карточки в архиве до удаления (в UI задаётся в годах, 1 г. = 365 дн.). */

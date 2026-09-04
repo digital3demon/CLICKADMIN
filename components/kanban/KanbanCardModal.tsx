@@ -131,6 +131,7 @@ import {
 import { SHELL_LAPTOP_MEDIA } from "@/lib/crm-layout-tiers";
 import { createPortal } from "react-dom";
 import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
+import { KanbanTinyPlusButton } from "./KanbanTinyPlusButton";
 import { PayrollDonePanel } from "@/components/payroll/PayrollDonePanel";
 import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
@@ -3232,16 +3233,12 @@ export function KanbanCardModal({
                   <span className="text-[0.625rem] font-medium uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
                     {card.parentCardId ? "Производственный чеклист" : "Чеклист"}
                   </span>
-                  <button
-                    type="button"
-                    className="inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-input)] disabled:opacity-40"
+                  <KanbanTinyPlusButton
                     disabled={!canManageKanbanChecklist}
                     onClick={addCheckItem}
-                    aria-label="Добавить пункт"
+                    ariaLabel="Добавить пункт"
                     title="Добавить пункт"
-                  >
-                    <span className="text-[0.65rem] font-semibold leading-none">+</span>
-                  </button>
+                  />
                 </div>
                 <ChecklistEditor
                   card={card}
@@ -3257,6 +3254,7 @@ export function KanbanCardModal({
               <KanbanCardTimerBlock
                 card={card}
                 cardId={cardId}
+                board={board}
                 onApply={onApply}
                 activityActorLabel={act}
                 canManage={canManageKanbanTimer}
