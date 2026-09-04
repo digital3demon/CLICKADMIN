@@ -54,7 +54,7 @@ export function OrderSourceEmailView({
         : "Входящее";
   const attachRow =
     compact
-      ? "flex items-center justify-between gap-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1 text-[0.72rem]"
+      ? "flex items-center justify-between gap-1.5 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[0.68rem] leading-tight"
       : "flex items-center justify-between gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs";
 
   return (
@@ -64,7 +64,7 @@ export function OrderSourceEmailView({
           ? "border-[var(--sidebar-blue)]/50 ring-1 ring-[var(--sidebar-blue)]/25"
           : "border-[var(--card-border)]"
       } ${compact ? "p-2" : "p-3"} ${
-        fillHeight ? "flex h-full min-h-0 flex-col" : ""
+        fillHeight ? "flex h-full min-h-0 flex-col overflow-hidden" : ""
       }`}
     >
       <header className={`shrink-0 ${compact ? "space-y-0.5" : "space-y-1"}`}>
@@ -126,12 +126,12 @@ export function OrderSourceEmailView({
       </header>
       <p
         className={`mt-1.5 overflow-y-auto whitespace-pre-wrap break-words border border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-body)] ${
-          compact ? "p-2 text-[0.8125rem] leading-5" : "p-3 text-sm leading-6"
+          compact ? "p-1.5 text-[0.75rem] leading-snug" : "p-2.5 text-[0.8125rem] leading-5"
         } ${
           fillHeight
-            ? "min-h-[8rem] flex-1"
+            ? "min-h-0 flex-1"
             : compact
-              ? "min-h-[9rem] max-h-64"
+              ? "min-h-[6.5rem] max-h-52"
               : "max-h-72"
         }`}
       >
@@ -139,8 +139,10 @@ export function OrderSourceEmailView({
       </p>
       {email.attachments.length > 0 ? (
         <div
-          className={`mt-1.5 space-y-1 ${
-            fillHeight ? "max-h-24 shrink-0 overflow-y-auto" : ""
+          className={`mt-1.5 space-y-0.5 ${
+            fillHeight
+              ? "min-h-0 max-h-[42%] shrink-0 overflow-y-auto"
+              : ""
           }`}
         >
           <div className="text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
