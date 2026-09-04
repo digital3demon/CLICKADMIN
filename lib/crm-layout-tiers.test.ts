@@ -5,6 +5,7 @@ import {
   KANBAN_COL_MIN_VISUAL_PX,
   kanbanBoardColumnVisualWidthPx,
   kanbanBoardFitZoom,
+  kanbanBoardMainWidthIfSidebarCollapsed,
   kanbanBoardNeedsHorizontalScroll,
 } from "./crm-layout-tiers";
 
@@ -58,5 +59,15 @@ describe("kanbanBoardNeedsHorizontalScroll", () => {
 
   it("широкий main и 5 колонок — без скролла", () => {
     expect(kanbanBoardNeedsHorizontalScroll(1600, 5, 40)).toBe(false);
+  });
+});
+
+describe("kanbanBoardMainWidthIfSidebarCollapsed", () => {
+  it("свёрнутый рельс — ширина main не меняется", () => {
+    expect(kanbanBoardMainWidthIfSidebarCollapsed(1600, 60, 60)).toBe(1600);
+  });
+
+  it("раскрытое меню — main как при рельсе", () => {
+    expect(kanbanBoardMainWidthIfSidebarCollapsed(1400, 240, 60)).toBe(1580);
   });
 });

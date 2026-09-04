@@ -13,6 +13,7 @@ import {
   clearKanbanBoardUiLocalForTests,
   loadKanbanBoardUiLocal,
   normalizeKanbanBoardUiState,
+  resolveKanbanColdStartBoardId,
   saveKanbanBoardUiLocal,
   stripPersonalKanbanUiForTenant,
 } from "@/lib/kanban/user-board-ui-state";
@@ -167,5 +168,34 @@ describe("apply / extract", () => {
       lastRealBoardId: KANBAN_BOARD_MY_CARDS_ID,
     });
     expect(loaded?.lastRealBoardId).toBe("");
+  });
+
+  it("F5 с «Мои» открывает последнюю настоящую доску", () => {
+    const state = defaultAppState();
+    const clinicId = "kanban-board-клиника-юли";
+    state.boards.push({
+      ...state.boards[0]!,
+      id: clinicId,
+      title: "Клиника Юли",
+      columns: [],
+    });
+    const boot = resolveKanbanColdStartBoardId(
+      {
+        activeBoardId: KANBAN_BOARD_MY_CARDS_ID,
+        lastRealBoardId: clinicId,
+      },
+      state.boards.map((b) => b.id),
+    );
+    expect(boot).toBe(clinicId);
+  });
+
+  it("F5 без lastReal не оставляет виртуальную доску", () => {
+    const state = defaultAppState();
+    const boot = resolveKanbanColdStartBoardId(
+      { activeBoardId: KANBAN_BOARD_MY_CARDS_ID, lastRealBoardId: "" },
+      state.boards.map((b) => b.id),
+    );
+    expect(boot).not.toBe(KANBAN_BOARD_MY_CARDS_ID);
+    expect(state.boards.some((b) => b.id === boot)).toBe(true);
   });
 });

@@ -191,6 +191,7 @@ import {
   extractKanbanBoardUiState,
   loadKanbanBoardUiLocal,
   normalizeKanbanBoardUiState,
+  resolveKanbanColdStartBoardId,
   saveKanbanBoardUiLocal,
 } from "@/lib/kanban/user-board-ui-state";
 import dynamic from "next/dynamic";
@@ -462,6 +463,8 @@ export function KanbanApp({
   const lastTenantKanbanRef = useRef<KanbanAppState | null>(null);
   /** F5: не писать default в tenant, пока GET не подтвердил живой снимок. */
   const tenantKanbanWriteAllowedRef = useRef(isDemo);
+  /** После GET tenant JSON не гоняем PUT+комменты — иначе UI мёртв на минуты. */
+  const skipTenantPersistUntilRef = useRef(0);
   const kanbanStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kanbanUiSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
@@ -508,6 +511,13 @@ export function KanbanApp({
         return;
       }
       const boardId = cur.activeBoardId;
+      if (
+        isKanbanAggregateBoardId(boardId) &&
+        !(kanbanSessionUserIdRef.current || "").trim()
+      ) {
+        if (opts?.full) boardTilesQueuedFullRef.current = true;
+        return;
+      }
       boardTilesInFlightRef.current = true;
       try {
         const since =
@@ -554,13 +564,13 @@ export function KanbanApp({
         });
         if (mergedForPersist) {
           const snapshot = mergedForPersist;
-          queueMicrotask(() => {
+          window.setTimeout(() => {
             persistMissingCrmStageDuesFromState(snapshot, tiles);
             persistMissingCrmPeopleFromState(snapshot, tiles);
             persistMissingCrmTimersFromState(snapshot, tiles);
             persistMissingCrmChecklistsFromState(snapshot, tiles);
             saveKanbanState(snapshot, false);
-          });
+          }, 0);
         }
       } catch {
         /* offline */
@@ -880,8 +890,18 @@ export function KanbanApp({
           bid &&
           (next.boards.some((b) => b.id === bid) || isKanbanAggregateBoardId(bid))
         ) {
-          next = structuredClone(next);
-          next.activeBoardId = bid;
+          next = { ...next, activeBoardId: bid };
+        } else if (!isDemo) {
+          const bootId = resolveKanbanColdStartBoardId(
+            {
+              activeBoardId: next.activeBoardId,
+              lastRealBoardId: lastRealBoardIdRef.current,
+            },
+            next.boards.map((b) => b.id),
+          );
+          if (bootId && bootId !== next.activeBoardId) {
+            next = { ...next, activeBoardId: bootId };
+          }
         }
         if (!isDemo) {
           applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
@@ -896,6 +916,12 @@ export function KanbanApp({
           const boardIdForTiles = next.activeBoardId;
           tilesTimer = window.setTimeout(() => {
             if (cancelled) return;
+            if (
+              isKanbanAggregateBoardId(boardIdForTiles) &&
+              !(kanbanSessionUserIdRef.current || "").trim()
+            ) {
+              return;
+            }
             const cachedTiles = loadCrmBoardTilesCache(boardIdForTiles);
             if (cachedTiles.length === 0) return;
             const snaps = appointmentSnapsFromCrmTiles(cachedTiles);
@@ -956,6 +982,8 @@ export function KanbanApp({
       } else if (!isDemo && remoteRead.ok && !remoteRead.found) {
         tenantKanbanWriteAllowedRef.current = true;
       } else if (remoteRead.ok && remoteRead.found) {
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        if (cancelled) return;
         const parsed = parseKanbanAppState(remoteRead.value);
         if (!isDemo && !parsed) {
           tenantKanbanWriteAllowedRef.current = false;
@@ -987,11 +1015,14 @@ export function KanbanApp({
             if (currentCard && !findCardInAppState(finalState, currentCard)) {
               setCardModalId(null);
             }
-            saveKanbanState(finalState, isDemo);
             if (!isDemo) {
               lastTenantKanbanRef.current = finalState;
               tenantKanbanWriteAllowedRef.current = true;
+              skipTenantPersistUntilRef.current = Date.now() + 8_000;
             }
+            window.setTimeout(() => {
+              saveKanbanState(finalState, isDemo);
+            }, 0);
             return finalState;
           });
         }
@@ -1008,7 +1039,23 @@ export function KanbanApp({
           setAppState((prev) => {
             const base = prev ?? loadKanbanState(false);
             const next = applyKanbanBoardUiState(base, ui);
-            saveKanbanState(next, false);
+            if (!kanbanStateReadyRef.current) {
+              const params = new URLSearchParams(window.location.search);
+              const bid = params.get("board");
+              if (!bid || !isKanbanAggregateBoardId(bid)) {
+                const bootId = resolveKanbanColdStartBoardId(
+                  {
+                    activeBoardId: next.activeBoardId,
+                    lastRealBoardId: lastRealBoardIdRef.current,
+                  },
+                  next.boards.map((b) => b.id),
+                );
+                if (bootId) next.activeBoardId = bootId;
+              }
+            }
+            window.setTimeout(() => {
+              saveKanbanState(next, false);
+            }, 0);
             return next;
           });
         } else {
@@ -1112,6 +1159,7 @@ export function KanbanApp({
   useEffect(() => {
     if (!appState || !kanbanStateReady || kanbanPersistPausedRef.current) return;
     saveKanbanState(appState, isDemo);
+    if (Date.now() < skipTenantPersistUntilRef.current) return;
     if (!canPersistTenantKanban(appState)) return;
     if (kanbanStateSaveTimerRef.current) {
       clearTimeout(kanbanStateSaveTimerRef.current);
@@ -1250,6 +1298,13 @@ export function KanbanApp({
     const bid = appState.activeBoardId;
     if (boardTilesBoardRef.current !== bid) {
       boardTilesBoardRef.current = bid;
+      if (
+        isKanbanAggregateBoardId(bid) &&
+        !(kanbanSessionUserIdRef.current || "").trim()
+      ) {
+        boardTilesQueuedFullRef.current = true;
+        return;
+      }
       const cachedTiles = loadCrmBoardTilesCache(bid);
       if (cachedTiles.length > 0) {
         setLinkedAppointmentByOrderId((prev) => {
@@ -1317,7 +1372,11 @@ export function KanbanApp({
       setStickyLinkedOrderIds((prev) => mergeStickyLinkedOrderIds(prev, fromHeads));
     }
     void syncKanbanMirrorFromApi();
-  }, [kanbanSessionUserId, isDemo, kanbanStateReady, syncKanbanMirrorFromApi]);
+    if (boardTilesQueuedFullRef.current) {
+      boardTilesQueuedFullRef.current = false;
+      void syncCrmBoardTiles({ full: true });
+    }
+  }, [kanbanSessionUserId, isDemo, kanbanStateReady, syncKanbanMirrorFromApi, syncCrmBoardTiles]);
 
   const pullCatalogCardTypes = useCallback(async () => {
     if (isDemo) return;
@@ -1337,7 +1396,7 @@ export function KanbanApp({
         const next = applyKaitenApiCardTypesToMirrorBoards(prev, rows);
         return applyKanbanCardTypeLanes(next, lastCardTypeLanesRef.current);
       });
-      void syncCrmBoardTiles({ full: true });
+      void syncCrmBoardTiles({ full: false });
     } catch {
       /* справочник недоступен — плитки всё равно клеят тип по имени */
     }

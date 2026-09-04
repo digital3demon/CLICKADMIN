@@ -79,6 +79,11 @@ describe("buildKanbanDisplayView · Мои", () => {
     expect(allIds).toContain("as-assignee");
     expect(allIds).toContain("as-participant");
     expect(allIds).not.toContain("empty-team");
+    expect(queueCol.cards.map((c) => c.id)).toEqual([
+      "empty-team",
+      "as-assignee",
+      "as-participant",
+    ]);
   });
 
   it("в режиме «Ответственный» только карты, где пользователь в assignees", () => {

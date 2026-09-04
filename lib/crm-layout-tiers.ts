@@ -5,10 +5,10 @@
  * Не подменять sm/md/lg по репо; Harmony/classic палитры не унифицировать.
  * Аналитика / почта / склад — те же токены, когда экран реально трогают.
  *
- * Канбан (laptop+): zoom подбирается по ширине main и числу колонок
- * (`kanbanBoardFitZoom`), чтобы 9 столбцов влезали без обрезки.
+ * Канбан (laptop+): zoom подбирается по ширине main *как при свёрнутом рельсе*
+ * (`kanbanBoardFitZoom`), чтобы карточки не сжимались при раскрытом меню.
  * Высота — 100dvh / zoom, колонки stretch на всю рабочую область.
- * Узкий main / крупный масштаб браузера — min-width колонок + горизонтальный скролл.
+ * Узкий main (меню открыто) — тот же размер колонок + горизонтальный скролл.
  *
  * Единицы высоты (поколение 2):
  * - оболочка / full-screen: 100dvh (живой chrome) или min-h-dvh; не 100vh / min-h-screen;
@@ -117,4 +117,17 @@ export function kanbanBoardNeedsHorizontalScroll(
     kanbanBoardColumnVisualWidthPx(availCssPx, columnCount, extraCssPx) <
     KANBAN_COL_MIN_VISUAL_PX
   );
+}
+
+/**
+ * Ширина main, если левое меню свернуть в рельс.
+ * Раскрытое меню не должно уменьшать zoom / карточки — только скролл полотна.
+ */
+export function kanbanBoardMainWidthIfSidebarCollapsed(
+  currentMainCssPx: number,
+  sidebarCssPx: number,
+  collapsedSidebarCssPx: number,
+): number {
+  if (currentMainCssPx <= 0) return currentMainCssPx;
+  return currentMainCssPx + Math.max(0, sidebarCssPx - collapsedSidebarCssPx);
 }

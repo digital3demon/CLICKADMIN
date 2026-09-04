@@ -191,15 +191,17 @@ export function applyKanbanBoardUiState(
   state: KanbanAppState,
   ui: KanbanBoardUiState,
 ): KanbanAppState {
-  const next = structuredClone(state);
-  next.filters = { ...ui.filters };
-  next.filterTemplates = ui.filterTemplates.map((t) => ({
-    ...t,
-    filters: { ...t.filters },
-  }));
-  next.viewMode = ui.viewMode;
-  next.calendarMonth = { ...ui.calendarMonth };
-  next.search = ui.search;
+  const next: KanbanAppState = {
+    ...state,
+    filters: { ...ui.filters },
+    filterTemplates: ui.filterTemplates.map((t) => ({
+      ...t,
+      filters: { ...t.filters },
+    })),
+    viewMode: ui.viewMode,
+    calendarMonth: { ...ui.calendarMonth },
+    search: ui.search,
+  };
   if (ui.activeBoardId) {
     const inBoards = next.boards.some((b) => b.id === ui.activeBoardId);
     if (inBoards || AGGREGATE_BOARD_IDS.has(ui.activeBoardId)) {
@@ -207,6 +209,26 @@ export function applyKanbanBoardUiState(
     }
   }
   return next;
+}
+
+/**
+ * F5 / первый кадр: не открываем «Мои» / «Ответственный».
+ * Виртуальная доска тянет плитки со всех дорожек и на секунды клинит UI.
+ */
+export function resolveKanbanColdStartBoardId(
+  ui: Pick<KanbanBoardUiState, "activeBoardId" | "lastRealBoardId">,
+  boardIds: readonly string[],
+): string {
+  const realIds = boardIds
+    .map((id) => String(id || "").trim())
+    .filter((id) => id && !AGGREGATE_BOARD_IDS.has(id));
+  const active = String(ui.activeBoardId ?? "").trim();
+  if (active && !AGGREGATE_BOARD_IDS.has(active) && realIds.includes(active)) {
+    return active;
+  }
+  const last = normalizeLastRealBoardId(ui.lastRealBoardId);
+  if (last && realIds.includes(last)) return last;
+  return realIds[0] ?? active;
 }
 
 export function hasNonDefaultKanbanBoardUi(ui: KanbanBoardUiState): boolean {

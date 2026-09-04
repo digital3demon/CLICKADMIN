@@ -84,11 +84,14 @@ import type { AggregateCardDragArgs } from "@/lib/kanban/aggregate-card-drag";
 import {
   KANBAN_COL_MIN_VISUAL_PX,
   SHELL_LAPTOP_MEDIA,
+  kanbanBoardColumnVisualWidthPx,
   kanbanBoardDesktopZoom,
   kanbanBoardFitZoom,
+  kanbanBoardMainWidthIfSidebarCollapsed,
   kanbanBoardNeedsHorizontalScroll,
   setKanbanBoardLiveZoom,
 } from "@/lib/crm-layout-tiers";
+import { APP_SIDEBAR_W_COLLAPSED } from "@/lib/app-sidebar-collapse";
 
 type BoardCanvasProps = {
   appState: KanbanAppState;
@@ -979,8 +982,11 @@ export function BoardCanvas({
     const parent = root?.parentElement;
     if (!root || !parent) return;
 
+    let lastFitKey = "";
     const apply = () => {
       if (!window.matchMedia(SHELL_LAPTOP_MEDIA).matches) {
+        if (lastFitKey === "off") return;
+        lastFitKey = "off";
         root.style.removeProperty("--kanban-board-zoom");
         root.style.removeProperty("--kanban-col-min");
         root.style.removeProperty("width");
@@ -991,20 +997,40 @@ export function BoardCanvas({
         return;
       }
       const extra = aggregateLayoutLocked ? 0 : 40;
-      const needsScroll = kanbanBoardNeedsHorizontalScroll(
+      const remPx =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const collapsedSidebarPx =
+        (parseFloat(APP_SIDEBAR_W_COLLAPSED) || 3.75) * remPx;
+      const sidebarEl = document.querySelector<HTMLElement>(
+        'aside[aria-label="Основное меню"]',
+      );
+      const sidebarPx = sidebarEl?.getBoundingClientRect().width ?? 0;
+      const fitW = kanbanBoardMainWidthIfSidebarCollapsed(
         parent.clientWidth,
+        sidebarPx,
+        collapsedSidebarPx,
+      );
+      const z = kanbanBoardFitZoom(fitW, columnIds.length, extra);
+      const colVisual = kanbanBoardColumnVisualWidthPx(
+        fitW,
         columnIds.length,
         extra,
       );
-      setBoardNeedsScroll(needsScroll);
-      const z = kanbanBoardFitZoom(parent.clientWidth, columnIds.length, extra);
-      setKanbanBoardLiveZoom(z);
-      root.style.setProperty("--kanban-board-zoom", String(z));
-      root.style.setProperty("--kanban-col-min", `${KANBAN_COL_MIN_VISUAL_PX}px`);
-      root.style.width = `${parent.clientWidth / z}px`;
+      const colTrack = Math.max(KANBAN_COL_MIN_VISUAL_PX, colVisual);
+      const needsScroll =
+        fitW > parent.clientWidth + 1 ||
+        kanbanBoardNeedsHorizontalScroll(fitW, columnIds.length, extra);
       const cssH =
         window.visualViewport?.height ??
         document.documentElement.clientHeight;
+      const fitKey = `${Math.round(fitW)}:${z.toFixed(4)}:${Math.round(colTrack)}:${needsScroll ? 1 : 0}:${Math.round(cssH)}`;
+      if (fitKey === lastFitKey) return;
+      lastFitKey = fitKey;
+      setBoardNeedsScroll(needsScroll);
+      setKanbanBoardLiveZoom(z);
+      root.style.setProperty("--kanban-board-zoom", String(z));
+      root.style.setProperty("--kanban-col-min", `${colTrack}px`);
+      root.style.width = `${fitW / z}px`;
       root.style.height = `${cssH / z}px`;
     };
 

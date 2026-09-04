@@ -1946,6 +1946,9 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
   }
 }
 
+let headsPersistTimer: ReturnType<typeof setTimeout> | null = null;
+let headsPersistQueued: KanbanAppState | null = null;
+
 export function saveKanbanState(state: KanbanAppState, isDemo = false) {
   if (isDemo) {
     memoryStateRawDemo = JSON.stringify(state);
@@ -1953,7 +1956,18 @@ export function saveKanbanState(state: KanbanAppState, isDemo = false) {
   }
   memoryStateLiveObj = state;
   memoryStateRawLive = null;
-  persistKanbanCardHeadsCache(state);
+  headsPersistQueued = state;
+  if (typeof window === "undefined") {
+    persistKanbanCardHeadsCache(state);
+    return;
+  }
+  if (headsPersistTimer != null) window.clearTimeout(headsPersistTimer);
+  headsPersistTimer = window.setTimeout(() => {
+    headsPersistTimer = null;
+    const snap = headsPersistQueued;
+    headsPersistQueued = null;
+    if (snap) persistKanbanCardHeadsCache(snap);
+  }, 480);
 }
 
 export function getActiveBoard(state: KanbanAppState): KanbanBoard {
@@ -2223,15 +2237,22 @@ export function buildKanbanDisplayView(
       sources[0] ??
       accessibleBoards[0] ??
       getKanbanLayoutTemplateBoard(state);
-    const displayBoard = structuredClone(template);
-    displayBoard.id = state.activeBoardId;
-    displayBoard.title = agg === "my" ? "Мои" : "Ответственный";
-    displayBoard.automations = [];
+    const displayBoard: KanbanBoard = {
+      ...template,
+      id: state.activeBoardId,
+      title: agg === "my" ? "Мои" : "Ответственный",
+      automations: [],
+      archivedCards: [],
+      stoppedCards: [],
+      columns: (template.columns || []).map((col) => ({
+        ...col,
+        cards: [],
+      })),
+    };
     const uid = sessionUserId;
 
     const colByKey = new Map<string, KanbanColumn>();
     for (const colView of displayBoard.columns) {
-      colView.cards = [];
       colByKey.set(kanbanAggregateColumnKey(colView.title), colView);
     }
     const seen = new Set<string>();
@@ -2241,7 +2262,7 @@ export function buildKanbanDisplayView(
         let colView = colByKey.get(key);
         if (!colView) {
           colView = {
-            ...structuredClone(colO),
+            ...colO,
             cards: [],
           };
           displayBoard.columns.push(colView);
