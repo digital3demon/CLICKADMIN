@@ -915,7 +915,7 @@ export default async function OrdersPage({
             title="Наряды с заблокированной карточкой"
           >
             <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-              ЗАБЛОКИРОВАНО
+              Заблокировано
             </span>
             <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
               {blockedCount}

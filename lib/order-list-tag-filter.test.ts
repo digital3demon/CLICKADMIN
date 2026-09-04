@@ -77,11 +77,11 @@ describe("parseListTagParam / urgent", () => {
     expect(listTagWhere({ kind: "waitPayment" }).listCustomTags).toBeTruthy();
   });
 
-  it("kaiten-blocked: фильтр и подпись «ЗАБЛОКИРОВАНО»", () => {
+  it("kaiten-blocked: фильтр и подпись «Заблокировано»", () => {
     expect(parseListTagParam(LIST_TAG_KAITEN_BLOCKED)).toEqual({
       kind: "kaitenBlocked",
     });
-    expect(humanListTagLabel({ kind: "kaitenBlocked" })).toBe("ЗАБЛОКИРОВАНО");
+    expect(humanListTagLabel({ kind: "kaitenBlocked" })).toBe("Заблокировано");
     expect(listTagWhere({ kind: "kaitenBlocked" })).toEqual({
       kaitenBlocked: true,
     });

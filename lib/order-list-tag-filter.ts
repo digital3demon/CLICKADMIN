@@ -398,7 +398,7 @@ export function humanListTagLabel(parsed: ParsedListTag): string {
           return "Срочно";
       }
     case "kaitenBlocked":
-      return "ЗАБЛОКИРОВАНО";
+      return "Заблокировано";
     case "invoice":
       return "СЧЕТ";
     case "invoicePrinted":
