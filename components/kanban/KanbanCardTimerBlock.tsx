@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { KanbanBoard, KanbanCard } from "@/lib/kanban/types";
 import { KanbanTinyPlusButton } from "./KanbanTinyPlusButton";
@@ -69,11 +69,33 @@ export function KanbanCardTimerBlock({
   const [hoursDraft, setHoursDraft] = useState("0");
   const [minutesDraft, setMinutesDraft] = useState("30");
   const [stopColumnDraft, setStopColumnDraft] = useState("");
+  const [stopMenuOpen, setStopMenuOpen] = useState(false);
   const [portalReady, setPortalReady] = useState(false);
+  const stopMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPortalReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!settingsOpen) setStopMenuOpen(false);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!stopMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setStopMenuOpen(false);
+    };
+    const onPointer = (e: MouseEvent) => {
+      if (!stopMenuRef.current?.contains(e.target as Node)) setStopMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onPointer);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onPointer);
+    };
+  }, [stopMenuOpen]);
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -317,7 +339,7 @@ export function KanbanCardTimerBlock({
       {settingsOpen && canManage && portalReady
         ? createPortal(
         <div
-          className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 p-4"
+          className="kanban-root fixed inset-0 z-[400] flex items-center justify-center bg-black/50 p-4"
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setSettingsOpen(false);
@@ -326,7 +348,8 @@ export function KanbanCardTimerBlock({
           <div
             role="dialog"
             aria-label="Настройки таймера"
-            className="w-full max-w-sm rounded-xl border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-4 text-[var(--kaiten-modal-text)] shadow-2xl"
+            className="isolate w-full max-w-sm rounded-xl border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] p-4 text-[var(--kaiten-modal-text)] shadow-2xl"
+            style={{ backgroundColor: "var(--kaiten-modal-bg, #383840)" }}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <h3 className="m-0 text-sm font-semibold">Интервал таймера</h3>
@@ -367,23 +390,86 @@ export function KanbanCardTimerBlock({
                 />
               </label>
             </div>
-            <label className="mt-3 block text-[0.7rem]">
+            <div className="mt-3 block text-[0.7rem]">
               <span className="block text-[var(--kaiten-modal-muted)]">
                 Отключить на колонке
               </span>
-              <select
-                className="mt-0.5 w-full rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-sm"
-                value={stopColumnDraft}
-                onChange={(e) => setStopColumnDraft(e.target.value)}
-              >
-                <option value="">Любой шаг вперёд</option>
-                {(board?.columns ?? []).map((col) => (
-                  <option key={col.id} value={col.id}>
-                    {col.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div ref={stopMenuRef} className="relative mt-0.5">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-left text-sm text-[var(--kaiten-modal-text)]"
+                  aria-haspopup="listbox"
+                  aria-expanded={stopMenuOpen}
+                  aria-label="Отключить на колонке"
+                  onClick={() => setStopMenuOpen((v) => !v)}
+                >
+                  <span className="min-w-0 truncate">
+                    {(board?.columns ?? []).find((c) => c.id === stopColumnDraft)
+                      ?.title ?? "Любой шаг вперёд"}
+                  </span>
+                  <svg
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className={`h-3.5 w-3.5 shrink-0 text-[var(--kaiten-modal-muted)] transition-transform ${
+                      stopMenuOpen ? "rotate-180" : ""
+                    }`}
+                    aria-hidden
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+                {stopMenuOpen ? (
+                  <ul
+                    role="listbox"
+                    aria-label="Колонка отключения таймера"
+                    className="absolute left-0 top-[calc(100%+4px)] z-10 max-h-56 w-full overflow-y-auto rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] py-1 text-sm text-[var(--kaiten-modal-text)] shadow-xl"
+                    style={{ backgroundColor: "var(--kaiten-modal-input, #34343c)" }}
+                  >
+                    <li role="option" aria-selected={!stopColumnDraft}>
+                      <button
+                        type="button"
+                        className={`flex w-full px-2.5 py-1.5 text-left hover:bg-black/[0.06] dark:hover:bg-white/[0.08] ${
+                          !stopColumnDraft
+                            ? "bg-[color-mix(in_srgb,var(--kaiten-accent,#8b5cf6)_22%,transparent)] font-medium"
+                            : ""
+                        }`}
+                        onClick={() => {
+                          setStopColumnDraft("");
+                          setStopMenuOpen(false);
+                        }}
+                      >
+                        Любой шаг вперёд
+                      </button>
+                    </li>
+                    {(board?.columns ?? []).map((col) => {
+                      const active = col.id === stopColumnDraft;
+                      return (
+                        <li key={col.id} role="option" aria-selected={active}>
+                          <button
+                            type="button"
+                            className={`flex w-full px-2.5 py-1.5 text-left hover:bg-black/[0.06] dark:hover:bg-white/[0.08] ${
+                              active
+                                ? "bg-[color-mix(in_srgb,var(--kaiten-accent,#8b5cf6)_22%,transparent)] font-medium"
+                                : ""
+                            }`}
+                            onClick={() => {
+                              setStopColumnDraft(col.id);
+                              setStopMenuOpen(false);
+                            }}
+                          >
+                            {col.title}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
             <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--kaiten-modal-border)] pt-3">
               <button
                 type="button"

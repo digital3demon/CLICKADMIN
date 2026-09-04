@@ -46,74 +46,92 @@ export function OrderSourceEmailView({
   /** В канбане бейдж автоответа не нужен. */
   hideReplyStatus?: boolean;
 }) {
+  const directionLabel =
+    email.direction === "OUTBOUND"
+      ? "Исходящее"
+      : email.direction === "DRAFT"
+        ? "Черновик"
+        : "Входящее";
+  const attachRow =
+    compact
+      ? "flex items-center justify-between gap-2 rounded-md border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1 text-[0.72rem]"
+      : "flex items-center justify-between gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs";
+
   return (
     <article
       className={`rounded-xl border bg-[var(--card-bg)] ${
         usedByAi
           ? "border-[var(--sidebar-blue)]/50 ring-1 ring-[var(--sidebar-blue)]/25"
           : "border-[var(--card-border)]"
-      } ${compact ? "p-2" : "p-4"} ${
+      } ${compact ? "p-2" : "p-3"} ${
         fillHeight ? "flex h-full min-h-0 flex-col" : ""
       }`}
     >
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          {index != null ? (
-            <div className="text-[0.68rem] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-              Письмо {index + 1}
-            </div>
-          ) : null}
-          <h4 className="mt-1 text-sm font-semibold text-[var(--app-text)]">
-            {email.subject?.trim() || "(без темы)"}
-          </h4>
-          <p className="mt-0.5 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            {email.direction === "OUTBOUND"
-              ? "Исходящее"
-              : email.direction === "DRAFT"
-                ? "Черновик"
-                : "Входящее"}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          {usedByAi ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--sidebar-blue)]/40 bg-[var(--sidebar-blue)]/10 px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--sidebar-blue)]"
-              title="ИИ использовал это письмо"
-            >
-              <svg
-                className="h-3.5 w-3.5 shrink-0"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
+      <header className={`shrink-0 ${compact ? "space-y-0.5" : "space-y-1"}`}>
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+            {index != null ? <span>Письмо {index + 1}</span> : null}
+            {index != null ? (
+              <span aria-hidden className="font-normal opacity-50">
+                ·
+              </span>
+            ) : null}
+            <span>{directionLabel}</span>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {usedByAi ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--sidebar-blue)]/40 bg-[var(--sidebar-blue)]/10 px-1.5 py-0.5 text-[0.65rem] font-semibold text-[var(--sidebar-blue)]"
+                title="ИИ использовал это письмо"
               >
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
-              ИИ
-            </span>
-          ) : null}
-          <time className="text-[0.68rem] font-medium text-[var(--text-muted)]">
-            {formatSourceEmailDate(email)}
-          </time>
-          {email.isReplyTarget && !hideReplyStatus ? (
-            <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-              {email.autoReplySentAt ? "Автоответ отправлен" : "Ответ по шаблону"}
-            </span>
-          ) : null}
+                <svg
+                  className="h-3 w-3 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                ИИ
+              </span>
+            ) : null}
+            <time className="text-[0.65rem] font-medium text-[var(--text-muted)]">
+              {formatSourceEmailDate(email)}
+            </time>
+            {email.isReplyTarget && !hideReplyStatus ? (
+              <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                {email.autoReplySentAt ? "Автоответ отправлен" : "Ответ по шаблону"}
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
-      <p className="mt-2 shrink-0 text-xs font-medium text-[var(--text-secondary)]">
-        {senderLabel(email)}
-      </p>
+        <h4
+          className={`min-w-0 font-semibold leading-snug text-[var(--app-text)] ${
+            compact ? "line-clamp-2 text-xs" : "line-clamp-2 text-sm"
+          }`}
+        >
+          {email.subject?.trim() || "(без темы)"}
+        </h4>
+        <p
+          className={`truncate font-medium text-[var(--text-secondary)] ${
+            compact ? "text-[0.7rem]" : "text-xs"
+          }`}
+        >
+          {senderLabel(email)}
+        </p>
+      </header>
       <p
-        className={`mt-2 overflow-y-auto whitespace-pre-wrap border border-[var(--border-subtle)] bg-[var(--surface-muted)] ${compact ? "p-1.5 leading-4" : "p-3 leading-5"} text-xs text-[var(--text-body)] ${
+        className={`mt-1.5 overflow-y-auto whitespace-pre-wrap break-words border border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-body)] ${
+          compact ? "p-2 text-[0.8125rem] leading-5" : "p-3 text-sm leading-6"
+        } ${
           fillHeight
-            ? "min-h-0 flex-1"
+            ? "min-h-[8rem] flex-1"
             : compact
-              ? "max-h-24"
+              ? "min-h-[9rem] max-h-64"
               : "max-h-72"
         }`}
       >
@@ -121,11 +139,11 @@ export function OrderSourceEmailView({
       </p>
       {email.attachments.length > 0 ? (
         <div
-          className={`mt-3 space-y-1.5 ${
-            fillHeight ? "max-h-28 shrink-0 overflow-y-auto" : ""
+          className={`mt-1.5 space-y-1 ${
+            fillHeight ? "max-h-24 shrink-0 overflow-y-auto" : ""
           }`}
         >
-          <div className="text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          <div className="text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Вложения
           </div>
           {email.attachments.map((attachment) => {
@@ -143,7 +161,7 @@ export function OrderSourceEmailView({
                   href={externalUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+                  className={`${attachRow} text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]`}
                 >
                   <span className="min-w-0 truncate font-medium">{attachment.fileName}</span>
                   <span className="shrink-0 text-[var(--text-muted)]">{meta}</span>
@@ -157,7 +175,7 @@ export function OrderSourceEmailView({
               return (
                 <div
                   key={attachment.id}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--text-body)]"
+                  className={`${attachRow} text-[var(--text-body)]`}
                   title={
                     attachment.id.startsWith("yandex-disk:")
                       ? "Файл на Яндекс.Диске: в теле письма нет URL, откройте письмо во внешней почте"
@@ -175,7 +193,7 @@ export function OrderSourceEmailView({
                 href={`/api/mail/emails/${email.id}/attachments/${attachment.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between gap-2 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-2 text-xs text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]"
+                className={`${attachRow} text-[var(--sidebar-blue)] hover:bg-[var(--surface-hover)]`}
               >
                 <span className="min-w-0 truncate font-medium">{attachment.fileName}</span>
                 <span className="shrink-0 text-[var(--text-muted)]">{size}</span>

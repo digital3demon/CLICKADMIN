@@ -64,7 +64,7 @@ export function OrderSourceEmailsPanel({
         </div>
       ) : (
         <div className="shrink-0 border-b border-[var(--kaiten-modal-border)] px-2.5 py-1.5">
-          <div className="text-[0.55rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+          <div className="text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
             Письма наряда
             {orderNumber ? (
               <span className="ml-1.5 normal-case tracking-normal text-[var(--kaiten-modal-text)]">
@@ -77,8 +77,8 @@ export function OrderSourceEmailsPanel({
       <div
         className={[
           "min-h-0 flex-1",
-          compact ? "p-2" : "p-4",
-          many ? "overflow-x-auto overflow-y-hidden" : "overflow-y-auto",
+          compact ? "flex flex-col p-2" : "p-4",
+          many ? "overflow-x-auto overflow-y-hidden" : compact ? "overflow-hidden" : "overflow-y-auto",
         ].join(" ")}
       >
         {loading ? (
@@ -93,7 +93,7 @@ export function OrderSourceEmailsPanel({
           <div
             className={[
               "flex h-full snap-x snap-mandatory gap-3",
-              compact ? "min-h-[12rem] flex-row" : "min-h-[12rem]",
+              compact ? "min-h-[18rem] flex-row" : "min-h-[12rem]",
             ].join(" ")}
           >
             {emails.map((email, index) => (
@@ -102,7 +102,7 @@ export function OrderSourceEmailsPanel({
                 className={[
                   "flex h-full shrink-0 snap-start flex-col",
                   compact
-                    ? "w-[15rem]"
+                    ? "w-[min(22rem,100%)]"
                     : "w-[min(22rem,calc(100vw-3.5rem))]",
                 ].join(" ")}
               >
@@ -117,10 +117,11 @@ export function OrderSourceEmailsPanel({
             ))}
           </div>
         ) : (
-          <div className={compact ? "w-[15rem] max-w-full" : undefined}>
+          <div className={compact ? "flex min-h-0 w-full flex-1 flex-col" : undefined}>
             <OrderSourceEmailView
               email={emails[0]!}
               index={0}
+              fillHeight={compact}
               compact={compact}
               hideReplyStatus={hideReplyStatus}
             />

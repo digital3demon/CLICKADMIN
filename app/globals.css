@@ -186,6 +186,13 @@ html.dark .kanban-root {
   --kaiten-modal-input: #34343c;
   --kaiten-modal-control: #404048;
   --kanban-cal-mini-bg: #4a4a52;
+  color-scheme: dark;
+}
+
+html.dark .kanban-root select,
+html.dark .kanban-root select option {
+  background-color: var(--kaiten-modal-input);
+  color: var(--kaiten-modal-text);
 }
 
 /* Touch: карточка «вибрирует» всё время перетаскивания — сигнал, что drag активен. */
