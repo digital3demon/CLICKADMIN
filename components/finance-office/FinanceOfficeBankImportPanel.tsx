@@ -552,7 +552,6 @@ export function FinanceOfficeBankImportPanel({
       className={[
         "rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm",
         compact ? "flex min-h-[3.25rem] flex-col" : "",
-        hasRows ? "col-span-2 xl:col-span-2" : "",
         className,
       ]
         .filter(Boolean)

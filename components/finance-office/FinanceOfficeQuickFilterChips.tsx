@@ -228,7 +228,7 @@ export function FinanceOfficeQuickFilterChips({
   if (!showRow) return null;
   return (
     <div className="w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 crm-t2:gap-2">
         {showCorrections ? (
           <Link
             prefetch={false}
@@ -243,10 +243,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Непринятые корректировки из чата («!!!») и наряды, где сумма счёта не сходится с составом"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               Корректировки
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {attentionCount}
             </span>
           </Link>
@@ -265,10 +265,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Быстрый фильтр по тегу «Заказ протетики»"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               Заказ протетики
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {prostheticsPendingCount}
             </span>
           </Link>
@@ -287,10 +287,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Наряды без отметки «Просчитано» (в выбранном периоде)"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               Не просчитано
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {financeNotCalculatedCount}
             </span>
           </Link>
@@ -309,10 +309,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Наряды с отметкой «Просчитано» (в выбранном периоде)"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               Просчитано
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {financeCalculatedCount}
             </span>
           </Link>
@@ -335,10 +335,10 @@ export function FinanceOfficeQuickFilterChips({
                 : "Наряды с отметкой «ждем оплату» (в выбранном периоде)"
             }
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               Ждем оплату
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {waitPaymentCount}
             </span>
           </Link>
@@ -357,10 +357,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Клиника только по ЭДО (в т.ч. ИП врача)"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               ЭДО
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {edoCount}
             </span>
           </Link>
@@ -379,10 +379,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Клиника работает и по ЭДО, и по бумдокам"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               ЭДО+бумдоки
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {edoPaperCount}
             </span>
           </Link>
@@ -401,10 +401,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Бумажный документооборот или наряд без клиники"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               бумдоки
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {noEdoCount}
             </span>
           </Link>
@@ -423,10 +423,10 @@ export function FinanceOfficeQuickFilterChips({
             }`}
             title="Наряды с непрочитанным упоминанием лаборатории в чате Kaiten (@…)"
           >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
+            <span className="px-2 py-1 text-xs font-semibold crm-t2:px-3 crm-t2:py-1.5 crm-t2:text-sm">
               ЧАТ
             </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
+            <span className="inline-flex min-w-[1.75rem] items-center justify-center border-l border-current/25 px-1.5 py-1 text-xs font-bold crm-t2:min-w-[2.25rem] crm-t2:px-2 crm-t2:py-1.5 crm-t2:text-sm">
               {labMentionCount}
             </span>
           </Link>

@@ -724,8 +724,8 @@ export default async function OrdersPage({
         searchActive={Boolean(listSearchQ)}
       >
       <div className={`${ORDERS_LIST_STACK} space-y-4`}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-        <div className="order-1 flex min-w-0 flex-col lg:order-2 lg:flex-1">
+      <div className="flex flex-col gap-3 crm-t3:flex-row crm-t3:items-stretch">
+        <div className="order-1 flex min-w-0 flex-col crm-t3:order-2 crm-t3:min-w-0 crm-t3:flex-1">
           <OrderPostingMonthBar
             toolbarEnd={
               <OrdersListShippedToolbar
@@ -745,9 +745,9 @@ export default async function OrdersPage({
             }
           />
         </div>
-        <div className="order-2 flex min-w-0 flex-col self-stretch lg:order-1 lg:shrink-0">
+        <div className="order-2 flex min-w-0 flex-col self-stretch crm-t3:order-1 crm-t3:shrink-0">
           <OrdersListHeaderActionCards
-            className="h-full lg:flex-1"
+            className="h-full crm-t3:flex-1"
             initialInTransitCount={prostheticsInTransitCount}
             initialToOrderCount={prostheticsToOrderCount}
             initialCorrectionsPendingCount={attentionCount}

@@ -18,11 +18,11 @@ type Props = {
 };
 
 const linkNeutral =
-  "inline-flex min-w-0 max-w-full items-center justify-center whitespace-nowrap rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-medium leading-none text-[var(--text-body)] shadow-sm hover:bg-[var(--surface-hover)]";
+  "inline-flex min-w-0 w-full items-center justify-center text-center whitespace-normal rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-medium leading-tight text-[var(--text-body)] shadow-sm hover:bg-[var(--surface-hover)]";
 const linkEmerald =
-  "inline-flex min-w-0 max-w-full items-center justify-center whitespace-nowrap rounded-full border border-emerald-300/70 bg-emerald-100/80 px-2.5 py-1 text-xs font-medium leading-none text-emerald-950 shadow-sm hover:bg-emerald-200/90 dark:border-emerald-800/60 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-900/55";
+  "inline-flex min-w-0 w-full items-center justify-center text-center whitespace-normal rounded-full border border-emerald-300/70 bg-emerald-100/80 px-2.5 py-1 text-xs font-medium leading-tight text-emerald-950 shadow-sm hover:bg-emerald-200/90 dark:border-emerald-800/60 dark:bg-emerald-950/50 dark:text-emerald-100 dark:hover:bg-emerald-900/55";
 const linkSky =
-  "inline-flex min-w-0 max-w-full items-center justify-center whitespace-nowrap rounded-full border border-sky-300/70 bg-sky-100/80 px-2.5 py-1 text-xs font-medium leading-none text-sky-950 shadow-sm hover:bg-sky-200/90 dark:border-sky-800/60 dark:bg-sky-950/50 dark:text-sky-100 dark:hover:bg-sky-900/55";
+  "inline-flex min-w-0 w-full items-center justify-center text-center whitespace-normal rounded-full border border-sky-300/70 bg-sky-100/80 px-2.5 py-1 text-xs font-medium leading-tight text-sky-950 shadow-sm hover:bg-sky-200/90 dark:border-sky-800/60 dark:bg-sky-950/50 dark:text-sky-100 dark:hover:bg-sky-900/55";
 
 /** Кнопки фильтра по отгрузке — колонкой справа от «Старт нового месяца». */
 export function OrdersListShippedToolbar({
@@ -138,6 +138,8 @@ export function OrdersListShippedToolbar({
   }
 
   return (
-    <div className="flex shrink-0 flex-col items-stretch gap-1">{links}</div>
+    <div className="flex w-full min-w-0 flex-col items-stretch gap-1 crm-t2:max-w-[12.5rem] crm-t3:w-auto crm-t3:shrink-0">
+      {links}
+    </div>
   );
 }

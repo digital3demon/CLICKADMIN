@@ -37,10 +37,11 @@ import { extractOrderNumberLabelFromKanbanCardTitle } from "@/lib/kanban-mention
 /**
  * Desktop: одна сетка на шапку + все строки (`auto` = max по столбцу).
  * Название — не 1fr: иначе пустота между текстом и «Колонка».
+ * minmax(0, …) чтобы ячейка сжималась; иначе min-content заезжает на соседей.
  * Хвост `1fr` забирает лишнюю ширину, карточка остаётся на всю строку.
  */
 const LIST_TABLE =
-  "grid w-full grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(8rem,18rem)_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
+  "grid w-full min-w-0 grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,60ch)_auto_auto_auto_auto_auto_minmax(0,12rem)_minmax(0,1fr)] sm:items-stretch sm:gap-x-0 sm:gap-y-1.5";
 
 /** Mobile: своя сетка. Desktop: `contents` — ячейки входят в subgrid карточки. */
 const LIST_ROW_INNER = "grid w-full grid-cols-1 gap-y-1 gap-x-2 sm:contents";
@@ -1090,7 +1091,7 @@ export function KanbanListView({
                         </span>
                       </div>
                       <div className="min-w-0 flex-1 py-1 pl-1 pr-1.5 sm:contents sm:p-0">
-                        <div className="flex min-w-0 items-start gap-1 sm:min-w-0 sm:items-start sm:gap-1.5 sm:px-2 sm:py-1.5">
+                        <div className="flex min-w-0 items-start gap-1 overflow-hidden sm:min-w-0 sm:items-start sm:gap-1.5 sm:px-2 sm:py-1.5">
                           <span
                             className="mt-0.5 hidden h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.58rem] font-bold text-white sm:mt-0.5 sm:flex"
                             style={{ background: accent }}
@@ -1098,13 +1099,13 @@ export function KanbanListView({
                           >
                             {initials}
                           </span>
-                          <div className="min-w-0 flex-1 sm:max-w-[60ch] sm:flex-none sm:overflow-hidden">
+                          <div className="min-w-0 flex-1 overflow-hidden">
                             <div className="hidden text-[0.55rem] font-bold uppercase leading-none tracking-wide text-[var(--kanban-text-muted)] sm:block">
                               {ct?.name ?? "—"}
                             </div>
-                            <div className="flex min-w-0 max-w-[60ch] items-start gap-1 overflow-hidden text-[0.78rem] font-semibold leading-snug text-[var(--kanban-text)] sm:mt-0.5 sm:gap-1.5 sm:text-[0.8rem]">
+                            <div className="flex min-w-0 items-start gap-1 overflow-hidden text-[0.78rem] font-semibold leading-snug text-[var(--kanban-text)] sm:mt-0.5 sm:gap-1.5 sm:text-[0.8rem]">
                               <span
-                                className="min-w-0 max-w-[60ch] whitespace-normal break-words [overflow-wrap:anywhere]"
+                                className="min-w-0 flex-1 line-clamp-2 break-words [overflow-wrap:anywhere]"
                                 title={card.title}
                               >
                                 {card.title}
@@ -1128,7 +1129,7 @@ export function KanbanListView({
                               isKanbanAggregateBoardId(appState.activeBoardId)) &&
                             homeBoardId !== appState.activeBoardId ? (
                               <div
-                                className="mt-0.5 text-[0.55rem] font-medium leading-tight text-[var(--kanban-text-muted)] sm:text-[0.58rem]"
+                                className="mt-0.5 truncate text-[0.55rem] font-medium leading-tight text-[var(--kanban-text-muted)] sm:text-[0.58rem]"
                                 title={`Карточка с доски «${rowBoard.title}»`}
                               >
                                 <span className="opacity-80">Доска:</span>{" "}

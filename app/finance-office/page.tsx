@@ -334,21 +334,23 @@ export default async function FinanceOfficePage({
         {pageSize !== FINANCE_OFFICE_DEFAULT_PAGE_SIZE ? (
           <input type="hidden" name="limit" value={String(pageSize)} />
         ) : null}
-        <div className="flex min-w-0 items-stretch gap-2">
+        <div className="flex min-w-0 flex-col gap-2 crm-t2:flex-row crm-t2:items-stretch">
           <input
             name="q"
             defaultValue={q}
             placeholder="Поиск по номеру наряда или пациенту"
-            className="min-w-0 flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
+            className="min-w-0 w-full flex-1 rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
           />
-          <FinanceOfficeExportButton className="self-stretch" />
+          <div className="flex min-w-0 flex-wrap items-stretch gap-2">
+            <button
+              type="submit"
+              className="min-w-0 flex-1 rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90 crm-t2:flex-none"
+            >
+              Найти
+            </button>
+            <FinanceOfficeExportButton className="self-stretch" />
+          </div>
         </div>
-        <button
-          type="submit"
-          className="w-full rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90 sm:w-auto sm:self-start"
-        >
-          Найти
-        </button>
       </form>
       <div className="flex flex-wrap items-center gap-2">
         <FinanceOfficePrintInvoicesButton
@@ -378,7 +380,7 @@ export default async function FinanceOfficePage({
     <section className="space-y-3">
       <div>
         <h1
-          className={`${fontDisplay.className} text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl`}
+          className={`${fontDisplay.className} crm-mobile-menu-pad text-xl font-semibold tracking-tight text-[var(--app-text)] lg:text-2xl`}
         >
           ФинОтдел
         </h1>
@@ -389,7 +391,7 @@ export default async function FinanceOfficePage({
         </p>
       </div>
       {/* Режим · долги · корректировки · выписка */}
-      <div className="flex flex-col gap-3 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(10rem,12rem)_minmax(16rem,22rem)] xl:items-stretch">
+      <div className="flex min-w-0 flex-col gap-3">
         <FinanceOfficeModePanel
           mode={mode}
           appliedFrom={fromRaw}
@@ -398,23 +400,26 @@ export default async function FinanceOfficePage({
           q={q}
           listSummaryLine={listSummaryLine}
         />
-        <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:gap-2 xl:contents">
+        <div className="grid min-w-0 grid-cols-3 gap-1.5 crm-t3:grid-cols-4 crm-t2:gap-2">
           <FinanceOfficeDebtsCard
-            className="h-full min-w-0 w-full max-w-none justify-self-stretch xl:max-w-[13rem]"
+            className="h-full min-w-0 w-full"
             initialCount={debtsCount}
           />
           <FinanceOfficeReconciliationsCard
-            className="h-full min-w-0 w-full max-w-none justify-self-stretch xl:max-w-[13rem]"
+            className="h-full min-w-0 w-full"
             initialHighlightCount={reconHighlightCount}
           />
           <CorrectionsHistoryActionCard
             dense
-            className="h-full min-w-0 w-full max-w-none justify-self-stretch xl:max-w-[13rem]"
+            className="h-full min-w-0 w-full"
             initialPendingCount={correctionsPendingCount}
             canAcceptCorrections={canAcceptCorrections}
           />
+          <FinanceOfficeBankImportPanel
+            compact
+            className="col-span-3 h-full min-w-0 w-full crm-t3:col-span-1"
+          />
         </div>
-        <FinanceOfficeBankImportPanel compact className="h-full w-full" />
       </div>
       <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2">
         {searchControls}

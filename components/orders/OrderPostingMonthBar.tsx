@@ -172,8 +172,8 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
 
   return (
     <div className={cardShell}>
-      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
-      <div className="min-w-0 text-base text-[var(--text-strong)] xl:max-w-[24rem] xl:shrink-0">
+      <div className="flex min-w-0 flex-col gap-3 crm-t3:flex-row crm-t3:items-center crm-t3:justify-between crm-t3:gap-6">
+      <div className="min-w-0 text-base text-[var(--text-strong)] crm-t3:max-w-[24rem] crm-t3:shrink-0">
         <p className="text-lg font-semibold text-[var(--app-text)]">
           Нумерация нарядов
         </p>
@@ -208,14 +208,14 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
           <p className="mt-2 text-sm text-red-600">{error}</p>
         ) : null}
       </div>
-      <div className="flex min-w-0 max-sm:flex-wrap sm:flex-nowrap items-stretch gap-2">
+      <div className="flex min-w-0 w-full flex-col gap-2 crm-t2:flex-row crm-t2:flex-wrap crm-t2:items-stretch crm-t3:w-auto crm-t3:justify-end">
         <Button
           type="button"
           variant="secondary"
           size="sm"
           disabled={busy}
           onClick={() => void load()}
-          className="shrink-0"
+          className="w-full shrink-0 crm-t2:w-auto"
         >
           Обновить
         </Button>
@@ -225,7 +225,7 @@ export function OrderPostingMonthBar({ toolbarEnd }: Props) {
           size="sm"
           disabled={busy}
           onClick={() => void advance()}
-          className="shrink-0"
+          className="h-auto min-h-7 w-full min-w-0 px-2.5 py-1.5 text-center leading-tight crm-t2:w-auto crm-t2:flex-1 crm-t3:flex-none [&>span]:overflow-visible [&>span]:whitespace-normal [&>span]:text-wrap"
         >
           Старт нового месяца
         </Button>

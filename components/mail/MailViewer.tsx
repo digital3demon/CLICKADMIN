@@ -23,6 +23,33 @@ function sizeLabel(size: number): string {
   return `${size} Б`;
 }
 
+function MailBackToListButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
+      aria-label="Назад к списку писем"
+      title="Назад к списку"
+    >
+      <svg
+        className="h-5 w-5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        aria-hidden
+      >
+        <path
+          d="M19 12H5m6 6-6-6 6-6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
 export function MailViewer({
   email,
   loading,
@@ -55,13 +82,7 @@ export function MailViewer({
       <section className="flex h-full min-w-0 flex-1 items-center justify-center bg-[var(--app-bg)] p-8 text-sm text-[var(--text-muted)]">
         {onClose ? (
           <div className="flex flex-col items-center gap-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-            >
-              К списку
-            </button>
+            <MailBackToListButton onClick={onClose} />
             <span>Открываем письмо...</span>
           </div>
         ) : (
@@ -86,13 +107,9 @@ export function MailViewer({
           </div>
           <h3 className="text-lg font-semibold text-[var(--app-text)]">Выберите письмо</h3>
           {onClose ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-4 rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-            >
-              К списку
-            </button>
+            <div className="mt-4 flex justify-center">
+              <MailBackToListButton onClick={onClose} />
+            </div>
           ) : null}
         </div>
       </section>
@@ -110,16 +127,14 @@ export function MailViewer({
 
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--card-bg)]">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-3">
-        {onClose ? (
-          <button
-            type="button"
-            className="rounded-lg border border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-body)] hover:bg-[var(--surface-hover)]"
-            onClick={onClose}
-          >
-            К списку
-          </button>
-        ) : null}
+      <div
+        className={
+          onClose
+            ? "crm-mobile-menu-pad flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--card-bg)] py-3 pe-5 ps-5 pt-[max(0.75rem,env(safe-area-inset-top,0px))]"
+            : "flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--card-border)] bg-[var(--card-bg)] px-5 py-3"
+        }
+      >
+        {onClose ? <MailBackToListButton onClick={onClose} /> : null}
         <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700" onClick={() => onReply("", "reply")}>
           Ответить
         </button>
