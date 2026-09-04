@@ -41,7 +41,7 @@ function DroppableColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-w-[210px] max-w-[240px] shrink-0 flex-col items-center gap-3 rounded-xl border border-transparent p-2 ${
+      className={`flex min-w-[229px] max-w-[260px] shrink-0 flex-col items-center gap-3 rounded-xl border border-transparent p-2 ${
         isOver ? "border-sky-400/80 bg-sky-400/10" : ""
       }`}
     >

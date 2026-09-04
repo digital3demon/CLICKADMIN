@@ -8,14 +8,15 @@ export type WarehouseTreeCardLevel =
   | "article"
   | "group";
 
-const LEVEL_DIMENSIONS: Record<
-  WarehouseTreeCardLevel,
-  { width: number; height: number; tierLabel: string }
-> = {
-  warehouse: { width: 221, height: 312, tierLabel: "Склад" },
-  manufacturer: { width: 187, height: 264, tierLabel: "Производитель" },
-  article: { width: 170, height: 240, tierLabel: "Артикул" },
-  group: { width: 187, height: 264, tierLabel: "Группа" },
+/** Один макет: размер как у склада, отличаются только подпись яруса и цвет. */
+const CARD_WIDTH = 221;
+const CARD_HEIGHT = 312;
+
+const LEVEL_TIER_LABEL: Record<WarehouseTreeCardLevel, string> = {
+  warehouse: "Склад",
+  manufacturer: "Производитель",
+  article: "Артикул",
+  group: "Группа",
 };
 
 /** Портретное соотношение сторон (width / height = 1000 / 1414). */
@@ -110,14 +111,12 @@ function CardChrome({
   tabIndex,
   "aria-expanded": ariaExpanded,
 }: CardChromeProps) {
-  const { width, height } = LEVEL_DIMENSIONS[level];
-
   return (
     <div
       className={`relative shrink-0 rounded-[9px] p-[2px] transition-opacity ${levelRingClass(level, highlighted)} ${
         dimmed ? "opacity-50" : "opacity-100"
       }`}
-      style={{ width, height }}
+      style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}
     >
       <article
         role={role}
@@ -146,21 +145,13 @@ function CardChrome({
   );
 }
 
-/** Крупно, но без скролла: чем больше строк метрик, тем плотнее кегль. */
-function cardTypeScale(metricCount: number): {
-  titlePx: number;
-  labelPx: number;
-  valuePx: number;
-  rowGapPx: number;
-} {
-  if (metricCount <= 1) {
-    return { titlePx: 18, labelPx: 13, valuePx: 22, rowGapPx: 10 };
-  }
-  if (metricCount === 2) {
-    return { titlePx: 16, labelPx: 12, valuePx: 18, rowGapPx: 8 };
-  }
-  return { titlePx: 15, labelPx: 11, valuePx: 15, rowGapPx: 4 };
-}
+/** Кегль как у склада (четыре метрики), чтобы ярусы не «прыгали». */
+const CARD_TYPE = {
+  titlePx: 15,
+  labelPx: 11,
+  valuePx: 15,
+  rowGapPx: 4,
+} as const;
 
 function StockActionButton({
   ariaLabel,
@@ -199,8 +190,6 @@ export function WarehouseTreeCard(props: {
   onMinus: (e: React.MouseEvent) => void;
   /** Переключатель Группы / Производители (склад) или Группы / Артикулы. */
   modeToggle?: { label: string; onClick: (e: React.MouseEvent) => void };
-  /** Мультивыбор групп на производителе или артикуле. */
-  onGroups?: (e: React.MouseEvent) => void;
 }): React.ReactElement {
   const {
     level,
@@ -214,11 +203,10 @@ export function WarehouseTreeCard(props: {
     onPlus,
     onMinus,
     modeToggle,
-    onGroups,
   } = props;
-  const { tierLabel } = LEVEL_DIMENSIONS[level];
+  const tierLabel = LEVEL_TIER_LABEL[level];
   const accent = LEVEL_ACCENT[level];
-  const type = cardTypeScale(metrics.length);
+  const type = CARD_TYPE;
 
   return (
     <CardChrome
@@ -312,19 +300,9 @@ export function WarehouseTreeCard(props: {
             >
               {modeToggle.label}
             </button>
-          ) : null}
-          {onGroups ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onGroups(e);
-              }}
-              className="shrink-0 rounded-full border border-[var(--card-border)] bg-[var(--surface-subtle)] px-2 py-1.5 text-[11px] font-semibold text-[var(--app-text)] hover:border-[var(--sidebar-blue)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
-            >
-              Группы
-            </button>
-          ) : null}
+          ) : (
+            <span className="min-w-0 flex-1" aria-hidden />
+          )}
           <StockActionButton ariaLabel="Списание" onClick={onMinus}>
             <MinusIcon className="h-4 w-4" />
           </StockActionButton>
@@ -340,15 +318,14 @@ export function WarehouseTreeGhostCard(props: {
   onClick: () => void;
 }): React.ReactElement {
   const { level, label, onClick } = props;
-  const { width, height } = LEVEL_DIMENSIONS[level];
-
   return (
     <button
       type="button"
+      data-level={level}
       aria-label={label}
       title={label}
       onClick={onClick}
-      style={{ width, height }}
+      style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}
       className="flex shrink-0 flex-col items-center justify-center gap-2 rounded-[9px] border-2 border-dashed border-[var(--card-border)] bg-[var(--surface-subtle)]/40 p-3 text-[var(--text-muted)] transition-colors hover:border-[var(--sidebar-blue)] hover:bg-[var(--card-bg)] hover:text-[var(--sidebar-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/80"
     >
       <span className="flex h-10 w-10 items-center justify-center rounded-full border border-current bg-[var(--card-bg)] text-[var(--app-text)]">

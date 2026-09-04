@@ -12,7 +12,23 @@ import {
 import { createPortal } from "react-dom";
 import { MobileAwareDialog } from "@/components/ui/MobileAwareDialog";
 import { useFixedDropdownPosition } from "@/components/ui/use-fixed-dropdown-position";
+import {
+  manufacturerOwnerKey,
+  normalizeGroupName,
+  warehouseOwnerKey,
+} from "@/lib/inventory/inventory-groups";
 import type { WarehouseTreeArticle } from "@/lib/inventory/warehouse-tree";
+
+type CatalogGroup = {
+  id: string;
+  warehouseId: string;
+  ownerKind: "WAREHOUSE" | "MANUFACTURER";
+  ownerKey: string;
+  name: string;
+  manufacturerKeys: string[];
+  manufacturerNames?: Record<string, string>;
+  itemIds: string[];
+};
 
 type CatalogItem = {
   id: string;
@@ -114,6 +130,7 @@ type Props = {
   onClose: () => void;
   onDone: () => Promise<void>;
   items: CatalogItem[];
+  groups: CatalogGroup[];
 };
 
 function uniqueSortedLabels(values: Array<string | null | undefined>): string[] {
@@ -478,6 +495,7 @@ export function WarehouseTreeModals({
   onClose,
   onDone,
   items,
+  groups,
 }: Props): ReactElement | null {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -508,6 +526,9 @@ export function WarehouseTreeModals({
   }>({ purchase: null, sale: null });
   const [minusQtyMode, setMinusQtyMode] = useState<"unit" | "supply">("unit");
   const [groupName, setGroupName] = useState("");
+  const [receiptGroup, setReceiptGroup] = useState("");
+  const [cardGroup, setCardGroup] = useState("");
+  const [cardGroupInitial, setCardGroupInitial] = useState("");
   const [checkedGroupIds, setCheckedGroupIds] = useState<string[]>([]);
 
   const minusArticles = useMemo(() => {
@@ -536,6 +557,9 @@ export function WarehouseTreeModals({
     setSelectedItemId(null);
     setSku("");
     setStartQty("");
+    setReceiptGroup("");
+    setCardGroup("");
+    setCardGroupInitial("");
     setMinusQty("");
     setPlusQty("");
     setPlusQtyMode("unit");
@@ -563,10 +587,32 @@ export function WarehouseTreeModals({
     }
     if (state.type === "rename-manufacturer") {
       setManufacturerName(state.currentName);
+      const key = manufacturerOwnerKey(state.currentName);
+      const current = groups.find(
+        (g) =>
+          g.warehouseId === state.warehouseId &&
+          g.ownerKind === "WAREHOUSE" &&
+          g.manufacturerKeys.includes(key),
+      );
+      const label = current?.name ?? "";
+      setCardGroup(label);
+      setCardGroupInitial(label);
     }
     if (state.type === "rename-article") {
       setArticleName(state.article.name);
       setSku(state.article.sku ?? "");
+      const ownerKey = manufacturerOwnerKey(state.article.manufacturer ?? "");
+      const current = groups.find(
+        (g) =>
+          g.warehouseId === state.article.warehouseId &&
+          g.ownerKind === "MANUFACTURER" &&
+          g.ownerKey === ownerKey &&
+          (state.article.groupIds.includes(g.id) ||
+            g.itemIds.includes(state.article.id)),
+      );
+      const label = current?.name ?? "";
+      setCardGroup(label);
+      setCardGroupInitial(label);
     }
     setGroupName(state.type === "rename-group" ? state.name : "");
     if (
@@ -612,7 +658,11 @@ export function WarehouseTreeModals({
   }, [selectedItemId, state, items]);
 
   const catalogWarehouseId =
-    state && "warehouseId" in state ? state.warehouseId : null;
+    state && "warehouseId" in state
+      ? state.warehouseId
+      : state && "article" in state
+        ? state.article.warehouseId
+        : null;
   const catalogManufacturerHint =
     state && "manufacturer" in state ? state.manufacturer : null;
 
@@ -647,6 +697,55 @@ export function WarehouseTreeModals({
         hint: [it.sku, it.manufacturer].filter(Boolean).join(" · ") || undefined,
       }));
   }, [warehouseItems, catalogManufacturerHint, manufacturerName]);
+
+  const receiptManufacturerName = (() => {
+    if (!state) return "";
+    if (state.type === "manufacturer-plus" || state.type === "create-article") {
+      return (state.manufacturer ?? manufacturerName).trim();
+    }
+    if (state.type === "article-plus") {
+      return state.article.manufacturer?.trim() ?? "";
+    }
+    return manufacturerName.trim();
+  })();
+
+  const receiptGroupOptions = useMemo((): SuggestOption[] => {
+    if (!catalogWarehouseId || !receiptManufacturerName) return [];
+    const ownerKey = manufacturerOwnerKey(receiptManufacturerName);
+    return groups
+      .filter(
+        (g) =>
+          g.warehouseId === catalogWarehouseId &&
+          g.ownerKind === "MANUFACTURER" &&
+          g.ownerKey === ownerKey,
+      )
+      .map((g) => ({ id: g.id, label: g.name }));
+  }, [groups, catalogWarehouseId, receiptManufacturerName]);
+
+  const cardGroupOptions = useMemo((): SuggestOption[] => {
+    if (!state) return [];
+    if (state.type === "rename-manufacturer") {
+      return groups
+        .filter(
+          (g) =>
+            g.warehouseId === state.warehouseId && g.ownerKind === "WAREHOUSE",
+        )
+        .map((g) => ({ id: g.id, label: g.name }));
+    }
+    if (state.type === "rename-article") {
+      const ownerKey = manufacturerOwnerKey(state.article.manufacturer ?? "");
+      if (!ownerKey) return [];
+      return groups
+        .filter(
+          (g) =>
+            g.warehouseId === state.article.warehouseId &&
+            g.ownerKind === "MANUFACTURER" &&
+            g.ownerKey === ownerKey,
+        )
+        .map((g) => ({ id: g.id, label: g.name }));
+    }
+    return [];
+  }, [groups, state]);
 
   const skuOptions = useMemo(
     (): SuggestOption[] =>
@@ -870,6 +969,195 @@ export function WarehouseTreeModals({
         unitCostRub: purchase ?? 0,
       });
     }
+    return itemId;
+  };
+
+  const assignReceiptGroup = async (params: {
+    warehouseId: string;
+    manufacturer: string | null | undefined;
+    itemId: string;
+  }) => {
+    const name = normalizeGroupName(receiptGroup);
+    if (!name) return;
+    const manufacturer = params.manufacturer?.trim() ?? "";
+    if (!manufacturer) {
+      throw new Error("Чтобы указать группу, задайте производителя");
+    }
+    const ownerKey = manufacturerOwnerKey(manufacturer);
+    const existing = groups.find(
+      (g) =>
+        g.warehouseId === params.warehouseId &&
+        g.ownerKind === "MANUFACTURER" &&
+        g.ownerKey === ownerKey &&
+        normalizeGroupName(g.name).toLowerCase() === name.toLowerCase(),
+    );
+    let groupId = existing?.id ?? "";
+    let itemIds = existing?.itemIds ?? [];
+    if (!groupId) {
+      const res = await fetch("/api/inventory/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          warehouseId: params.warehouseId,
+          ownerKind: "MANUFACTURER",
+          ownerKey,
+          name,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await readApiError(res));
+      }
+      const row = (await res.json()) as { id: string };
+      groupId = row.id;
+      itemIds = [];
+    }
+    if (itemIds.includes(params.itemId)) return;
+    const res = await fetch(`/api/inventory/groups/${groupId}/members`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemIds: [...itemIds, params.itemId],
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res));
+    }
+  };
+
+  const putGroupMembers = async (
+    groupId: string,
+    body: Record<string, unknown>,
+  ) => {
+    const res = await fetch(`/api/inventory/groups/${groupId}/members`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res));
+    }
+  };
+
+  const ensureNamedGroup = async (params: {
+    warehouseId: string;
+    ownerKind: "WAREHOUSE" | "MANUFACTURER";
+    ownerKey: string;
+    name: string;
+  }): Promise<CatalogGroup> => {
+    const name = normalizeGroupName(params.name);
+    const found = groups.find(
+      (g) =>
+        g.warehouseId === params.warehouseId &&
+        g.ownerKind === params.ownerKind &&
+        g.ownerKey === params.ownerKey &&
+        normalizeGroupName(g.name).toLowerCase() === name.toLowerCase(),
+    );
+    if (found) return found;
+    const res = await fetch("/api/inventory/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        warehouseId: params.warehouseId,
+        ownerKind: params.ownerKind,
+        ownerKey: params.ownerKey,
+        name,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(await readApiError(res));
+    }
+    const row = (await res.json()) as { id: string; name: string };
+    return {
+      id: row.id,
+      warehouseId: params.warehouseId,
+      ownerKind: params.ownerKind,
+      ownerKey: params.ownerKey,
+      name: row.name,
+      manufacturerKeys: [],
+      itemIds: [],
+    };
+  };
+
+  const placeManufacturerInWarehouseGroup = async (params: {
+    warehouseId: string;
+    manufacturerName: string;
+    groupName: string;
+  }) => {
+    const key = manufacturerOwnerKey(params.manufacturerName);
+    const targetName = normalizeGroupName(params.groupName);
+    const siblings = groups.filter(
+      (g) =>
+        g.warehouseId === params.warehouseId && g.ownerKind === "WAREHOUSE",
+    );
+    let targetId = "";
+    if (targetName) {
+      const created = await ensureNamedGroup({
+        warehouseId: params.warehouseId,
+        ownerKind: "WAREHOUSE",
+        ownerKey: warehouseOwnerKey(),
+        name: targetName,
+      });
+      targetId = created.id;
+      if (!siblings.some((g) => g.id === created.id)) {
+        siblings.push(created);
+      }
+    }
+    for (const group of siblings) {
+      const has = group.manufacturerKeys.includes(key);
+      const should = group.id === targetId;
+      if (has === should) continue;
+      const manufacturerKeys = should
+        ? [...new Set([...group.manufacturerKeys, key])]
+        : group.manufacturerKeys.filter((k) => k !== key);
+      await putGroupMembers(group.id, {
+        manufacturerKeys,
+        manufacturerNames: {
+          ...(group.manufacturerNames ?? {}),
+          [key]: params.manufacturerName,
+        },
+      });
+    }
+  };
+
+  const placeArticleInManufacturerGroup = async (params: {
+    warehouseId: string;
+    manufacturer: string;
+    itemId: string;
+    groupName: string;
+  }) => {
+    const ownerKey = manufacturerOwnerKey(params.manufacturer);
+    if (!ownerKey) {
+      throw new Error("Чтобы указать группу, задайте производителя");
+    }
+    const targetName = normalizeGroupName(params.groupName);
+    const siblings = groups.filter(
+      (g) =>
+        g.warehouseId === params.warehouseId &&
+        g.ownerKind === "MANUFACTURER" &&
+        g.ownerKey === ownerKey,
+    );
+    let targetId = "";
+    if (targetName) {
+      const created = await ensureNamedGroup({
+        warehouseId: params.warehouseId,
+        ownerKind: "MANUFACTURER",
+        ownerKey,
+        name: targetName,
+      });
+      targetId = created.id;
+      if (!siblings.some((g) => g.id === created.id)) {
+        siblings.push(created);
+      }
+    }
+    for (const group of siblings) {
+      const has = group.itemIds.includes(params.itemId);
+      const should = group.id === targetId;
+      if (has === should) continue;
+      const itemIds = should
+        ? [...new Set([...group.itemIds, params.itemId])]
+        : group.itemIds.filter((id) => id !== params.itemId);
+      await putGroupMembers(group.id, { itemIds });
+    }
   };
 
   const submitMinus = async (
@@ -957,13 +1245,23 @@ export function WarehouseTreeModals({
           }
           if (selectedItemId) {
             await receiptExistingIfNeeded(selectedItemId, state.warehouseId);
+            await assignReceiptGroup({
+              warehouseId: state.warehouseId,
+              manufacturer,
+              itemId: selectedItemId,
+            });
           } else {
-            await createItemWithOptionalReceipt({
+            const itemId = await createItemWithOptionalReceipt({
               warehouseId: state.warehouseId,
               name,
               manufacturer,
               sku,
               startQuantityRaw: startQty,
+            });
+            await assignReceiptGroup({
+              warehouseId: state.warehouseId,
+              manufacturer,
+              itemId,
             });
           }
           break;
@@ -976,23 +1274,34 @@ export function WarehouseTreeModals({
             setError("Укажите наименование");
             return;
           }
+          const manufacturer =
+            state.type === "manufacturer-plus"
+              ? state.manufacturer
+              : state.type === "create-article"
+                ? state.manufacturer
+                : state.type === "warehouse-plus"
+                  ? manufacturerName.trim() || null
+                  : null;
           if (selectedItemId) {
             await receiptExistingIfNeeded(selectedItemId, state.warehouseId);
+            await assignReceiptGroup({
+              warehouseId: state.warehouseId,
+              manufacturer,
+              itemId: selectedItemId,
+            });
             break;
           }
-          await createItemWithOptionalReceipt({
+          const itemId = await createItemWithOptionalReceipt({
             warehouseId: state.warehouseId,
             name,
-            manufacturer:
-              state.type === "manufacturer-plus"
-                ? state.manufacturer
-                : state.type === "create-article"
-                  ? state.manufacturer
-                  : state.type === "warehouse-plus"
-                    ? manufacturerName.trim() || null
-                    : null,
+            manufacturer,
             sku,
             startQuantityRaw: startQty,
+          });
+          await assignReceiptGroup({
+            warehouseId: state.warehouseId,
+            manufacturer,
+            itemId,
           });
           break;
         }
@@ -1024,6 +1333,11 @@ export function WarehouseTreeModals({
             unitCostRub: cost ?? 0,
           });
           await patchSaleIfChanged(state.article.id);
+          await assignReceiptGroup({
+            warehouseId: state.article.warehouseId,
+            manufacturer: state.article.manufacturer,
+            itemId: state.article.id,
+          });
           break;
         }
         case "article-minus": {
@@ -1060,40 +1374,55 @@ export function WarehouseTreeModals({
             setError("Укажите производителя");
             return;
           }
-          if (name === state.currentName.trim()) {
+          const nameChanged = name !== state.currentName.trim();
+          const groupChanged =
+            normalizeGroupName(cardGroup).toLowerCase() !==
+            normalizeGroupName(cardGroupInitial).toLowerCase();
+          if (!nameChanged && !groupChanged) {
             onClose();
             return;
           }
           if (
             !window.confirm(
-              `Переименовать производителя «${state.currentName}» в «${name}» у ${state.itemIds.length} позиций?`,
+              nameChanged
+                ? `Переименовать производителя «${state.currentName}» в «${name}» у ${state.itemIds.length} позиций?`
+                : `Изменить группу для «${state.currentName}»?`,
             )
           ) {
             return;
           }
-          for (const itemId of state.itemIds) {
-            const res = await fetch(`/api/inventory/items/${itemId}`, {
-              method: "PATCH",
+          if (nameChanged) {
+            for (const itemId of state.itemIds) {
+              const res = await fetch(`/api/inventory/items/${itemId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ manufacturer: name }),
+              });
+              if (!res.ok) {
+                setError(await readApiError(res));
+                return;
+              }
+            }
+            const rekey = await fetch("/api/inventory/groups/rekey-manufacturer", {
+              method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ manufacturer: name }),
+              body: JSON.stringify({
+                warehouseId: state.warehouseId,
+                fromName: state.currentName,
+                toName: name,
+              }),
             });
-            if (!res.ok) {
-              setError(await readApiError(res));
+            if (!rekey.ok) {
+              setError(await readApiError(rekey));
               return;
             }
           }
-          const rekey = await fetch("/api/inventory/groups/rekey-manufacturer", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          if (groupChanged) {
+            await placeManufacturerInWarehouseGroup({
               warehouseId: state.warehouseId,
-              fromName: state.currentName,
-              toName: name,
-            }),
-          });
-          if (!rekey.ok) {
-            setError(await readApiError(rekey));
-            return;
+              manufacturerName: name,
+              groupName: cardGroup,
+            });
           }
           break;
         }
@@ -1105,7 +1434,12 @@ export function WarehouseTreeModals({
           }
           const nextSku = sku.trim() || null;
           const prevSku = state.article.sku?.trim() || null;
-          if (name === state.article.name.trim() && nextSku === prevSku) {
+          const nameChanged =
+            name !== state.article.name.trim() || nextSku !== prevSku;
+          const groupChanged =
+            normalizeGroupName(cardGroup).toLowerCase() !==
+            normalizeGroupName(cardGroupInitial).toLowerCase();
+          if (!nameChanged && !groupChanged) {
             onClose();
             return;
           }
@@ -1116,14 +1450,24 @@ export function WarehouseTreeModals({
           ) {
             return;
           }
-          const res = await fetch(`/api/inventory/items/${state.article.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, sku: nextSku }),
-          });
-          if (!res.ok) {
-            setError(await readApiError(res));
-            return;
+          if (nameChanged) {
+            const res = await fetch(`/api/inventory/items/${state.article.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name, sku: nextSku }),
+            });
+            if (!res.ok) {
+              setError(await readApiError(res));
+              return;
+            }
+          }
+          if (groupChanged) {
+            await placeArticleInManufacturerGroup({
+              warehouseId: state.article.warehouseId,
+              manufacturer: state.article.manufacturer ?? "",
+              itemId: state.article.id,
+              groupName: cardGroup,
+            });
           }
           break;
         }
@@ -1336,16 +1680,27 @@ export function WarehouseTreeModals({
         ) : null}
 
         {state.type === "rename-manufacturer" ? (
-          <label className={labelClass}>
-            <span>Производитель</span>
-            <input
-              type="text"
-              className={inputClass}
-              value={manufacturerName}
-              onChange={(e) => setManufacturerName(e.target.value)}
-              autoFocus
-            />
-          </label>
+          <>
+            <label className={labelClass}>
+              <span>Производитель</span>
+              <input
+                type="text"
+                className={inputClass}
+                value={manufacturerName}
+                onChange={(e) => setManufacturerName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <label className={labelClass}>
+              <span>Группа</span>
+              <CreatableSuggestField
+                value={cardGroup}
+                onChange={(next) => setCardGroup(next)}
+                options={cardGroupOptions}
+                placeholder="Найти или ввести новую"
+              />
+            </label>
+          </>
         ) : null}
 
         {state.type === "create-group" || state.type === "rename-group" ? (
@@ -1452,6 +1807,15 @@ export function WarehouseTreeModals({
                 onChange={(e) => setSku(e.target.value)}
               />
             </label>
+            <label className={labelClass}>
+              <span>Группа</span>
+              <CreatableSuggestField
+                value={cardGroup}
+                onChange={(next) => setCardGroup(next)}
+                options={cardGroupOptions}
+                placeholder="Найти или ввести новую"
+              />
+            </label>
           </>
         ) : null}
 
@@ -1527,6 +1891,15 @@ export function WarehouseTreeModals({
                 placeholder="Найти или ввести новый"
               />
             </label>
+            <label className={labelClass}>
+              <span>Группа (необязательно)</span>
+              <CreatableSuggestField
+                value={receiptGroup}
+                onChange={(next) => setReceiptGroup(next)}
+                options={receiptGroupOptions}
+                placeholder="Найти или ввести новую"
+              />
+            </label>
           </>
         ) : null}
 
@@ -1587,6 +1960,15 @@ export function WarehouseTreeModals({
                 placeholder="Найти или ввести новый"
               />
             </label>
+            <label className={labelClass}>
+              <span>Группа (необязательно)</span>
+              <CreatableSuggestField
+                value={receiptGroup}
+                onChange={(next) => setReceiptGroup(next)}
+                options={receiptGroupOptions}
+                placeholder="Найти или ввести новую"
+              />
+            </label>
           </>
         ) : null}
 
@@ -1600,6 +1982,18 @@ export function WarehouseTreeModals({
               value={startQty}
               onChange={(e) => setStartQty(e.target.value)}
               placeholder="0 — без прихода"
+            />
+          </label>
+        ) : null}
+
+        {state.type === "article-plus" ? (
+          <label className={labelClass}>
+            <span>Группа (необязательно)</span>
+            <CreatableSuggestField
+              value={receiptGroup}
+              onChange={(next) => setReceiptGroup(next)}
+              options={receiptGroupOptions}
+              placeholder="Найти или ввести новую"
             />
           </label>
         ) : null}

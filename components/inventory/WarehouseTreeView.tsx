@@ -83,6 +83,17 @@ function articleTitle(article: WarehouseTreeArticle): string {
   return sku ? `${sku} · ${article.name}` : article.name;
 }
 
+function realGroupCount(
+  groups: { isVirtualUngrouped?: boolean }[],
+): number {
+  return groups.filter((g) => !g.isVirtualUngrouped).length;
+}
+
+function formatRub(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${formatNum(n, 2)} ₽`;
+}
+
 function allWarehouseArticles(
   warehouse: WarehouseTreeWarehouse,
 ): WarehouseTreeArticle[] {
@@ -281,10 +292,17 @@ export function WarehouseTreeView({
       title={articleTitle(article)}
       highlighted={hits.has(`ar:${article.id}`)}
       metrics={[
+        { label: "Всего", value: formatNum(article.quantityOnHand) },
+        { label: "Ед.", value: article.unit.trim() || "ед." },
         {
-          label: "Кол-во",
-          value: `${formatNum(article.quantityOnHand)} ${article.unit.trim() || "ед."}`,
+          label: "Цена",
+          value: formatRub(
+            article.saleUnitPriceRub ??
+              article.averageUnitCostRub ??
+              article.referenceUnitPriceRub,
+          ),
         },
+        { label: "Групп", value: formatNum(article.groupIds.length, 0) },
       ]}
       onPlus={(e) => {
         e.stopPropagation();
@@ -305,28 +323,6 @@ export function WarehouseTreeView({
       onRename={(e) => {
         e.stopPropagation();
         setModalState({ type: "rename-article", article });
-      }}
-      onGroups={(e) => {
-        e.stopPropagation();
-        const ownerKey = manufacturerOwnerKey(article.manufacturer ?? "");
-        const options = groups
-          .filter(
-            (g) =>
-              g.warehouseId === article.warehouseId &&
-              g.ownerKind === "MANUFACTURER" &&
-              g.ownerKey === ownerKey,
-          )
-          .map((g) => ({
-            id: g.id,
-            name: g.name,
-            selected: article.groupIds.includes(g.id),
-            itemIds: g.itemIds,
-          }));
-        setModalState({
-          type: "assign-article-groups",
-          article,
-          options,
-        });
       }}
     />
   );
@@ -349,6 +345,14 @@ export function WarehouseTreeView({
         metrics={[
           { label: "Всего", value: formatNum(manufacturer.quantityOnHand) },
           { label: "Артикулов", value: formatNum(manufacturer.articleCount, 0) },
+          {
+            label: "На складе",
+            value: formatNum(manufacturer.warehouseGroupIds.length, 0),
+          },
+          {
+            label: "Групп",
+            value: formatNum(realGroupCount(manufacturer.groups), 0),
+          },
         ]}
         onPlus={(e) => {
           e.stopPropagation();
@@ -384,30 +388,6 @@ export function WarehouseTreeView({
               ? "Группы"
               : "Артикулы",
           onClick: () => flipManufacturerMode(manufacturer.key),
-        }}
-        onGroups={(e) => {
-          e.stopPropagation();
-          const key = manufacturerOwnerKey(manufacturer.name);
-          const options = groups
-            .filter(
-              (g) =>
-                g.warehouseId === manufacturer.warehouseId &&
-                g.ownerKind === "WAREHOUSE",
-            )
-            .map((g) => ({
-              id: g.id,
-              name: g.name,
-              selected: g.manufacturerKeys.includes(key),
-              manufacturerKeys: g.manufacturerKeys,
-              manufacturerNames: g.manufacturerNames ?? {},
-            }));
-          setModalState({
-            type: "assign-manufacturer-groups",
-            warehouseId: manufacturer.warehouseId,
-            manufacturerName: manufacturer.name,
-            manufacturerKey: key,
-            options,
-          });
         }}
       />
     );
@@ -455,6 +435,26 @@ export function WarehouseTreeView({
         }
         metrics={[
           { label: "Всего", value: formatNum(group.quantityOnHand) },
+          {
+            label: "Артикулов",
+            value: formatNum(
+              group.ownerKind === "MANUFACTURER"
+                ? group.articleIds.length
+                : memberArticles.length,
+              0,
+            ),
+          },
+          {
+            label: "Производителей",
+            value: formatNum(
+              group.ownerKind === "WAREHOUSE"
+                ? group.manufacturerKeys.length
+                : group.memberCount > 0
+                  ? 1
+                  : 0,
+              0,
+            ),
+          },
           { label: "В группе", value: formatNum(group.memberCount, 0) },
         ]}
         onPlus={(e) => {
@@ -619,14 +619,17 @@ export function WarehouseTreeView({
                 onOpen={() => toggleWarehouse(warehouse.id)}
                 metrics={[
                   { label: "Всего", value: formatNum(warehouse.quantityOnHand) },
-                  { label: "Позиций", value: formatNum(warehouse.itemCount, 0) },
+                  {
+                    label: "Артикулов",
+                    value: formatNum(warehouse.articleCount, 0),
+                  },
                   {
                     label: "Производителей",
                     value: formatNum(warehouse.manufacturerCount, 0),
                   },
                   {
-                    label: "Артикулов",
-                    value: formatNum(warehouse.articleCount, 0),
+                    label: "Групп",
+                    value: formatNum(realGroupCount(warehouse.groups), 0),
                   },
                 ]}
                 onPlus={(e) => {
@@ -897,6 +900,7 @@ export function WarehouseTreeView({
         state={modalState}
         onClose={() => setModalState(null)}
         onDone={onRefresh}
+        groups={groups}
         items={items.map((it) => {
           const bal = balances.find(
             (b) => b.item.id === it.id && b.warehouse.id === it.warehouseId,
