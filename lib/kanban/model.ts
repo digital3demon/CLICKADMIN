@@ -1946,7 +1946,7 @@ export function loadKanbanState(isDemo = false): KanbanAppState {
   }
 }
 
-let headsPersistTimer: ReturnType<typeof setTimeout> | null = null;
+let headsPersistTimer: number | null = null;
 let headsPersistQueued: KanbanAppState | null = null;
 
 export function saveKanbanState(state: KanbanAppState, isDemo = false) {
