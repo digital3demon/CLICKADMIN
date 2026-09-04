@@ -29,6 +29,7 @@ import { OrdersListTableHeaderRow } from "@/components/orders/OrdersListTableHea
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
 import { OrdersListMirrorTheadGate } from "@/components/orders/OrdersListMirrorTheadGate";
+import { OrdersQuickFilterChips } from "@/components/orders/OrdersQuickFilterChips";
 import {
   ORDER_LIST_MOBILE_ACTION_BTN,
   ORDER_LIST_TAG_ADD_BTN,
@@ -41,17 +42,10 @@ import { fetchOrdersShipmentListPage } from "@/lib/fetch-orders-shipment-list-pa
 import { countOrdersWithPendingKaitenLabMentionForUser } from "@/lib/order-kaiten-lab-mention-count";
 import { orderIdsWithPendingMergedCorrections } from "@/lib/order-chat-corrections-read";
 import {
-  humanListTagLabel,
-  LIST_TAG_KAITEN_LAB_MENTION,
-  LIST_TAG_ORDER_ATTENTION,
-  LIST_TAG_PROSTHETICS_PENDING,
-  LIST_TAG_WAIT_PAYMENT,
+  LIST_TAG_KAITEN_BLOCKED,
   parseListTagParam,
-  relatedOrdersListTagQuickFilters,
-  listTagParamsEqual,
   listTagKaitenColumnTitle,
   listTagKaitenTrackLaneOrNull,
-  LIST_TAG_KAITEN_BLOCKED,
 } from "@/lib/order-list-tag-filter";
 import { resolveOrdersPageSize } from "@/lib/orders-list-cursor";
 import { ordersListCreatedAtPeriod } from "@/lib/orders-list-period";
@@ -266,50 +260,60 @@ export default async function OrdersPage({
     moduleAccess,
   );
 
-  let prostheticsInTransitCount = 0;
-  let prostheticsToOrderCount = 0;
-  let prostheticsToOrderOrderCount = 0;
-  let labTasksPendingCount = 0;
-  let labPickupsPendingCount = 0;
-  try {
-    if (canSeeProstheticsChip) {
-      const [transit, toOrder] = await Promise.all([
-        loadProstheticsInTransitForTenant(tenantId),
-        loadProstheticsToOrderForTenant(tenantId),
-      ]);
-      prostheticsInTransitCount = transit.count;
-      prostheticsToOrderCount = toOrder.count;
-      prostheticsToOrderOrderCount = toOrder.orderCount;
-    }
-  } catch (e) {
-    console.error("[orders] prosthetics in-transit/to-order count", e);
-  }
-  try {
-    if (tenantId) {
-      const [tasksN, pickupsN] = await Promise.all([
-        countPendingLabTasks(tenantId, "TASK"),
-        countPendingLabTasks(tenantId, "PICKUP_FROM"),
-      ]);
-      labTasksPendingCount = tasksN;
-      labPickupsPendingCount = pickupsN;
-    }
-  } catch (e) {
-    console.error("[orders] lab tasks/pickups pending count", e);
-  }
-
-  let kaitenIntegrationActive = true;
-  if (tenantId) {
+  /** Шапка (протетика/задачи/Kaiten) — параллельно со списком и чипами. */
+  const headerExtrasWork = (async () => {
+    let prostheticsInTransitCount = 0;
+    let prostheticsToOrderCount = 0;
+    let prostheticsToOrderOrderCount = 0;
+    let labTasksPendingCount = 0;
+    let labPickupsPendingCount = 0;
+    let kaitenIntegrationActive = true;
     try {
-      const prisma = await getPrisma();
-      const integration = await loadKaitenIntegrationTenantState(
-        prisma,
-        tenantId,
-      );
-      kaitenIntegrationActive = integration.active;
-    } catch {
-      kaitenIntegrationActive = true;
+      if (canSeeProstheticsChip) {
+        const [transit, toOrder] = await Promise.all([
+          loadProstheticsInTransitForTenant(tenantId),
+          loadProstheticsToOrderForTenant(tenantId),
+        ]);
+        prostheticsInTransitCount = transit.count;
+        prostheticsToOrderCount = toOrder.count;
+        prostheticsToOrderOrderCount = toOrder.orderCount;
+      }
+    } catch (e) {
+      console.error("[orders] prosthetics in-transit/to-order count", e);
     }
-  }
+    try {
+      if (tenantId) {
+        const [tasksN, pickupsN] = await Promise.all([
+          countPendingLabTasks(tenantId, "TASK"),
+          countPendingLabTasks(tenantId, "PICKUP_FROM"),
+        ]);
+        labTasksPendingCount = tasksN;
+        labPickupsPendingCount = pickupsN;
+      }
+    } catch (e) {
+      console.error("[orders] lab tasks/pickups pending count", e);
+    }
+    if (tenantId) {
+      try {
+        const prisma = await getPrisma();
+        const integration = await loadKaitenIntegrationTenantState(
+          prisma,
+          tenantId,
+        );
+        kaitenIntegrationActive = integration.active;
+      } catch {
+        kaitenIntegrationActive = true;
+      }
+    }
+    return {
+      prostheticsInTransitCount,
+      prostheticsToOrderCount,
+      prostheticsToOrderOrderCount,
+      labTasksPendingCount,
+      labPickupsPendingCount,
+      kaitenIntegrationActive,
+    };
+  })();
 
   let userOrdersListPageSize: number | null = null;
   const [ordersPrisma, clientsPrisma] = await Promise.all([
@@ -397,7 +401,7 @@ export default async function OrdersPage({
         : undefined,
   };
 
-  /** Список — сразу, параллельно со счётчиками шапки (иначе пагинация ждёт чипы). */
+  /** Список — сразу, параллельно со счётчиками шапки и чипов. */
   const listPageWork = !tenantId
     ? Promise.reject(new Error("tenant_context_required"))
     : shipmentModeActive && shipParsed.mode
@@ -447,55 +451,52 @@ export default async function OrdersPage({
           slots,
         }));
 
-  const baseCountParts: Prisma.OrderWhereInput[] = [
-    { tenantId: tenantId ?? "__missing_tenant__" },
-    { archivedAt: null },
-    orderTestVisibilityWhere({
-      viewerRole: session?.role ?? null,
-      viewerUserId: session?.sub ?? null,
-    }),
-  ];
-  if (onlyShippedActive) {
-    baseCountParts.push({ adminShippedOtpr: true });
-  } else if (hideShippedActive) {
-    baseCountParts.push({ adminShippedOtpr: false });
-  }
-  if (listSearchQ) {
-    baseCountParts.push(await ordersSearchWhere(listSearchQ, tenantId));
-  }
-  if (dueDateRange) {
-    baseCountParts.push({
-      dueDate: {
-        gte: dueDateRange.start,
-        lt: dueDateRange.endExclusive,
-      },
-    });
-  }
-  if (otprAtRange) {
-    baseCountParts.push({
-      adminShippedAt: {
-        gte: otprAtRange.start,
-        lt: otprAtRange.endExclusive,
-      },
-    });
-  }
-  const baseCountWhere =
-    baseCountParts.length === 1 ? baseCountParts[0] : { AND: baseCountParts };
-  const statusChipCountParts = baseCountParts.filter(
-    (part) => !("dueDate" in part) && !("createdAt" in part),
-  );
-  const statusChipCountWhere =
-    statusChipCountParts.length === 1
-      ? statusChipCountParts[0]
-      : { AND: statusChipCountParts };
-  /** Счётчики чипов — кандидаты из pending-строк (без findMany всех id тенанта). */
-  const attentionCount = tenantId
-    ? await (async () => {
-        const inbox = (ordersPrisma as {
-          orderChatInboxItem: {
-            findMany: (args: unknown) => Promise<Array<{ orderId: string }>>;
-          };
-        }).orderChatInboxItem;
+  const chipCountsWork = (async () => {
+    if (!tenantId) {
+      return {
+        attentionCount: 0,
+        labMentionCount: 0,
+        waitPaymentCount: 0,
+        blockedCount: 0,
+      };
+    }
+    const baseCountParts: Prisma.OrderWhereInput[] = [
+      { tenantId },
+      { archivedAt: null },
+      orderTestVisibilityWhere({
+        viewerRole: session?.role ?? null,
+        viewerUserId: session?.sub ?? null,
+      }),
+    ];
+    if (onlyShippedActive) {
+      baseCountParts.push({ adminShippedOtpr: true });
+    } else if (hideShippedActive) {
+      baseCountParts.push({ adminShippedOtpr: false });
+    }
+    if (listSearchQ) {
+      baseCountParts.push(await ordersSearchWhere(listSearchQ, tenantId));
+    }
+    const statusChipCountParts = baseCountParts.filter(
+      (part) => !("dueDate" in part) && !("createdAt" in part),
+    );
+    const statusChipCountWhere =
+      statusChipCountParts.length === 1
+        ? statusChipCountParts[0]
+        : { AND: statusChipCountParts };
+
+    const inbox = (ordersPrisma as {
+      orderChatInboxItem: {
+        findMany: (args: unknown) => Promise<Array<{ orderId: string }>>;
+      };
+    }).orderChatInboxItem;
+
+    const [
+      attentionCount,
+      labMentionCount,
+      waitPaymentCount,
+      blockedCount,
+    ] = await Promise.all([
+      (async () => {
         const [legacyCorrPending, inboxCorrPending] = await Promise.all([
           ordersPrisma.orderChatCorrection.findMany({
             where: {
@@ -528,16 +529,7 @@ export default async function OrdersPage({
           corrCandidateIds,
         );
         return pendingCorrections.size;
-      })()
-    : 0;
-  /** Чип фильтра — наряды; бейдж «Заказать» — заявки (их может быть несколько на один наряд). */
-  const prostheticsPendingCount = prostheticsToOrderOrderCount;
-
-  let labMentionCount = 0;
-  let waitPaymentCount = 0;
-  let blockedCount = 0;
-  if (tenantId) {
-    [labMentionCount, waitPaymentCount, blockedCount] = await Promise.all([
+      })(),
       countOrdersWithPendingKaitenLabMentionForUser(
         ordersPrisma,
         statusChipCountWhere,
@@ -550,45 +542,90 @@ export default async function OrdersPage({
         where: { AND: [statusChipCountWhere, { kaitenBlocked: true }] },
       }),
     ]);
-  }
+    return {
+      attentionCount,
+      labMentionCount,
+      waitPaymentCount,
+      blockedCount,
+    };
+  })();
 
-  let kaitenColumnAlternates: string[] = [];
-  let urgentCoefficientsInDb: number[] = [];
-  if (tenantId && activeFilter?.kind === "kaitenColumn") {
-    const rows = await ordersPrisma.order.groupBy({
-      by: ["kaitenColumnTitle"],
-      where: {
-        tenantId,
-        archivedAt: null,
-        AND: [
-          { kaitenColumnTitle: { not: null } },
-          { kaitenColumnTitle: { not: activeFilter.title } },
-        ],
-      },
-      orderBy: { kaitenColumnTitle: "asc" },
-      take: 28,
-    });
-    kaitenColumnAlternates = rows
-      .map((r) => r.kaitenColumnTitle)
-      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
-      .map((t) => t.trim());
-  }
-  if (tenantId && activeFilter?.kind === "urgent") {
-    const rows = await ordersPrisma.order.groupBy({
-      by: ["urgentCoefficient"],
-      where: {
-        tenantId,
-        archivedAt: null,
-        isUrgent: true,
-        urgentCoefficient: { not: null },
-      },
-      orderBy: { urgentCoefficient: "asc" },
-      take: 30,
-    });
-    urgentCoefficientsInDb = rows
-      .map((r) => r.urgentCoefficient)
-      .filter((c): c is number => typeof c === "number" && Number.isFinite(c));
-  }
+  const relatedFiltersWork = (async () => {
+    let kaitenColumnAlternates: string[] = [];
+    let urgentCoefficientsInDb: number[] = [];
+    if (!tenantId) {
+      return { kaitenColumnAlternates, urgentCoefficientsInDb };
+    }
+    if (activeFilter?.kind === "kaitenColumn") {
+      const rows = await ordersPrisma.order.groupBy({
+        by: ["kaitenColumnTitle"],
+        where: {
+          tenantId,
+          archivedAt: null,
+          AND: [
+            { kaitenColumnTitle: { not: null } },
+            { kaitenColumnTitle: { not: activeFilter.title } },
+          ],
+        },
+        orderBy: { kaitenColumnTitle: "asc" },
+        take: 28,
+      });
+      kaitenColumnAlternates = rows
+        .map((r) => r.kaitenColumnTitle)
+        .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+        .map((t) => t.trim());
+    }
+    if (activeFilter?.kind === "urgent") {
+      const rows = await ordersPrisma.order.groupBy({
+        by: ["urgentCoefficient"],
+        where: {
+          tenantId,
+          archivedAt: null,
+          isUrgent: true,
+          urgentCoefficient: { not: null },
+        },
+        orderBy: { urgentCoefficient: "asc" },
+        take: 30,
+      });
+      urgentCoefficientsInDb = rows
+        .map((r) => r.urgentCoefficient)
+        .filter((c): c is number => typeof c === "number" && Number.isFinite(c));
+    }
+    return { kaitenColumnAlternates, urgentCoefficientsInDb };
+  })();
+
+  const [
+    headerExtras,
+    chipCounts,
+    relatedFilters,
+    listSettled,
+  ] = await Promise.all([
+    headerExtrasWork,
+    chipCountsWork,
+    relatedFiltersWork,
+    listPageWork.then(
+      (result) => ({ ok: true as const, result }),
+      (e: unknown) => ({ ok: false as const, error: e }),
+    ),
+  ]);
+
+  const {
+    prostheticsInTransitCount,
+    prostheticsToOrderCount,
+    prostheticsToOrderOrderCount,
+    labTasksPendingCount,
+    labPickupsPendingCount,
+    kaitenIntegrationActive,
+  } = headerExtras;
+  const {
+    attentionCount,
+    labMentionCount,
+    waitPaymentCount,
+    blockedCount,
+  } = chipCounts;
+  const { kaitenColumnAlternates, urgentCoefficientsInDb } = relatedFilters;
+  /** Чип фильтра — наряды; бейдж «Заказать» — заявки (их может быть несколько на один наряд). */
+  const prostheticsPendingCount = prostheticsToOrderOrderCount;
 
   let orders: Awaited<
     ReturnType<typeof fetchOrdersListPage>
@@ -598,17 +635,8 @@ export default async function OrdersPage({
   let listHasMore = false;
   let shipmentListTruncated = false;
   let labDueHmSlots: string[] = [];
-  try {
-    const result = await listPageWork;
-    orders = result.page.orders;
-    listPage = result.page.page;
-    listTotalCount = result.page.totalCount;
-    listHasMore = result.page.hasMore;
-    labDueHmSlots = result.slots;
-    if (result.kind === "ship") {
-      shipmentListTruncated = result.page.truncated;
-    }
-  } catch (e) {
+  if (!listSettled.ok) {
+    const e = listSettled.error;
     console.error("[orders page] prisma", e);
     const msg = e instanceof Error ? e.message : String(e);
     const tenantMissing = msg === "tenant_context_required";
@@ -640,6 +668,17 @@ export default async function OrdersPage({
         </div>
       </ModuleFrame>
     );
+  }
+  {
+    const result = listSettled.result;
+    orders = result.page.orders;
+    listPage = result.page.page;
+    listTotalCount = result.page.totalCount;
+    listHasMore = result.page.hasMore;
+    labDueHmSlots = result.slots;
+    if (result.kind === "ship") {
+      shipmentListTruncated = result.page.truncated;
+    }
   }
 
   const alwaysShowOrderAttentionChips = session?.role === "FINANCIAL_MANAGER";
@@ -818,181 +857,40 @@ export default async function OrdersPage({
         ) : null}
         <div className="sticky top-0 z-50 bg-[var(--app-bg)] py-2 shadow-[0_4px_12px_-8px_rgba(0,0,0,0.45)] shell-laptop:static shell-laptop:z-auto shell-laptop:bg-transparent shell-laptop:p-0 shell-laptop:shadow-none">
           <div className="flex min-h-[3.25rem] w-full items-center rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
-            <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
-              <Suspense
-                fallback={
-                  <div className="h-8 w-[10rem] shrink-0 rounded-md bg-[var(--surface-subtle)]" />
+            <Suspense
+              fallback={
+                <div className="h-8 w-full shrink-0 rounded-md bg-[var(--surface-subtle)]" />
+              }
+            >
+              <OrdersQuickFilterChips
+                pageSize={pageSize}
+                listHrefCommon={listHrefCommon}
+                attentionCount={attentionCount}
+                prostheticsPendingCount={prostheticsPendingCount}
+                waitPaymentCount={waitPaymentCount}
+                blockedCount={blockedCount}
+                labMentionCount={labMentionCount}
+                showCorrectionsChip={showCorrectionsChip}
+                showProstheticsChip={showProstheticsChip}
+                showWaitPaymentChip={showWaitPaymentChip}
+                showAdminChip={showAdminChip}
+                kaitenColumnAlternates={kaitenColumnAlternates}
+                urgentCoefficientsInDb={urgentCoefficientsInDb}
+                searchSlot={
+                  <OrdersListSearch
+                    initialValue={listSearchQ}
+                    pageSize={pageSize}
+                    tag={rawTag ?? undefined}
+                    hideShipped={hideShippedActive}
+                    onlyShipped={onlyShippedActive}
+                    dense
+                    className="min-w-0 max-w-[12rem] basis-[8rem] shrink grow sm:max-w-[14rem] sm:basis-[9rem]"
+                    idSuffix="chips"
+                  />
                 }
-              >
-                <OrdersListSearch
-                  initialValue={listSearchQ}
-                  pageSize={pageSize}
-                  tag={rawTag ?? undefined}
-                  hideShipped={hideShippedActive}
-                  onlyShipped={onlyShippedActive}
-                  dense
-                  className="min-w-0 max-w-[12rem] basis-[8rem] shrink grow sm:max-w-[14rem] sm:basis-[9rem]"
-                  idSuffix="chips"
-                />
-              </Suspense>
-          {showCorrectionsChip ? (
-            <Link
-              href={ordersListHref({
-                limit: pageSize,
-                ...listHrefCommon,
-                tag: LIST_TAG_ORDER_ATTENTION,
-              })}
-              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-                activeFilter?.kind === "orderAttention"
-                  ? "border-amber-500 bg-amber-400 text-amber-950 ring-2 ring-amber-400/90 dark:border-amber-400 dark:bg-amber-500 dark:text-amber-950 dark:ring-amber-400/80"
-                  : "border-amber-400/80 bg-amber-300/90 text-amber-950 hover:bg-amber-300 dark:border-amber-500/70 dark:bg-amber-600/55 dark:text-amber-50 dark:hover:bg-amber-600/70"
-              }`}
-              title="Наряды с непринятыми корректировками из чата («!!!»); в списке также может попасть расхождение суммы счёта с составом"
-            >
-              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                Корректировки
-              </span>
-              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-                {attentionCount}
-              </span>
-            </Link>
-          ) : null}
-          {showProstheticsChip ? (
-            <Link
-              href={ordersListHref({
-                limit: pageSize,
-                ...listHrefCommon,
-                tag: LIST_TAG_PROSTHETICS_PENDING,
-              })}
-              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-                activeFilter?.kind === "prostheticsPending"
-                  ? "border-sky-400/90 bg-sky-100 text-sky-950 ring-2 ring-sky-500/85 dark:border-sky-700 dark:bg-sky-950/45 dark:text-sky-100 dark:ring-sky-500/70"
-                  : "border-sky-300/70 bg-sky-100/70 text-sky-950 hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/35 dark:text-sky-100 dark:hover:bg-sky-950/50"
-              }`}
-              title="Быстрый фильтр по тегу «Заказ протетики»"
-            >
-              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                Заказ протетики
-              </span>
-              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-                {prostheticsPendingCount}
-              </span>
-            </Link>
-          ) : null}
-          {showWaitPaymentChip ? (
-            <Link
-              href={ordersListHref({
-                limit: pageSize,
-                ...listHrefCommon,
-                tag: LIST_TAG_WAIT_PAYMENT,
-              })}
-              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-                activeFilter?.kind === "waitPayment"
-                  ? "border-rose-400/90 bg-rose-100 text-rose-950 ring-2 ring-rose-500/85 dark:border-rose-700 dark:bg-rose-950/45 dark:text-rose-100 dark:ring-rose-500/70"
-                  : "border-rose-300/70 bg-rose-100/70 text-rose-950 hover:bg-rose-100 dark:border-rose-800/60 dark:bg-rose-950/35 dark:text-rose-100 dark:hover:bg-rose-950/50"
-              }`}
-              title="Наряды с отметкой «ждем оплату»"
-            >
-              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                Ждем оплату
-              </span>
-              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-                {waitPaymentCount}
-              </span>
-            </Link>
-          ) : null}
-          <Link
-            href={ordersListHref({
-              limit: pageSize,
-              ...listHrefCommon,
-              tag: LIST_TAG_KAITEN_BLOCKED,
-            })}
-            className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-              activeFilter?.kind === "kaitenBlocked"
-                ? "border-red-500 bg-red-500 text-white ring-2 ring-red-400/90 dark:border-red-400 dark:bg-red-600 dark:text-red-50 dark:ring-red-400/80"
-                : "border-red-400/80 bg-red-200/90 text-red-950 hover:bg-red-200 dark:border-red-500/70 dark:bg-red-950/50 dark:text-red-100 dark:hover:bg-red-950/70"
-            }`}
-            title="Наряды с заблокированной карточкой"
-          >
-            <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-              Заблокировано
-            </span>
-            <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-              {blockedCount}
-            </span>
-          </Link>
-          {showAdminChip ? (
-            <Link
-              href={ordersListHref({
-                limit: pageSize,
-                ...listHrefCommon,
-                tag: LIST_TAG_KAITEN_LAB_MENTION,
-              })}
-              className={`group inline-flex items-stretch overflow-hidden rounded-full border shadow-sm transition-colors ${
-                activeFilter?.kind === "kaitenLabMention"
-                  ? "border-violet-400/90 bg-violet-100 text-violet-950 ring-2 ring-violet-500/90 dark:border-violet-600 dark:bg-violet-950/45 dark:text-violet-100 dark:ring-violet-500/75"
-                  : "border-violet-300/70 bg-violet-100/70 text-violet-950 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/35 dark:text-violet-100 dark:hover:bg-violet-950/50"
-              }`}
-              title="Наряды с непрочитанным упоминанием лаборатории в чате Kaiten (@…)"
-            >
-              <span className="px-3 py-1.5 text-sm font-semibold sm:px-4 sm:py-2">
-                Упоминания
-              </span>
-              <span className="inline-flex min-w-[2.25rem] items-center justify-center border-l border-current/25 px-2 py-1.5 text-sm font-bold sm:py-2">
-                {labMentionCount}
-              </span>
-            </Link>
-          ) : null}
-          {activeFilter ? (
-            <span className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-md border border-sky-200/80 bg-sky-50/80 px-2 py-1 text-sm dark:border-sky-900/50 dark:bg-sky-950/25">
-              <span className="min-w-0 truncate whitespace-nowrap text-[var(--text-body)]">
-                Фильтр по тегу:{" "}
-                <strong className="text-[var(--text-strong)]">
-                  {humanListTagLabel(activeFilter)}
-                </strong>
-              </span>
-              <Link
-                href={ordersListHref({
-                  limit: pageSize,
-                  ...listHrefCommon,
-                  tag: undefined,
-                })}
-                className="shrink-0 whitespace-nowrap rounded-md border border-[var(--card-border)] bg-[var(--card-bg)] px-2.5 py-1 text-xs font-medium text-[var(--sidebar-blue)] shadow-sm hover:bg-[var(--table-row-hover)]"
-              >
-                Показать все заказы
-              </Link>
-            </span>
-          ) : null}
-          {activeFilter
-            ? relatedOrdersListTagQuickFilters(activeFilter, {
-                kaitenColumnAlternates,
-                urgentCoefficientsInDb,
-              }).map((opt) => {
-                const optParsed = parseListTagParam(opt.tag);
-                const isActive = Boolean(
-                  optParsed && listTagParamsEqual(activeFilter, optParsed),
-                );
-                return (
-                  <Link
-                    key={opt.tag}
-                    href={ordersListHref({
-                      limit: pageSize,
-                      ...listHrefCommon,
-                      tag: opt.tag,
-                    })}
-                    className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm ${
-                      isActive
-                        ? "border-sky-500 bg-sky-100 text-sky-950 ring-1 ring-sky-500/50 dark:border-sky-600 dark:bg-sky-900/50 dark:text-sky-50"
-                        : "border-[var(--card-border)] bg-[var(--card-bg)] text-[var(--sidebar-blue)] hover:bg-[var(--table-row-hover)]"
-                    }`}
-                  >
-                    {opt.label}
-                  </Link>
-                );
-              })
-            : null}
+              />
+            </Suspense>
           </div>
-        </div>
         </div>
         <div className="shell-laptop:hidden">
           <Suspense fallback={null}>

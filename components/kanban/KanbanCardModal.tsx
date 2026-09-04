@@ -134,6 +134,7 @@ import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
 import { KanbanTinyPlusButton } from "./KanbanTinyPlusButton";
 import { PayrollDonePanel } from "@/components/payroll/PayrollDonePanel";
 import { OrderSourceEmailsModal } from "@/components/orders/OrderSourceEmailsModal";
+import { OrderSourceEmailsPanel } from "@/components/orders/OrderSourceEmailsPanel";
 import { useKanbanCrmUsers } from "./kanban-crm-users-context";
 import { KanbanMemberPickerDialog } from "./KanbanMemberPickerDialog";
 import {
@@ -2399,7 +2400,7 @@ export function KanbanCardModal({
         <div
           className={
             embed
-              ? "relative flex min-h-0 w-full max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] sm:w-fit"
+              ? "relative flex min-h-0 w-full max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)]"
               : `relative flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] text-[var(--kaiten-modal-text)] shadow-[0_16px_40px_rgba(0,0,0,0.55)] max-sm:rounded-none max-sm:border-x-0 max-sm:shadow-none ${
                   blocked ? "rounded-b-[10px] rounded-t-none border-t-0" : "rounded-[10px]"
                 }`
@@ -2620,7 +2621,19 @@ export function KanbanCardModal({
                   }
                   aria-label="Письма наряда"
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-muted)] hover:bg-[var(--kaiten-modal-input)] hover:text-[var(--kaiten-modal-text)] sm:h-[2.1rem] sm:w-[2.1rem]"
-                  onClick={() => setOrderMailOpen(true)}
+                  onClick={() => {
+                    if (embed) {
+                      document
+                        .getElementById("kanban-embed-order-emails")
+                        ?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "nearest",
+                          inline: "nearest",
+                        });
+                      return;
+                    }
+                    setOrderMailOpen(true);
+                  }}
                 >
                   <IconMail className={TOOLBAR_CIRCLE_ICON} />
                 </button>
@@ -2670,15 +2683,13 @@ export function KanbanCardModal({
 
           <div
             className={`flex min-h-0 max-sm:flex-col sm:flex-row sm:items-stretch ${
-              embed
-                ? "w-full min-w-0 max-w-full sm:flex-row-reverse"
-                : "flex-1"
+              embed ? "w-full min-w-0 max-w-full" : "flex-1"
             }`}
           >
             <div
               className={`flex min-h-0 min-w-0 flex-col ${
                 embed
-                  ? "w-full min-w-0 flex-1 overflow-visible"
+                  ? "w-full overflow-visible sm:w-[min(32%,28rem)] sm:max-w-[32rem] sm:shrink-0"
                   : "sm:flex-1 sm:overflow-y-auto sm:overscroll-contain"
               } ${rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"}`}
             >
@@ -2982,7 +2993,7 @@ export function KanbanCardModal({
                 <div
                   className={`grid min-h-0 gap-2 crm-t2:items-start ${
                     embed
-                      ? "crm-t2:grid-cols-[minmax(0,1fr)_auto_minmax(10.5rem,34%)]"
+                      ? "crm-t2:grid-cols-1"
                       : "crm-t2:grid-cols-[minmax(0,1fr)_minmax(10.5rem,34%)]"
                   }`}
                 >
@@ -3101,64 +3112,7 @@ export function KanbanCardModal({
                     )}
                     </div>
                   </div>
-                  {embed ? (
-                    <div
-                      className="flex shrink-0 flex-row items-center justify-center gap-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 crm-t2:flex-col crm-t2:self-start"
-                      role="toolbar"
-                      aria-label="Действия карточки"
-                    >
-                      <button
-                        type="button"
-                        data-no-touch-expand
-                        title={
-                          canManageKanbanBlock
-                            ? blocked
-                              ? "Снять блокировку"
-                              : "Заблокировать карточку"
-                            : KANBAN_BLOCK_PERM_HINT
-                        }
-                        aria-label={
-                          blocked ? "Снять блокировку" : "Заблокировать карточку"
-                        }
-                        disabled={!canManageKanbanBlock}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-                        onClick={handleKanbanBlockToggle}
-                      >
-                        {blocked ? (
-                          <IconUnlock className="h-5 w-5" />
-                        ) : (
-                          <IconBrick className="h-5 w-5" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        data-no-touch-expand
-                        title={
-                          showOrderMailButton
-                            ? (card.sourceEmailCount ?? 0) > 0
-                              ? `Письма наряда (${card.sourceEmailCount})`
-                              : "Письма наряда"
-                            : "Нет связанного наряда"
-                        }
-                        aria-label="Письма наряда"
-                        disabled={!showOrderMailButton}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-                        onClick={() => setOrderMailOpen(true)}
-                      >
-                        <IconMail className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        data-no-touch-expand
-                        title="Скопировать ссылку на карточку"
-                        aria-label="Поделиться — копировать ссылку"
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)]"
-                        onClick={() => onCopyCardLink(cardId)}
-                      >
-                        <IconLink className="h-5 w-5" />
-                      </button>
-                    </div>
-                  ) : null}
+                  {!embed ? (
                   <aside
                     className="flex min-h-[100px] flex-col rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5 sm:min-h-[120px]"
                   >
@@ -3280,6 +3234,7 @@ export function KanbanCardModal({
                       )}
                     </div>
                   </aside>
+                  ) : null}
                 </div>
               </div>
 
@@ -3416,10 +3371,10 @@ export function KanbanCardModal({
             </div>
 
             <div
-              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:border-t-0 ${
+              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:border-l sm:border-t-0 ${
                 embed
-                  ? "overflow-visible sm:w-[22.5rem] sm:max-w-[22.5rem] sm:shrink-0 sm:overflow-hidden sm:border-r sm:border-[var(--kaiten-modal-border)]"
-                  : "overflow-hidden sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l"
+                  ? "overflow-visible sm:w-[22.5rem] sm:max-w-[22.5rem] sm:shrink-0 sm:overflow-hidden"
+                  : "overflow-hidden sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0"
               } ${
                 rightTab === "card"
                   ? "max-sm:hidden"
@@ -3429,6 +3384,168 @@ export function KanbanCardModal({
               }`}
               style={{ backgroundColor: "var(--kaiten-modal-aside)" }}
             >
+              {embed ? (
+                <div className="flex shrink-0 items-stretch gap-2 border-b border-[var(--kaiten-modal-border)] p-2">
+                  <aside className="flex min-h-[5rem] min-w-0 flex-1 flex-col rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] p-1.5">
+                    <div className="mb-1 shrink-0 text-[0.55rem] font-semibold uppercase tracking-wide text-[var(--kaiten-modal-muted)]">
+                      Файлы наряда и чата
+                    </div>
+                    <div className="max-h-[8.5rem] space-y-1.5 overflow-y-auto overflow-x-hidden">
+                      {cardDocumentFiles.length === 0 ? (
+                        <p className="m-0 px-0.5 py-1 text-[0.7rem] leading-snug text-[var(--kaiten-modal-muted)]">
+                          {cardImageFiles.length > 0
+                            ? "Изображения смотрите в чате. Здесь — документы (PDF, архивы и другие файлы)."
+                            : card.parentCardId || (card.childCardIds || []).length > 0
+                              ? "Файлы производства хранятся только в CRM-канбане. Перетащите архив/файл в чат ниже."
+                              : "Вложения из наряда подтягиваются сюда автоматически. Чтобы отправить ещё файл в Kaiten и обсудить в чате — перетащите его в область чата ниже."}
+                        </p>
+                      ) : (
+                        cardDocumentFiles.map((f) => (
+                          <div
+                            key={f.id}
+                            className="group relative rounded border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] py-0.5 pl-1 pr-14"
+                          >
+                            <button
+                              type="button"
+                              className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded px-0.5 py-0.5 text-left transition-opacity hover:opacity-90"
+                              onClick={() => openAttachment(f)}
+                              title={f.name}
+                            >
+                              <span
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[var(--kaiten-modal-border)] bg-black/25 px-0.5 text-center text-[0.5rem] font-bold uppercase leading-tight tracking-tight text-[var(--kaiten-modal-muted)]"
+                                aria-hidden
+                              >
+                                {cardFileExtensionLabel(f.name, f.mime)}
+                              </span>
+                              <span className="min-w-0 flex-1 break-words text-left text-[0.7rem] leading-snug text-[var(--kaiten-modal-text)] line-clamp-2">
+                                {f.name}
+                              </span>
+                            </button>
+                            {canMarkFilesForRedo ? (
+                              <label
+                                className="mt-0.5 inline-flex items-center gap-1.5 rounded px-0.5 py-0.5 text-[0.62rem] text-[var(--kaiten-modal-muted)]"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={f.productionRedo === true}
+                                  onChange={(e) =>
+                                    onApply((b) => {
+                                      const fc = findCard(b, cardId);
+                                      if (!fc) return;
+                                      const row = (fc.card.files || []).find((x) => x.id === f.id);
+                                      if (!row) return;
+                                      row.productionRedo = e.target.checked;
+                                      fc.card.updatedAt = new Date().toISOString();
+                                      pushActivity(
+                                        fc.card,
+                                        `${e.target.checked ? "Отмечен" : "Снят"} «переделать»: ${row.name}`,
+                                        b.users[0]?.id,
+                                        b,
+                                        act,
+                                      );
+                                    })
+                                  }
+                                />
+                                Переделать
+                              </label>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="absolute right-5 top-1/2 -translate-y-1/2 rounded bg-[var(--kaiten-modal-bg)]/90 p-0.5 text-[var(--kaiten-modal-muted)] opacity-0 shadow-sm ring-1 ring-[var(--kaiten-modal-border)] transition-opacity hover:text-[var(--kaiten-modal-text)] group-hover:opacity-100"
+                              title="Скачать файл"
+                              aria-label="Скачать файл"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadCardFile(f);
+                              }}
+                            >
+                              <span className="px-1 text-[0.6rem] leading-none">↓</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded bg-[var(--kaiten-modal-bg)]/90 p-0.5 text-[var(--kaiten-modal-muted)] opacity-0 shadow-sm ring-1 ring-[var(--kaiten-modal-border)] transition-opacity hover:text-red-500 group-hover:opacity-100"
+                              title="Убрать файл"
+                              aria-label="Убрать файл"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void (async () => {
+                                  if (f.orderAttachmentId && card.linkedOrderId) {
+                                    const del = await deleteOrderAttachmentById(
+                                      card.linkedOrderId,
+                                      f.orderAttachmentId,
+                                    );
+                                    if (!del.ok) {
+                                      toast(del.error, true);
+                                      return;
+                                    }
+                                  }
+                                  onApply((b) => {
+                                    const fc = findCard(b, cardId);
+                                    if (!fc) return;
+                                    fc.card.files = (fc.card.files || []).filter(
+                                      (x) => x.id !== f.id,
+                                    );
+                                    fc.card.updatedAt = new Date().toISOString();
+                                    pushActivity(
+                                      fc.card,
+                                      `Удалён файл: ${f.name}`,
+                                      b.users[0]?.id,
+                                      b,
+                                      act,
+                                    );
+                                  });
+                                })();
+                              }}
+                            >
+                              <IconX className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </aside>
+                  <div
+                    className="flex shrink-0 flex-col gap-2"
+                    role="toolbar"
+                    aria-label="Действия карточки"
+                  >
+                    <button
+                      type="button"
+                      data-no-touch-expand
+                      title="Скопировать ссылку на карточку"
+                      aria-label="Поделиться — копировать ссылку"
+                      className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)]"
+                      onClick={() => onCopyCardLink(cardId)}
+                    >
+                      <IconLink className="h-6 w-6" />
+                    </button>
+                    <button
+                      type="button"
+                      data-no-touch-expand
+                      title={
+                        canManageKanbanBlock
+                          ? blocked
+                            ? "Снять блокировку"
+                            : "Заблокировать карточку"
+                          : KANBAN_BLOCK_PERM_HINT
+                      }
+                      aria-label={
+                        blocked ? "Снять блокировку" : "Заблокировать карточку"
+                      }
+                      disabled={!canManageKanbanBlock}
+                      className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] text-[var(--kaiten-modal-text)] hover:bg-[var(--kaiten-modal-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+                      onClick={handleKanbanBlockToggle}
+                    >
+                      {blocked ? (
+                        <IconUnlock className="h-6 w-6" />
+                      ) : (
+                        <IconBrick className="h-6 w-6" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div className="hidden shrink-0 overflow-y-hidden sm:block">
                 <KanbanCardModalTabs
                   rightTab={rightTab === "card" ? "chat" : rightTab}
@@ -3499,6 +3616,22 @@ export function KanbanCardModal({
                 />
               )}
             </div>
+            {embed && card.linkedOrderId ? (
+              <aside
+                id="kanban-embed-order-emails"
+                className="flex min-h-[16rem] w-full min-w-0 flex-col overflow-x-auto overflow-y-hidden border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-bg)] sm:min-h-0 sm:flex-1 sm:border-l sm:border-t-0"
+                aria-label="Письма наряда"
+              >
+                <OrderSourceEmailsPanel
+                  orderId={card.linkedOrderId}
+                  orderNumber={extractOrderNumberLabelFromKanbanCardTitle(
+                    card.title,
+                  )}
+                  hideReplyStatus
+                  compact
+                />
+              </aside>
+            ) : null}
           </div>
         </div>
       </div>

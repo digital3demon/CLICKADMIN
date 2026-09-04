@@ -3275,7 +3275,7 @@ export function KanbanApp({
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text)]">
       <header className="flex max-w-full shrink-0 flex-col gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 shadow-[0_1px_0_rgba(0,0,0,0.03)] sm:gap-2 sm:px-4 sm:py-2.5">
         {/* Мобилка: ряд 1 полный; ряды 2–3 + квадрат сохранённых фильтров справа */}
-        <div className="flex flex-col gap-1 ps-[var(--app-mobile-menu-inset,0.5rem)] sm:hidden">
+        <div className="flex flex-col gap-1 ps-[var(--app-mobile-menu-inset,0.5rem)] shell-laptop:hidden">
           <div className="flex min-w-0 items-center gap-1">
             <div className="relative min-w-0 flex-1">
               <select
@@ -3449,7 +3449,7 @@ export function KanbanApp({
         </div>
 
         {/* Desktop / tablet: доска + вид + мои / ответственный */}
-        <div className="hidden min-w-0 max-w-full items-center gap-1.5 sm:flex sm:gap-2">
+        <div className="hidden min-w-0 max-w-full items-center gap-1.5 shell-laptop:flex shell-laptop:gap-2">
           <div className="relative">
             <select
               className="inline-flex min-h-[2.75rem] max-w-[14rem] appearance-none truncate rounded-md border border-[var(--kanban-border)] bg-[var(--kanban-column-bg)] py-2 pl-3 pr-7 text-[0.8125rem] font-semibold leading-tight text-[var(--kanban-text)] md:max-w-[16rem] md:text-[0.875rem]"
@@ -3539,8 +3539,8 @@ export function KanbanApp({
       </header>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:overflow-y-auto max-sm:overscroll-y-contain sm:overflow-hidden">
-          <div className="relative z-20 hidden max-w-full shrink-0 flex-wrap items-center gap-2.5 overflow-x-auto border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-4 py-2.5 shell-laptop:overflow-visible sm:flex">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-contain shell-laptop:overflow-hidden">
+          <div className="relative z-20 hidden max-w-full shrink-0 flex-wrap items-center gap-2.5 overflow-x-auto border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-4 py-2.5 shell-laptop:flex shell-laptop:overflow-visible">
             <input
               type="search"
               placeholder="Поиск…"
@@ -3711,7 +3711,7 @@ export function KanbanApp({
           <div
             className={`flex min-h-0 min-w-0 flex-col ${
               !stopOpen && appState.viewMode === "list"
-                ? "max-sm:flex-none max-sm:overflow-visible sm:min-h-0 sm:flex-1 sm:overflow-hidden"
+                ? "flex-none overflow-visible shell-laptop:min-h-0 shell-laptop:flex-1 shell-laptop:overflow-hidden"
                 : "min-h-0 flex-1 overflow-hidden"
             }`}
           >

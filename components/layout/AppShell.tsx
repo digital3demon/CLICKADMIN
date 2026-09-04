@@ -155,7 +155,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         <Sidebar />
         <button
           type="button"
-          className={`absolute left-full top-8 z-[80] flex h-7 w-[7px] -translate-x-px items-center justify-center overflow-hidden rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-[2px_1px_6px_rgba(0,0,0,0.18)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] ${
+          className={`absolute left-full top-8 z-[80] flex h-11 min-w-11 -translate-x-px items-center justify-start bg-transparent ${
             permanentRail ? "flex" : "hidden shell-laptop:flex"
           }`}
           aria-expanded={!collapsed}
@@ -164,11 +164,13 @@ function AppShellChrome({ children }: { children: ReactNode }) {
           title={collapsed ? "Развернуть меню" : "Свернуть меню"}
           onClick={toggleCollapsed}
         >
-          {collapsed ? (
-            <ChevronRight className="h-2.5 w-2.5 shrink-0" aria-hidden />
-          ) : (
-            <ChevronLeft className="h-2.5 w-2.5 shrink-0" aria-hidden />
-          )}
+          <span className="flex h-7 w-[7px] items-center justify-center overflow-hidden rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-[2px_1px_6px_rgba(0,0,0,0.18)]">
+            {collapsed ? (
+              <ChevronRight className="h-2.5 w-2.5 shrink-0" aria-hidden />
+            ) : (
+              <ChevronLeft className="h-2.5 w-2.5 shrink-0" aria-hidden />
+            )}
+          </span>
         </button>
       </aside>
 
