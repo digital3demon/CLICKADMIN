@@ -150,10 +150,10 @@ const CARD_MENU_EST_HEIGHT = 150;
 const BOARD_COLUMN_WIDTH_FIXED =
   "w-[230px] sm:w-[240px] lg:w-[255px] xl:w-[270px]";
 /**
- * На ПК (shell-laptop) колонки — равные доли grid, без max-w 270 (9 столбцов иначе вылезают).
+ * На ПК (shell-laptop) колонки — равные ячейки grid (`minmax(0,1fr)` / фиксированный min при скролле).
  * Mobile / низкое окно — прежние px + скролл.
  */
-const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-auto shell-laptop:min-w-[var(--kanban-col-min,200px)] shell-laptop:max-w-none shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:self-stretch`;
+const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-full shell-laptop:min-w-0 shell-laptop:max-w-none shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:self-stretch`;
 
 /** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
 const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
@@ -1710,7 +1710,9 @@ export function BoardCanvas({
               </div>
             ) : (
               <div
-                className="flex h-full min-h-0 items-stretch gap-1.5 sm:gap-2 kanban-columns-fit"
+                className={`flex h-full min-h-0 items-stretch gap-1.5 sm:gap-2 kanban-columns-fit${
+                  boardNeedsScroll ? " kanban-columns-fit--scroll" : ""
+                }`}
                 style={{ "--kanban-col-count": columnIds.length } as CSSProperties}
               >
                 {board.columns.map((col, columnIndex) => {

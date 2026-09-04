@@ -292,18 +292,26 @@ html {
 
   .kanban-columns-fit {
     display: grid;
-    /* minmax(0) давил колонки при 125–150% zoom → «ПОСТОЯН…»; порог — скролл. */
-    grid-template-columns: repeat(
-      var(--kanban-col-count, 1),
-      minmax(var(--kanban-col-min, 200px), 1fr)
-    );
+    /* Равные доли: 1fr при ширине от родителя. max-content + 1fr раздувал колонки по контенту. */
+    grid-template-columns: repeat(var(--kanban-col-count, 1), minmax(0, 1fr));
     align-items: stretch;
     align-self: stretch;
-    width: max-content;
-    min-width: 100%;
-    flex: 1 1 auto;
+    flex: 1 1 0%;
+    width: auto;
+    min-width: 0;
     height: 100%;
     min-height: 0;
+  }
+
+  /* Узкий main / крупный zoom браузера — фиксированная равная ширина + горизонтальный скролл. */
+  .kanban-columns-fit.kanban-columns-fit--scroll {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 100%;
+    grid-template-columns: repeat(
+      var(--kanban-col-count, 1),
+      minmax(var(--kanban-col-min, 200px), var(--kanban-col-min, 200px))
+    );
   }
 }
 
