@@ -196,7 +196,7 @@ import {
 import dynamic from "next/dynamic";
 import { KanbanCardModal } from "./KanbanCardModal";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { KanbanCrmUsersProvider } from "./kanban-crm-users-context";
 import { TOAST_AUTO_HIDE_MS } from "@/components/ui/toast-store";
@@ -961,7 +961,12 @@ export function KanbanApp({
           tenantKanbanWriteAllowedRef.current = false;
         } else if (parsed || (isDemo && remoteRead.value && typeof remoteRead.value === "object")) {
           setAppState((prev) => {
-            if (!prev) return prev;
+            // Remote иногда приходит раньше local hydrate: раньше был no-op → вечная «Загрузка…».
+            const base =
+              prev ??
+              (isDemo
+                ? normalizeDemoKanbanAppState(loadKanbanState(true))
+                : loadKanbanState(false));
             const currentCard = cardModalId;
             const remoteState = isDemo
               ? normalizeDemoKanbanAppState(
@@ -969,7 +974,7 @@ export function KanbanApp({
                 )
               : (parsed as KanbanAppState);
             const merged = applyKanbanCardTypeLanes(
-              mergeKanbanStatePreservingLocalBoards(prev, remoteState),
+              mergeKanbanStatePreservingLocalBoards(base, remoteState),
               lastCardTypeLanesRef.current,
             );
             const finalState = applyPendingKanbanColumnMoves(
@@ -1001,8 +1006,8 @@ export function KanbanApp({
           if (ui.lastRealBoardId) lastRealBoardIdRef.current = ui.lastRealBoardId;
           saveKanbanBoardUiLocal(ui);
           setAppState((prev) => {
-            if (!prev) return prev;
-            const next = applyKanbanBoardUiState(prev, ui);
+            const base = prev ?? loadKanbanState(false);
+            const next = applyKanbanBoardUiState(base, ui);
             saveKanbanState(next, false);
             return next;
           });
@@ -1482,12 +1487,21 @@ export function KanbanApp({
   }, [appState, kanbanSessionUserId, kanbanSessionRole]);
   const searchView = useMemo(() => {
     if (!appState) return null;
-    return buildKanbanDisplayView(appState, {
-      sessionUserId: kanbanSessionUserId,
-      sessionUserRole: kanbanSessionRole,
-      stickyLinkedOrderIds,
-      memberHeads: loadKanbanCardHeadsCache(),
-    });
+    try {
+      return buildKanbanDisplayView(appState, {
+        sessionUserId: kanbanSessionUserId,
+        sessionUserRole: kanbanSessionRole,
+        stickyLinkedOrderIds,
+        memberHeads: loadKanbanCardHeadsCache(),
+      });
+    } catch (err) {
+      console.error("[kanban] buildKanbanDisplayView failed", err);
+      const fallback = getActiveBoard(appState);
+      return {
+        displayBoard: fallback,
+        cardHomeBoardId: new Map<string, string>(),
+      };
+    }
   }, [appState, kanbanSessionUserId, kanbanSessionRole, stickyLinkedOrderIds]);
   const displayBoard = searchView?.displayBoard ?? null;
   const cardHomeBoardId = searchView?.cardHomeBoardId;
@@ -1500,17 +1514,20 @@ export function KanbanApp({
   const actualOn =
     actualFilterAvailable && actualAppointmentBoardId === board?.id;
   const viewBoard = useMemo(() => {
-    if (!displayBoard) return null;
+    const base = displayBoard ?? board;
+    if (!base) return null;
     if (
       !kanbanShouldApplyActualAppointmentView(actualOn, appState?.search ?? "")
     ) {
-      return displayBoard;
+      return base;
     }
-    return applyKanbanActualAppointmentView(
-      displayBoard,
-      linkedAppointmentByOrderId,
-    );
-  }, [displayBoard, actualOn, linkedAppointmentByOrderId, appState?.search]);
+    try {
+      return applyKanbanActualAppointmentView(base, linkedAppointmentByOrderId);
+    } catch (err) {
+      console.error("[kanban] actual appointment view failed", err);
+      return base;
+    }
+  }, [displayBoard, board, actualOn, linkedAppointmentByOrderId, appState?.search]);
 
   const resolveCardHomeBoard = useCallback(
     (c: KanbanCard) => {
@@ -2074,6 +2091,37 @@ export function KanbanApp({
     },
     [],
   );
+
+  /**
+   * Фильтры / шаблоны / вид — без structuredClone всей доски
+   * (иначе «Сохранить» и смена вида на больших досках зависают или роняют кадр).
+   */
+  const patchKanbanPersonalUi = useCallback((fn: (s: KanbanAppState) => void) => {
+    setAppState((s) => {
+      if (!s) return s;
+      const next: KanbanAppState = {
+        ...s,
+        filters: { ...s.filters },
+        filterTemplates: (s.filterTemplates ?? []).map((t) => ({
+          ...t,
+          filters: { ...t.filters },
+        })),
+        calendarMonth: { ...s.calendarMonth },
+      };
+      fn(next);
+      return next;
+    });
+  }, []);
+
+  /** Без structuredClone всей доски — иначе смена вида на мобилке «замирает». */
+  const setViewMode = useCallback((mode: KanbanAppState["viewMode"]) => {
+    startTransition(() => {
+      setAppState((s) => {
+        if (!s || s.viewMode === mode) return s;
+        return { ...s, viewMode: mode };
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (!appState) return;
@@ -3192,10 +3240,32 @@ export function KanbanApp({
     [],
   );
 
-  if (!appState || !board || !viewBoard) {
+  if (!appState) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col items-center justify-center overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text-muted)]">
         <span className="text-[0.95rem]">Загрузка доски…</span>
+      </div>
+    );
+  }
+
+  if (!board || !viewBoard) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-2 overflow-hidden bg-[var(--kanban-workspace-bg)] text-[var(--kanban-text-muted)]">
+        <span className="text-[0.95rem]">Доска недоступна</span>
+        <button
+          type="button"
+          className="rounded-md border border-[var(--kanban-border)] px-3 py-1.5 text-[0.8rem] text-[var(--kanban-text)]"
+          onClick={() => {
+            const next = isDemo
+              ? normalizeDemoKanbanAppState(loadKanbanState(true))
+              : loadKanbanState(false);
+            setAppState(
+              applyPendingKanbanColumnMoves(next, listPendingKanbanColumnMoves()),
+            );
+          }}
+        >
+          Перезагрузить
+        </button>
       </div>
     );
   }
@@ -3259,7 +3329,7 @@ export function KanbanApp({
             </div>
             <KanbanViewModePicker
               viewMode={appState.viewMode}
-              onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
+              onChange={setViewMode}
             />
             <button
               type="button"
@@ -3295,9 +3365,9 @@ export function KanbanApp({
                   placeholder="Поиск…"
                   value={appState.search}
                   onChange={(e) =>
-                    patchApp((s) => {
-                      s.search = e.target.value;
-                    })
+                    setAppState((s) =>
+                      s ? { ...s, search: e.target.value } : s,
+                    )
                   }
                   className={`h-8 min-w-0 flex-1 rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-2.5 text-[0.75rem] text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] ${
                     actualFilterAvailable ? "" : "basis-[70%]"
@@ -3308,7 +3378,8 @@ export function KanbanApp({
                   filters={appState.filters}
                   filterTemplates={appState.filterTemplates ?? []}
                   viewMode={appState.viewMode}
-                  patchApp={patchApp}
+                  onViewModeChange={setViewMode}
+                  patchApp={patchKanbanPersonalUi}
                   showToast={showToast}
                 />
                 {actualFilterAvailable ? (
@@ -3372,7 +3443,7 @@ export function KanbanApp({
               layout="square"
               templates={appState.filterTemplates ?? []}
               filters={appState.filters}
-              patchApp={patchApp}
+              patchApp={patchKanbanPersonalUi}
             />
           </div>
         </div>
@@ -3431,7 +3502,7 @@ export function KanbanApp({
           </div>
           <KanbanViewModePicker
             viewMode={appState.viewMode}
-            onChange={(mode) => patchApp((s) => (s.viewMode = mode))}
+            onChange={setViewMode}
           />
           <div
             className="flex shrink-0 items-center gap-1.5"
@@ -3475,23 +3546,24 @@ export function KanbanApp({
               placeholder="Поиск…"
               value={appState.search}
               onChange={(e) =>
-                patchApp((s) => {
-                  s.search = e.target.value;
-                })
+                setAppState((s) =>
+                  s ? { ...s, search: e.target.value } : s,
+                )
               }
               className="min-h-[2.75rem] min-w-0 max-w-[320px] flex-[1_1_12rem] rounded-lg border border-[var(--kanban-border)] bg-[var(--kanban-workspace-bg)] px-3 py-2 text-base text-[var(--kanban-text)] placeholder:text-[var(--kanban-text-muted)] dark:bg-[#262626] md:text-[0.875rem]"
             />
             <KanbanFilterQuickAccess
               templates={appState.filterTemplates ?? []}
               filters={appState.filters}
-              patchApp={patchApp}
+              patchApp={patchKanbanPersonalUi}
             />
             <KanbanFiltersButton
               board={board}
               filters={appState.filters}
               filterTemplates={appState.filterTemplates ?? []}
               viewMode={appState.viewMode}
-              patchApp={patchApp}
+              onViewModeChange={setViewMode}
+              patchApp={patchKanbanPersonalUi}
               showToast={showToast}
             />
             {!stopOpen &&

@@ -47,6 +47,8 @@ type KanbanFiltersButtonProps = {
   filters: KanbanFilters;
   filterTemplates: KanbanFilterTemplate[];
   viewMode: KanbanAppState["viewMode"];
+  onViewModeChange: (mode: KanbanAppState["viewMode"]) => void;
+  /** Лёгкий патч UI (фильтры/шаблоны) — без clone всей доски. */
   patchApp: (fn: (s: KanbanAppState) => void) => void;
   showToast: (text: string, err?: boolean) => void;
 };
@@ -65,6 +67,7 @@ export function KanbanFiltersButton({
   filters,
   filterTemplates,
   viewMode,
+  onViewModeChange,
   patchApp,
   showToast,
 }: KanbanFiltersButtonProps) {
@@ -351,10 +354,12 @@ export function KanbanFiltersButton({
                     className={peopleJoinBtnClass(viewMode === opt.id)}
                     aria-pressed={viewMode === opt.id}
                     onClick={() => {
-                      if (viewMode === opt.id) return;
-                      patchApp((s) => {
-                        s.viewMode = opt.id;
-                      });
+                      if (viewMode === opt.id) {
+                        setOpen(false);
+                        return;
+                      }
+                      setOpen(false);
+                      onViewModeChange(opt.id);
                     }}
                   >
                     {opt.label}

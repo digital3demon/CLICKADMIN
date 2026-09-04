@@ -1395,7 +1395,7 @@ export function KanbanListView({
                   </div>
                   {expandedCardId === card.id ? (
                     <div
-                      className="w-full max-w-full border-t border-[var(--kanban-border)] bg-[var(--kaiten-modal-bg)] sm:col-span-full sm:w-fit sm:justify-self-start"
+                      className="w-full max-w-full border-t border-[var(--kanban-border)] bg-[var(--kaiten-modal-bg)] sm:col-span-full"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
                     >

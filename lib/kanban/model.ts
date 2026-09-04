@@ -164,7 +164,9 @@ export function canUserAccessBoard(
 /** Шаблон колонок / типов для виртуальных досок и fallback активной доски. */
 export function getKanbanLayoutTemplateBoard(state: KanbanAppState): KanbanBoard {
   return (
-    state.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID) ?? state.boards[0]!
+    state.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID) ??
+    state.boards[0] ??
+    createInitialBoard()
   );
 }
 
@@ -2276,7 +2278,8 @@ export function buildKanbanDisplayView(
         canUserAccessBoard(b, sessionUserId || null, sessionUserRole),
     ) ??
     accessibleBoards[0] ??
-    state.boards[0]!;
+    state.boards[0] ??
+    getKanbanLayoutTemplateBoard(state);
 
   active.columns.forEach((col) => {
     col.cards.forEach((c) => cardHomeBoardId.set(c.id, active.id));

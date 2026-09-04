@@ -646,6 +646,8 @@ export function KanbanCardModal({
   const [linkedDetailLoading, setLinkedDetailLoading] = useState(false);
   const [descExpanded, setDescExpanded] = useState(true);
   const [descCanCollapse, setDescCanCollapse] = useState(false);
+  /** Список: max-height свёрнутого превью (остаток экрана от карточки). */
+  const [descCollapseMaxPx, setDescCollapseMaxPx] = useState(0);
   const descUserOverrideRef = useRef(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -776,6 +778,7 @@ export function KanbanCardModal({
     descUserOverrideRef.current = false;
     setDescExpanded(true);
     setDescCanCollapse(false);
+    setDescCollapseMaxPx(0);
     setKaitenChatLoading(false);
     setLinkedDetailLoading(false);
     setPlacementFieldsOpen(false);
@@ -795,16 +798,39 @@ export function KanbanCardModal({
 
   const recomputeDescCollapse = useCallback(() => {
     if (descUserOverrideRef.current) return;
-    // Список (embed): описание всегда развёрнуто — карточка растёт по высоте.
-    if (embed) {
+    const measure = descMeasureRef.current;
+    const box = descBoxRef.current;
+    if (!descDraft.trim() || !measure) {
       setDescCanCollapse(false);
       setDescExpanded(true);
       return;
     }
+    const fullH = measure.scrollHeight;
+    const topEl =
+      (box?.closest("article") as HTMLElement | null) ?? box ?? measure;
+    const top = topEl.getBoundingClientRect().top;
+
+    if (embed) {
+      // Список: макс. высота = остаток экрана от верха карточки; иначе «Развернуть описание».
+      const viewportBottom =
+        window.visualViewport?.height ?? window.innerHeight;
+      const available = kanbanCardDescriptionAvailableHeight(
+        viewportBottom,
+        top,
+      );
+      const needs = kanbanCardDescriptionNeedsCollapse(fullH, available);
+      const maxPx = Math.max(0, Math.floor(available));
+      setDescCollapseMaxPx((prev) => (prev === maxPx ? prev : maxPx));
+      setDescCanCollapse((prev) => (prev === needs ? prev : needs));
+      setDescExpanded((prev) => {
+        const next = !needs;
+        return prev === next ? prev : next;
+      });
+      return;
+    }
+
     const overlay = overlayRef.current;
-    const measure = descMeasureRef.current;
-    const box = descBoxRef.current;
-    if (!overlay || !descDraft.trim() || !measure) {
+    if (!overlay) {
       setDescCanCollapse(false);
       setDescExpanded(true);
       return;
@@ -815,7 +841,6 @@ export function KanbanCardModal({
       setDescExpanded(false);
       return;
     }
-    const fullH = measure.scrollHeight;
     const available = kanbanCardDescriptionAvailableHeight(
       overlay.getBoundingClientRect().bottom,
       (box ?? measure).getBoundingClientRect().top,
@@ -2101,7 +2126,7 @@ export function KanbanCardModal({
       ref={overlayRef}
       className={
         embed
-          ? "kanban-root relative z-0 flex min-h-0 w-full max-w-full flex-col overflow-visible bg-transparent p-0 sm:w-fit"
+          ? "kanban-root relative z-0 flex min-h-0 w-full max-w-full flex-col overflow-visible bg-transparent p-0"
           : "kanban-root fixed inset-0 z-[200] flex overflow-hidden max-sm:items-stretch max-sm:p-0 sm:items-center sm:justify-center sm:p-4"
       }
       role={embed ? "region" : "dialog"}
@@ -2287,7 +2312,7 @@ export function KanbanCardModal({
         ref={panelRef}
         className={
           embed
-            ? "flex w-full min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)] sm:w-fit"
+            ? "flex w-full min-h-0 max-w-full flex-col overflow-visible bg-[var(--kaiten-modal-bg)]"
             : "relative flex h-dvh max-h-dvh w-full min-h-0 flex-col overflow-hidden max-sm:pt-[env(safe-area-inset-top)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[min(1200px,100vw-24px)]"
         }
         onMouseDown={(e) => e.stopPropagation()}
@@ -2645,13 +2670,15 @@ export function KanbanCardModal({
 
           <div
             className={`flex min-h-0 max-sm:flex-col sm:flex-row sm:items-stretch ${
-              embed ? "w-full min-w-0 max-w-full sm:w-fit" : "flex-1"
+              embed
+                ? "w-full min-w-0 max-w-full sm:flex-row-reverse"
+                : "flex-1"
             }`}
           >
             <div
               className={`flex min-h-0 min-w-0 flex-col ${
                 embed
-                  ? "w-full overflow-visible sm:w-[min(36rem,52vw)] sm:max-w-[36rem] sm:shrink-0"
+                  ? "w-full min-w-0 flex-1 overflow-visible"
                   : "sm:flex-1 sm:overflow-y-auto sm:overscroll-contain"
               } ${rightTab === "card" ? "max-sm:flex-1" : "max-sm:shrink-0"}`}
             >
@@ -2971,7 +2998,14 @@ export function KanbanCardModal({
                     {descExpanded ? (
                       <LinkifiedTextarea
                         className={baseInput}
-                        rows={embed ? 8 : 3}
+                        rows={
+                          embed
+                            ? Math.min(
+                                80,
+                                Math.max(8, descDraft.split("\n").length + 2),
+                              )
+                            : 3
+                        }
                         value={descDraft}
                         onChange={setDescDraft}
                         onBlur={() => {
@@ -3030,18 +3064,39 @@ export function KanbanCardModal({
                       />
                     ) : (
                       <div
-                        className={`${baseInput} block w-full min-h-[4.5rem] max-h-[4.5rem] overflow-hidden text-left sm:min-h-[5rem] sm:max-h-[5rem]`}
+                        className={`${baseInput} block w-full overflow-hidden text-left ${
+                          embed
+                            ? "min-h-0"
+                            : "min-h-[4.5rem] max-h-[4.5rem] sm:min-h-[5rem] sm:max-h-[5rem]"
+                        }`}
+                        style={
+                          embed && descCollapseMaxPx > 0
+                            ? { maxHeight: descCollapseMaxPx }
+                            : undefined
+                        }
                         aria-label="Описание заказа (сокращённо)"
                       >
-                        <span className="line-clamp-3 whitespace-pre-wrap break-words sm:line-clamp-4">
-                          {descDraft.trim() ? (
-                            <LinkifiedPlainText text={descDraft} />
-                          ) : (
-                            <span className="text-[var(--kaiten-modal-muted)]">
-                              Описание пустое
-                            </span>
-                          )}
-                        </span>
+                        {embed ? (
+                          <div className="whitespace-pre-wrap break-words">
+                            {descDraft.trim() ? (
+                              <LinkifiedPlainText text={descDraft} />
+                            ) : (
+                              <span className="text-[var(--kaiten-modal-muted)]">
+                                Описание пустое
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="line-clamp-3 whitespace-pre-wrap break-words sm:line-clamp-4">
+                            {descDraft.trim() ? (
+                              <LinkifiedPlainText text={descDraft} />
+                            ) : (
+                              <span className="text-[var(--kaiten-modal-muted)]">
+                                Описание пустое
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </div>
                     )}
                     </div>
@@ -3361,10 +3416,10 @@ export function KanbanCardModal({
             </div>
 
             <div
-              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:border-l sm:border-t-0 ${
+              className={`flex w-full min-h-0 flex-col border-t border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-aside)] sm:border-t-0 ${
                 embed
-                  ? "overflow-visible sm:w-[22.5rem] sm:max-w-[22.5rem] sm:shrink-0 sm:overflow-hidden"
-                  : "overflow-hidden sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0"
+                  ? "overflow-visible sm:w-[22.5rem] sm:max-w-[22.5rem] sm:shrink-0 sm:overflow-hidden sm:border-r sm:border-[var(--kaiten-modal-border)]"
+                  : "overflow-hidden sm:w-[min(400px,42%)] sm:max-w-md sm:shrink-0 sm:border-l"
               } ${
                 rightTab === "card"
                   ? "max-sm:hidden"
