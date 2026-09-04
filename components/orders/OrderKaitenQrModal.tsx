@@ -138,7 +138,7 @@ export function OrderKaitenQrModal({
             role="dialog"
             aria-modal="true"
             aria-label="QR-код витрины наряда"
-            className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl"
+            className="crm-modal-max-h w-full max-w-sm overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-sm font-semibold text-[var(--app-text)]">

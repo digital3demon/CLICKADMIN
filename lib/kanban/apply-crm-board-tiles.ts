@@ -2,6 +2,7 @@
  * Кладёт плитки CRM на колонки доски. Не пишет description/files.
  */
 import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
+import { kanbanBoardIdFromTrackLane } from "@/lib/kanban/crm-board-tile";
 import { seedKanbanCreatedActivity } from "@/lib/kanban/kanban-order-activity";
 import { getKanbanStageDue, setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
 import {
@@ -11,6 +12,7 @@ import {
   parkLinkedCardInStop,
   resolveOrderKanbanColumnFromKaitenMirrorTitle,
   restoreStoppedLinkedOrderToColumn,
+  stripParkedLinkedOrdersFromAppState,
 } from "@/lib/kanban/model";
 import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
 import {
@@ -25,9 +27,35 @@ import {
   pendingColumnTitleForOrder,
   type PendingKanbanColumnMove,
 } from "@/lib/kanban/pending-column-moves";
+import {
+  applyPendingBlockToCard,
+  clearPendingBlocksConfirmedByTiles,
+  listPendingKanbanBlocks,
+  pendingBlockForOrder,
+  type PendingKanbanBlock,
+} from "@/lib/kanban/pending-kanban-blocks";
+import {
+  clearPendingTrackLanesConfirmedByTiles,
+  listPendingKanbanTrackLanes,
+  pendingTrackLaneForOrder,
+  type PendingKanbanTrackLane,
+} from "@/lib/kanban/pending-track-lane-moves";
 import { slimKanbanChecklist } from "@/lib/kanban/kanban-linked-checklist";
 import { ensureKanbanBoardCardType } from "@/lib/kanban/resolve-kanban-card-type";
 import type { KanbanAppState, KanbanBoard, KanbanCard } from "@/lib/kanban/types";
+
+function withPendingTrackLaneOnTile(
+  tile: CrmBoardTile,
+  pendingLanes: readonly PendingKanbanTrackLane[],
+): CrmBoardTile {
+  const lane = pendingTrackLaneForOrder(tile.orderId, pendingLanes);
+  if (!lane) return tile;
+  const boardId = kanbanBoardIdFromTrackLane(lane);
+  if (tile.boardId === boardId && String(tile.trackLane || "").toUpperCase() === lane) {
+    return tile;
+  }
+  return { ...tile, trackLane: lane, boardId };
+}
 
 function applyTileTimer(card: KanbanCard, tile: CrmBoardTile): void {
   const hasTileTimer =
@@ -56,7 +84,18 @@ function applyTileChecklist(card: KanbanCard, tile: CrmBoardTile): void {
   card.checklist = [];
 }
 
-function applyTileBlock(card: KanbanCard, tile: CrmBoardTile): void {
+function applyTileBlock(
+  card: KanbanCard,
+  tile: CrmBoardTile,
+  pendingBlocks: readonly PendingKanbanBlock[],
+): void {
+  const oid = String(card.linkedOrderId || tile.orderId || "").trim();
+  const pending = oid ? pendingBlockForOrder(oid, pendingBlocks) : null;
+  if (pending) {
+    applyPendingBlockToCard(card, pending);
+    return;
+  }
+  /* Локальный стоп не снимаем пустой плиткой (лаг БД). Снятие стопа — через pending/кэш. */
   if (card.blocked && !tile.blocked) return;
   card.blocked = tile.blocked;
   card.blockReason = tile.blockReason;
@@ -81,6 +120,22 @@ function findLinkedOnBoard(
   return null;
 }
 
+function extractLinkedFromAnyBoard(
+  state: KanbanAppState,
+  orderId: string,
+): KanbanCard | null {
+  for (const board of state.boards || []) {
+    if (isKanbanAggregateBoardId(board.id)) continue;
+    for (const col of board.columns) {
+      const idx = col.cards.findIndex((c) => c.linkedOrderId === orderId);
+      if (idx < 0) continue;
+      const [card] = col.cards.splice(idx, 1);
+      return card ?? null;
+    }
+  }
+  return null;
+}
+
 function parkedLinkedOrderIds(board: KanbanBoard): Set<string> {
   const ids = new Set<string>();
   for (const row of board.stoppedCards || []) {
@@ -98,6 +153,7 @@ function applyTileToCard(
   card: KanbanCard,
   tile: CrmBoardTile,
   board: KanbanBoard,
+  pendingBlocks: readonly PendingKanbanBlock[],
 ): void {
   card.title = tile.title;
   card.linkedOrderId = tile.orderId;
@@ -118,7 +174,7 @@ function applyTileToCard(
     if (tile.stageDueYmd) setKanbanStageDue(card, tile.stageDueYmd);
   }
   /* card.urgent ≠ Order.isUrgent: плитка наряда срочность карточки не затирает. */
-  applyTileBlock(card, tile);
+  applyTileBlock(card, tile, pendingBlocks);
   card.kaitenCardSortOrder = tile.sortOrder;
   card.trackLane = tile.trackLane || card.trackLane || "";
   if (tile.createdAt && (!card.createdAt || tile.createdAt < card.createdAt)) {
@@ -149,20 +205,33 @@ export function applyCrmBoardTilesToAppState(
     replaceBoardId?: string | null;
     pruneMemberUserId?: string | null;
     pendingMoves?: PendingKanbanColumnMove[];
+    /**
+     * Только после GET /board-tiles с сервера.
+     * Кэш localStorage уже пропатчен при DnD — иначе pending снимается до записи в БД и F5 откатывает колонку.
+     */
+    confirmPendingMoves?: boolean;
   },
 ): KanbanAppState {
   const next = structuredClone(state);
   const pending = opts?.pendingMoves ?? listPendingKanbanColumnMoves();
+  const pendingBlocks = listPendingKanbanBlocks();
+  const pendingLanes = listPendingKanbanTrackLanes();
   const seenOnBoard = new Map<string, Set<string>>();
   const parkedByBoard = new Map(
     (next.boards || []).map((b) => [b.id, parkedLinkedOrderIds(b)] as const),
   );
-  for (const tile of tiles) {
+  for (const rawTile of tiles) {
+    const tile = withPendingTrackLaneOnTile(rawTile, pendingLanes);
     const board = next.boards.find((b) => b.id === tile.boardId);
     if (!board?.columns.length) continue;
     const columnTitle =
       pendingColumnTitleForOrder(tile.orderId, pending) || tile.columnTitle;
     if (parkedByBoard.get(board.id)?.has(tile.orderId)) {
+      /* Архив плитками не возвращаем на доску; призраки снимет strip в конце. */
+      const archived = (board.archivedCards || []).some(
+        (r) => String(r.card?.linkedOrderId || "").trim() === tile.orderId,
+      );
+      if (archived) continue;
       if (isKanbanStopColumnTitle(columnTitle) || !(columnTitle || "").trim()) {
         continue;
       }
@@ -181,7 +250,7 @@ export function applyCrmBoardTilesToAppState(
       if (foundAfter) {
         const card =
           board.columns[foundAfter.colIndex]!.cards[foundAfter.cardIndex]!;
-        applyTileToCard(card, tile, board);
+        applyTileToCard(card, tile, board, pendingBlocks);
       }
       const set = seenOnBoard.get(board.id) ?? new Set<string>();
       set.add(tile.orderId);
@@ -201,6 +270,7 @@ export function applyCrmBoardTilesToAppState(
         sourceId = fromCol.id;
         sourceTitle = fromCol.title;
       } else {
+        const pendingBlock = pendingBlockForOrder(tile.orderId, pendingBlocks);
         card = createCard({
           id: crmKanbanLinkedCardId(tile.orderId),
           title: tile.title,
@@ -211,8 +281,12 @@ export function applyCrmBoardTilesToAppState(
           assignees: tile.assignees,
           participants: tile.participants,
           urgent: false,
-          blocked: tile.blocked,
-          blockReason: tile.blockReason,
+          blocked: pendingBlock ? pendingBlock.blocked : tile.blocked,
+          blockReason: pendingBlock
+            ? pendingBlock.blocked
+              ? pendingBlock.blockReason
+              : ""
+            : tile.blockReason,
           checklist: tile.checklist ?? [],
           kaitenCardSortOrder: tile.sortOrder,
           trackLane: tile.trackLane || "",
@@ -220,7 +294,7 @@ export function applyCrmBoardTilesToAppState(
           sourceEmailCount: tile.sourceEmailCount,
         });
       }
-      applyTileToCard(card, tile, board);
+      applyTileToCard(card, tile, board, pendingBlocks);
       parkLinkedCardInStop(board, card, sourceId, sourceTitle);
       parkedByBoard.get(board.id)?.add(tile.orderId);
       const set = seenOnBoard.get(board.id) ?? new Set<string>();
@@ -233,17 +307,22 @@ export function applyCrmBoardTilesToAppState(
       columnTitle,
     );
     const found = findLinkedOnBoard(next, board.id, tile.orderId);
+    const fromOther = found ? null : extractLinkedFromAnyBoard(next, tile.orderId);
     if (found) {
       const fromCol = board.columns[found.colIndex]!;
       const [card] = fromCol.cards.splice(found.cardIndex, 1);
       if (!card) continue;
-      applyTileToCard(card, tile, board);
+      applyTileToCard(card, tile, board, pendingBlocks);
       if (fromCol.id !== targetCol.id) {
         targetCol.cards.push(card);
       } else {
         targetCol.cards.splice(Math.min(found.cardIndex, targetCol.cards.length), 0, card);
       }
+    } else if (fromOther) {
+      applyTileToCard(fromOther, tile, board, pendingBlocks);
+      targetCol.cards.push(fromOther);
     } else {
+      const pendingBlock = pendingBlockForOrder(tile.orderId, pendingBlocks);
       const card = createCard({
         id: crmKanbanLinkedCardId(tile.orderId),
         title: tile.title,
@@ -254,8 +333,12 @@ export function applyCrmBoardTilesToAppState(
         assignees: tile.assignees,
         participants: tile.participants,
         urgent: false,
-        blocked: tile.blocked,
-        blockReason: tile.blockReason,
+        blocked: pendingBlock ? pendingBlock.blocked : tile.blocked,
+        blockReason: pendingBlock
+          ? pendingBlock.blocked
+            ? pendingBlock.blockReason
+            : ""
+          : tile.blockReason,
         checklist: tile.checklist ?? [],
         kaitenCardSortOrder: tile.sortOrder,
         trackLane: tile.trackLane || "",
@@ -277,6 +360,12 @@ export function applyCrmBoardTilesToAppState(
   if (replaceId) {
     const board = next.boards.find((b) => b.id === replaceId);
     const keep = seenOnBoard.get(replaceId) ?? new Set<string>();
+    /* Optimistic перенос дорожки: карточка уже на новой доске, а плитки ещё без неё. */
+    for (const move of pendingLanes) {
+      if (kanbanBoardIdFromTrackLane(move.trackLane) !== replaceId) continue;
+      const oid = String(move.orderId || move.cardId || "").trim();
+      if (oid) keep.add(oid);
+    }
     if (board) {
       for (const col of board.columns) {
         col.cards = col.cards.filter((c) => {
@@ -321,6 +410,11 @@ export function applyCrmBoardTilesToAppState(
     }
   }
   const placed = applyPendingKanbanColumnMoves(next, pending);
-  clearPendingMovesConfirmedByTiles(tiles);
+  stripParkedLinkedOrdersFromAppState(placed);
+  if (opts?.confirmPendingMoves) {
+    clearPendingMovesConfirmedByTiles(tiles);
+    clearPendingBlocksConfirmedByTiles(tiles);
+    clearPendingTrackLanesConfirmedByTiles(tiles);
+  }
   return placed;
 }

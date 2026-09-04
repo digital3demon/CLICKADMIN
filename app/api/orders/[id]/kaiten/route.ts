@@ -31,6 +31,7 @@ import {
   kaitenReleaseActiveCardBlockers,
   trackLaneForBoardId,
 } from "@/lib/kaiten-rest";
+import { friendlyKaitenApiErrorText } from "@/lib/kaiten-friendly-error";
 import {
   getKaitenSnapshotCache,
   invalidateKaitenSnapshotCache,
@@ -200,14 +201,9 @@ function friendlyKaitenLoadError(
   raw: string | null | undefined,
   fallback: string,
 ): string {
-  if (kaitenRateLimitMessage(status, raw)) {
-    return "Слишком много запросов к Kaiten. Подождите 1–2 минуты и обновите страницу.";
-  }
-  const text = raw?.trim() || "";
-  if (/Position inconsistency/i.test(text)) {
-    return "Kaiten: колонка и дорожка не относятся к одной доске. Выберите дорожку из списка или снова откройте пространство и сохраните.";
-  }
-  return text || fallback;
+  return friendlyKaitenApiErrorText(status, raw, fallback, {
+    rateLimited: Boolean(kaitenRateLimitMessage(status, raw)),
+  });
 }
 
 /**
@@ -1654,6 +1650,13 @@ export async function PATCH(
     body.columnId == null
   ) {
     titleUpdate = { kaitenColumnTitle: KANBAN_STOP_COLUMN_TITLE };
+  } else if (
+    typeof body.columnTitle === "string" &&
+    body.columnTitle.trim() &&
+    !isKanbanStopColumnTitle(body.columnTitle)
+  ) {
+    // Явный перенос из CRM — не затираем колонку зеркалом Kaiten (лаг / mismatch имён).
+    titleUpdate = { kaitenColumnTitle: body.columnTitle.trim() };
   } else if (boardId != null) {
     const colsAfter = await kaitenListBoardColumns(auth, boardId);
     if (colsAfter.ok) {

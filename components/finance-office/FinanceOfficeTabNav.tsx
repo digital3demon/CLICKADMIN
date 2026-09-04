@@ -23,7 +23,7 @@ export function FinanceOfficeTabNav({
   q?: string | null;
 }) {
   return (
-    <div className="no-print sticky top-0 z-50 -mx-2 bg-[var(--app-bg)] pe-2 ps-[var(--app-mobile-menu-inset,0px)] shadow-[0_4px_12px_-8px_rgba(0,0,0,0.45)] md:static md:z-auto md:mx-0 md:bg-transparent md:px-0 md:shadow-none">
+    <div className="no-print sticky top-0 z-50 -mx-2 bg-[var(--app-bg)] pe-2 ps-[var(--app-mobile-menu-inset,0px)] shadow-[0_4px_12px_-8px_rgba(0,0,0,0.45)] shell-laptop:static shell-laptop:z-auto shell-laptop:mx-0 shell-laptop:bg-transparent shell-laptop:px-0 shell-laptop:shadow-none">
     <nav
       className="flex w-full flex-wrap gap-8 border-b border-[var(--card-border)]"
       aria-label="Вид ФинОтдела"

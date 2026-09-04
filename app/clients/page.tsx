@@ -291,7 +291,54 @@ export default async function ClientsPage({ searchParams }: PageProps) {
             </Suspense>
             <ClientsAddNewPanel mode="clinic" canEditClients={canEditClients} />
           </div>
-          <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
+          <ul className="space-y-2 shell-laptop:hidden">
+            {totalClinicRows === 0 && !clinicSearchRaw ? (
+              <li className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-4 text-sm text-[var(--text-secondary)]">
+                Клиник пока нет в базе.
+              </li>
+            ) : visibleClinics.length === 0 ? (
+              <li className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-4 text-sm text-[var(--text-secondary)]">
+                По запросу «{clinicSearchRaw}» клиник не найдено.
+              </li>
+            ) : (
+              pageClinics.map((c) => {
+                const legalFullName = cleanLegalFullName(c.legalFullName);
+                const recon = clinicReconciliationListCell(
+                  c.worksWithReconciliation,
+                  c.reconciliationFrequency,
+                );
+                return (
+                  <li
+                    key={c.id}
+                    className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm"
+                  >
+                    <Link
+                      href={`/clients/${c.id}`}
+                      prefetch={false}
+                      className="font-medium text-[var(--sidebar-blue)] hover:underline"
+                    >
+                      {c.name}
+                    </Link>
+                    {legalFullName ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-[var(--text-body)]">
+                        {legalFullName}
+                      </p>
+                    ) : null}
+                    {c.address ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">
+                        {c.address}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                      {recon.text} · врачей {c._count.doctorLinks} · заказов{" "}
+                      {c._count.orders} · {moneyRub(turnoverMap.get(c.id) ?? 0)}
+                    </p>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+          <div className="hidden overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm shell-laptop:block">
             <table className="w-full min-w-[1000px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -552,7 +599,58 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           </Suspense>
           <ClientsAddNewPanel mode="doctor" canEditClients={canEditClients} />
         </div>
-        <div className="overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm">
+        <ul className="space-y-2 shell-laptop:hidden">
+          {doctors.length === 0 ? (
+            <li className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-4 text-sm text-[var(--text-muted)]">
+              Врачей пока нет.
+            </li>
+          ) : visibleDoctors.length === 0 ? (
+            <li className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-4 text-sm text-[var(--text-secondary)]">
+              По запросу «{doctorSearchRaw}» врачей не найдено.
+            </li>
+          ) : (
+            pageDoctors.map((d) => {
+              const activeClinicLinks = d.clinicLinks.filter(
+                (l) => l.clinic.deletedAt == null,
+              );
+              const clinicsLabel =
+                activeClinicLinks.length === 0
+                  ? "—"
+                  : activeClinicLinks.map((l) => l.clinic.name).join(", ");
+              const tg =
+                d.telegramUsername != null &&
+                String(d.telegramUsername).trim()
+                  ? `@${String(d.telegramUsername).replace(/^@+/, "")}`
+                  : null;
+              return (
+                <li
+                  key={d.id}
+                  className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-3 shadow-sm"
+                >
+                  <Link
+                    href={`/clients/doctors/${d.id}`}
+                    prefetch={false}
+                    className="font-medium text-[var(--sidebar-blue)] hover:underline"
+                  >
+                    {d.fullName}
+                  </Link>
+                  <p className="mt-1 text-xs text-[var(--text-body)]">
+                    {displayOrDash(d.phone)}
+                    {tg ? ` · ${tg}` : ""}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">
+                    {clinicsLabel}
+                  </p>
+                  <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                    заказов {d._count.orders}
+                    {d.acceptsPrivatePractice ? " · частное лицо" : ""}
+                  </p>
+                </li>
+              );
+            })
+          )}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] shadow-sm shell-laptop:block">
           <table className="w-full min-w-[960px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-[var(--card-border)] bg-[var(--surface-subtle)] text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">

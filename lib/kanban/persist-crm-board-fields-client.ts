@@ -6,6 +6,8 @@ import { forEachKanbanCardInState, getKanbanStageDue } from "@/lib/kanban/kanban
 import {
   patchCrmBoardTilesCacheColumn,
   patchCrmBoardTilesCacheTimer,
+  patchCrmBoardTilesCacheTrackLane,
+  patchCrmBoardTilesCacheBlock,
 } from "@/lib/kanban/crm-board-tiles-cache";
 import {
   upsertKanbanCardColumnCache,
@@ -15,9 +17,87 @@ import {
   clearPendingKanbanColumnMove,
   rememberPendingKanbanColumnMove,
 } from "@/lib/kanban/pending-column-moves";
+import {
+  clearPendingKanbanBlock,
+  listPendingKanbanBlocks,
+  pendingBlockForOrder,
+  rememberPendingKanbanBlock,
+} from "@/lib/kanban/pending-kanban-blocks";
+import {
+  clearPendingKanbanTrackLane,
+  rememberPendingKanbanTrackLane,
+} from "@/lib/kanban/pending-track-lane-moves";
 import { slimKanbanChecklist } from "@/lib/kanban/kanban-linked-checklist";
 import type { ChecklistItem, KanbanAppState, KanbanCard } from "@/lib/kanban/types";
 export { crmColumnPersistFromLinkedMove } from "@/lib/kanban/crm-column-persist";
+
+export function rememberCrmKanbanTrackLaneLocal(input: {
+  cardId: string;
+  orderId?: string;
+  trackLane: "ORTHOPEDICS" | "ORTHODONTICS";
+}): void {
+  const oid = String(input.orderId || "").trim();
+  rememberPendingKanbanTrackLane({
+    cardId: input.cardId,
+    orderId: oid || undefined,
+    trackLane: input.trackLane,
+  });
+  if (oid) patchCrmBoardTilesCacheTrackLane(oid, input.trackLane);
+}
+
+/** Кнопка «Обновить»: дорожка с Kaiten затирает локальный pending. */
+export function commitKanbanTrackLaneFromKaitenRefresh(input: {
+  cardId: string;
+  orderId: string;
+  trackLane: "ORTHOPEDICS" | "ORTHODONTICS";
+}): void {
+  const oid = input.orderId.trim();
+  if (!oid) return;
+  clearPendingKanbanTrackLane(oid);
+  clearPendingKanbanTrackLane(input.cardId);
+  patchCrmBoardTilesCacheTrackLane(oid, input.trackLane);
+}
+
+export function rememberCrmKanbanBlockLocal(input: {
+  cardId: string;
+  orderId?: string;
+  blocked: boolean;
+  blockReason?: string;
+  blockedAt?: string | null;
+}): void {
+  const oid = String(input.orderId || "").trim();
+  const reason = input.blocked ? String(input.blockReason || "").trim() : "";
+  rememberPendingKanbanBlock({
+    cardId: input.cardId,
+    orderId: oid || undefined,
+    blocked: input.blocked,
+    blockReason: reason,
+    blockedAt: input.blocked ? input.blockedAt ?? null : null,
+  });
+  if (oid) {
+    patchCrmBoardTilesCacheBlock(oid, {
+      blocked: input.blocked,
+      blockReason: reason,
+    });
+  }
+}
+
+/** Кнопка «Обновить»: блок с Kaiten затирает локальный pending. */
+export function commitKanbanBlockFromKaitenRefresh(input: {
+  cardId: string;
+  orderId: string;
+  blocked: boolean;
+  blockReason?: string | null;
+}): void {
+  const oid = input.orderId.trim();
+  if (!oid) return;
+  clearPendingKanbanBlock(oid);
+  clearPendingKanbanBlock(input.cardId);
+  patchCrmBoardTilesCacheBlock(oid, {
+    blocked: input.blocked,
+    blockReason: input.blocked ? String(input.blockReason || "").trim() : "",
+  });
+}
 
 export function rememberCrmKanbanColumnLocal(input: {
   cardId: string;
@@ -206,9 +286,27 @@ export function crmBoardFieldsFromKaitenRefreshPatch(
 export function persistCrmBoardFieldsFromKaitenRefreshPatches(
   patches: readonly KaitenRefreshCardPatch[],
 ): void {
+  const pendingBlocks = listPendingKanbanBlocks();
   for (const patch of patches) {
     const row = crmBoardFieldsFromKaitenRefreshPatch(patch);
     if (!row) continue;
+    const pending = pendingBlockForOrder(row.orderId, pendingBlocks);
+    if (pending && row.blocked !== undefined) {
+      const { blocked: _b, blockReason: _r, blockedAt: _a, ...rest } = row;
+      if (!rest.assignees && !rest.participants && !rest.stageDueYmd && !rest.columnTitle) {
+        continue;
+      }
+      persistCrmBoardFieldsClient(rest);
+      continue;
+    }
+    if (row.blocked !== undefined) {
+      commitKanbanBlockFromKaitenRefresh({
+        cardId: row.orderId,
+        orderId: row.orderId,
+        blocked: row.blocked,
+        blockReason: row.blockReason,
+      });
+    }
     persistCrmBoardFieldsClient(row);
   }
 }
@@ -241,7 +339,10 @@ export function persistCrmBoardFieldsClient(input: {
   if (input.stageDueYmd !== undefined) body.stageDueYmd = input.stageDueYmd;
   if (input.columnTitle !== undefined) body.columnTitle = input.columnTitle;
   if (input.sortOrder !== undefined) body.sortOrder = input.sortOrder;
-  if (input.trackLane !== undefined) body.trackLane = input.trackLane;
+  if (input.trackLane !== undefined) {
+    body.trackLane = input.trackLane;
+    if (input.trackLane) patchCrmBoardTilesCacheTrackLane(orderId, input.trackLane);
+  }
   if (input.timerStartedAt !== undefined) body.timerStartedAt = input.timerStartedAt;
   if (input.timerDurationMs !== undefined) body.timerDurationMs = input.timerDurationMs;
   if (input.timerFrozenAt !== undefined) body.timerFrozenAt = input.timerFrozenAt;
@@ -252,7 +353,17 @@ export function persistCrmBoardFieldsClient(input: {
   if (input.timerParkedRemainingMs !== undefined) {
     body.timerParkedRemainingMs = input.timerParkedRemainingMs;
   }
-  if (input.blocked !== undefined) body.blocked = input.blocked;
+  if (input.blocked !== undefined) {
+    body.blocked = input.blocked;
+    const reason =
+      input.blocked === true
+        ? String(input.blockReason ?? "").trim()
+        : "";
+    patchCrmBoardTilesCacheBlock(orderId, {
+      blocked: input.blocked === true,
+      blockReason: reason,
+    });
+  }
   if (input.blockReason !== undefined) body.blockReason = input.blockReason;
   if (input.blockedAt !== undefined) body.blockedAt = input.blockedAt;
   if (input.checklist !== undefined) {
@@ -261,6 +372,7 @@ export function persistCrmBoardFieldsClient(input: {
   void fetch("/api/kanban/board-fields", {
     method: "PATCH",
     credentials: "include",
+    keepalive: true,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }).catch(() => {});
@@ -333,6 +445,13 @@ export function persistMissingCrmTimersFromState(
 export function persistKanbanLinkedCardBlock(card: KanbanCard): void {
   const orderId = String(card.linkedOrderId || "").trim();
   if (!orderId) return;
+  rememberCrmKanbanBlockLocal({
+    cardId: card.id,
+    orderId,
+    blocked: Boolean(card.blocked),
+    blockReason: card.blockReason || "",
+    blockedAt: card.blockedAt || null,
+  });
   persistCrmBoardFieldsClient({
     orderId,
     blocked: Boolean(card.blocked),

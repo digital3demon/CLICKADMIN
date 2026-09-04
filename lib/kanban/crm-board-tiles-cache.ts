@@ -2,19 +2,52 @@
  * Последние плитки доски в localStorage — F5 рисует прошлый снимок,
  * пока GET /board-tiles ещё идёт (3–5 с на полной ортодонтии).
  */
-import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
+import {
+  kanbanBoardIdFromTrackLane,
+  type CrmBoardTile,
+} from "@/lib/kanban/crm-board-tile";
 import type { KanbanLinkedAppointmentSnap } from "@/lib/kanban/kanban-actual-appointment";
 import {
   listPendingKanbanColumnMoves,
   pendingColumnTitleForOrder,
 } from "@/lib/kanban/pending-column-moves";
+import {
+  listPendingKanbanBlocks,
+  pendingBlockForOrder,
+} from "@/lib/kanban/pending-kanban-blocks";
+import {
+  listPendingKanbanTrackLanes,
+  pendingTrackLaneForOrder,
+} from "@/lib/kanban/pending-track-lane-moves";
 
-function overlayPendingColumnOnTiles(tiles: readonly CrmBoardTile[]): CrmBoardTile[] {
-  const pending = listPendingKanbanColumnMoves();
-  if (!pending.length) return [...tiles];
+function overlayPendingOnTiles(tiles: readonly CrmBoardTile[]): CrmBoardTile[] {
+  const pendingCols = listPendingKanbanColumnMoves();
+  const pendingBlocks = listPendingKanbanBlocks();
+  const pendingLanes = listPendingKanbanTrackLanes();
+  if (!pendingCols.length && !pendingBlocks.length && !pendingLanes.length) {
+    return [...tiles];
+  }
   return tiles.map((t) => {
-    const title = pendingColumnTitleForOrder(t.orderId, pending);
-    return title ? { ...t, columnTitle: title } : t;
+    let next = t;
+    const title = pendingColumnTitleForOrder(t.orderId, pendingCols);
+    if (title) next = { ...next, columnTitle: title };
+    const block = pendingBlockForOrder(t.orderId, pendingBlocks);
+    if (block) {
+      next = {
+        ...next,
+        blocked: block.blocked,
+        blockReason: block.blocked ? block.blockReason : "",
+      };
+    }
+    const lane = pendingTrackLaneForOrder(t.orderId, pendingLanes);
+    if (lane) {
+      next = {
+        ...next,
+        trackLane: lane,
+        boardId: kanbanBoardIdFromTrackLane(lane),
+      };
+    }
+    return next;
   });
 }
 
@@ -102,7 +135,7 @@ export function mergeCrmBoardTilesCache(
   }
   const byId = new Map(prev.map((t) => [t.orderId, t]));
   for (const t of incoming) byId.set(t.orderId, t);
-  saveCrmBoardTilesCache(id, overlayPendingColumnOnTiles([...byId.values()]));
+  saveCrmBoardTilesCache(id, overlayPendingOnTiles([...byId.values()]));
 }
 
 /** Сразу после переноса в CRM — F5 не читает старую колонку из кэша плиток. */
@@ -127,6 +160,47 @@ export function patchCrmBoardTilesCacheColumn(
       store.byBoard[boardId] = next;
       dirty = true;
     }
+  }
+  if (!dirty) return;
+  try {
+    storageSet(JSON.stringify(store));
+  } catch {
+    /* квота */
+  }
+}
+
+/** Сразу после смены доски — F5 не кладёт карточку на старую дорожку. */
+export function patchCrmBoardTilesCacheTrackLane(
+  orderId: string,
+  trackLane: string,
+): void {
+  const oid = String(orderId || "").trim();
+  const lane = String(trackLane || "").trim().toUpperCase();
+  if (!oid || !lane) return;
+  const nextBoardId = kanbanBoardIdFromTrackLane(lane);
+  const store = readStore();
+  let moved: CrmBoardTile | null = null;
+  let dirty = false;
+  for (const [boardId, tiles] of Object.entries(store.byBoard)) {
+    const idx = tiles.findIndex((t) => t.orderId === oid);
+    if (idx < 0) continue;
+    const [tile] = tiles.splice(idx, 1);
+    if (!tile) continue;
+    moved = { ...tile, trackLane: lane, boardId: nextBoardId };
+    store.byBoard[boardId] = tiles;
+    dirty = true;
+  }
+  if (moved) {
+    const dest = store.byBoard[nextBoardId] ?? [];
+    store.byBoard[nextBoardId] = [
+      moved,
+      ...dest.filter((t) => t.orderId !== oid),
+    ];
+    store.order = [nextBoardId, ...store.order.filter((x) => x !== nextBoardId)].slice(
+      0,
+      MAX_CACHED_BOARDS,
+    );
+    dirty = true;
   }
   if (!dirty) return;
   try {
@@ -173,13 +247,47 @@ export function patchCrmBoardTilesCacheTimer(
   }
 }
 
+/** Сразу после блокировки/разблокировки — F5 не поднимает старый стоп из кэша плиток. */
+export function patchCrmBoardTilesCacheBlock(
+  orderId: string,
+  block: Pick<CrmBoardTile, "blocked" | "blockReason">,
+): void {
+  const oid = String(orderId || "").trim();
+  if (!oid) return;
+  const store = readStore();
+  let dirty = false;
+  const blocked = block.blocked === true;
+  const blockReason = blocked ? String(block.blockReason || "").trim() : "";
+  for (const [boardId, tiles] of Object.entries(store.byBoard)) {
+    let changed = false;
+    const next = tiles.map((t) => {
+      if (t.orderId !== oid) return t;
+      if (Boolean(t.blocked) === blocked && (t.blockReason || "").trim() === blockReason) {
+        return t;
+      }
+      changed = true;
+      return { ...t, blocked, blockReason };
+    });
+    if (changed) {
+      store.byBoard[boardId] = next;
+      dirty = true;
+    }
+  }
+  if (!dirty) return;
+  try {
+    storageSet(JSON.stringify(store));
+  } catch {
+    /* квота */
+  }
+}
+
 export function saveCrmBoardTilesCache(
   boardId: string,
   tiles: readonly CrmBoardTile[],
 ): void {
   const id = String(boardId || "").trim();
   if (!id) return;
-  const clean = overlayPendingColumnOnTiles(tiles.filter(isTile));
+  const clean = overlayPendingOnTiles(tiles.filter(isTile));
   const store = readStore();
   store.byBoard[id] = clean;
   store.order = [id, ...store.order.filter((x) => x !== id)].slice(

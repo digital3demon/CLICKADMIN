@@ -8,6 +8,8 @@ import {
   readOrderAttachmentBytes,
 } from "@/lib/order-attachment-storage";
 import { removeAttachmentFromKaitenIfAny } from "@/lib/kaiten-sync";
+import { isOrderAttachmentThumbRequest } from "@/lib/order-attachment-thumb";
+import { buildOrderAttachmentThumbJpeg } from "@/lib/order-attachment-thumb.server";
 
 type Ctx = { params: Promise<{ id: string; attachmentId: string }> };
 
@@ -43,12 +45,45 @@ export async function GET(req: Request, ctx: Ctx) {
     const asciiName = row.fileName.replace(/[^\x20-\x7E]/g, "_");
     const url = new URL(req.url);
     const inline = url.searchParams.get("inline") === "1";
+    const wantThumb = isOrderAttachmentThumbRequest(url.searchParams);
+    const mime = (row.mimeType || "").toLowerCase();
+    const looksImage =
+      mime.startsWith("image/") ||
+      /\.(jpe?g|png|gif|webp|bmp)$/i.test(row.fileName);
+
+    if (wantThumb && looksImage) {
+      const t0 = Date.now();
+      const thumb = await buildOrderAttachmentThumbJpeg(Buffer.from(buf));
+      if (thumb) {
+        console.info(
+          JSON.stringify({
+            evt: "order_attachment_thumb",
+            orderId,
+            attachmentId,
+            srcBytes: buf.length,
+            thumbBytes: thumb.length,
+            ms: Date.now() - t0,
+          }),
+        );
+        return new Response(new Uint8Array(thumb), {
+          status: 200,
+          headers: {
+            "Content-Type": "image/jpeg",
+            "Content-Length": String(thumb.length),
+            "Content-Disposition": `inline; filename="${asciiName.replace(/\.[^.]+$/, "") || "preview"}.jpg"`,
+            "Cache-Control": "private, max-age=86400",
+          },
+        });
+      }
+    }
+
     return new Response(new Uint8Array(buf), {
       status: 200,
       headers: {
         "Content-Type": row.mimeType || "application/octet-stream",
         "Content-Length": String(buf.length),
         "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(row.fileName)}`,
+        ...(wantThumb ? { "Cache-Control": "private, max-age=300" } : {}),
       },
     });
   } catch (e) {

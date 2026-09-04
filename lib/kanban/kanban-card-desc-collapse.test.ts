@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  KANBAN_CARD_MODAL_NARROW_MAX_PX,
   kanbanCardDescriptionAvailableHeight,
   kanbanCardDescriptionForceCollapseOnNarrow,
   kanbanCardDescriptionNeedsCollapse,
@@ -29,6 +30,12 @@ describe("kanbanCardDescriptionForceCollapseOnNarrow", () => {
 
   it("на десктопе не форсирует сворачивание", () => {
     expect(kanbanCardDescriptionForceCollapseOnNarrow(false, true)).toBe(false);
+  });
+});
+
+describe("KANBAN_CARD_MODAL_NARROW_MAX_PX", () => {
+  it("совпадает с порогом drawer (не sm 639)", () => {
+    expect(KANBAN_CARD_MODAL_NARROW_MAX_PX).toBe(1023);
   });
 });
 

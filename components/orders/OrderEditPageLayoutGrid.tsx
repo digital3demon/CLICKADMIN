@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUiDesign } from "@/lib/hooks/useUiDesign";
+import { SHELL_LAPTOP_MEDIA } from "@/lib/crm-layout-tiers";
 import type {
   OrderEditBlockId,
   OrderEditLayoutV1,
@@ -79,7 +80,7 @@ export function OrderEditPageLayoutGrid({
   const isHarmony = useUiDesign() === "harmony";
   const [lgUp, setLgUp] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
+    const mq = window.matchMedia(SHELL_LAPTOP_MEDIA);
     const sync = () => setLgUp(mq.matches);
     sync();
     mq.addEventListener("change", sync);

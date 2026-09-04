@@ -23,8 +23,11 @@ export function kanbanCardDescriptionNeedsCollapse(
   return fullDescriptionHeight > availableHeight + slackPx;
 }
 
-/** Узкая модалка карточки: тот же порог, что `sm:` у блока людей (`sm:hidden`). */
-export const KANBAN_CARD_MODAL_NARROW_MAX_PX = 639;
+/**
+ * Узкая модалка / list vs board: тот же порог, что drawer (`shell-laptop` = 1024×560).
+ * Ширина ≤1023 — телефон и планшет в drawer; альбом с высотой <560 тоже узкий (JS: !SHELL_LAPTOP).
+ */
+export const KANBAN_CARD_MODAL_NARROW_MAX_PX = 1023;
 
 export function kanbanCardDescriptionForceCollapseOnNarrow(
   narrowViewport: boolean,

@@ -59,9 +59,7 @@ export function ModuleFrame({
       className={
         titleClassName?.trim()
           ? `${fontDisplay.className} break-words font-semibold tracking-tight text-[var(--app-text)] ${titleClassName.trim()}`
-          : `${fontDisplay.className} break-words font-semibold tracking-tight text-[var(--app-text)] ${
-              isHarmony ? "text-2xl" : "text-xl lg:text-2xl"
-            }`
+          : `${fontDisplay.className} break-words font-semibold tracking-tight text-[length:var(--step-2)] text-[var(--app-text)]`
       }
     >
       {title}
@@ -147,7 +145,7 @@ export function ModuleFrame({
             На lg подстрочник (напр. «Изменить номер») уходит на вторую строку (order + basis-full),
             чтобы в первой строке только h1 + пилюли + кнопки — тогда items-center совпадает с визуальным центром заголовка.
           */
-          <div className="flex max-w-full min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-3 lg:gap-y-2">
+          <div className="flex max-w-full min-w-0 flex-col gap-3 shell-laptop:flex-row shell-laptop:flex-wrap shell-laptop:items-center shell-laptop:gap-x-3 shell-laptop:gap-y-2">
             {/*
               Отступ только у заголовка — см. .module-frame-title-h1-wrap в globals.css
               (fixed-меню 2.75rem + safe-area; не тянем весь main).

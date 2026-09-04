@@ -24,6 +24,7 @@ import { OrdersListShippedToolbar } from "@/components/orders/OrdersListShippedT
 import { OrdersListPageSizePref } from "@/components/orders/OrdersListPageSizePref";
 import { OrdersListPagination } from "@/components/orders/OrdersListPagination";
 import { OrdersListSearch } from "@/components/orders/OrdersListSearch";
+import { OrdersListPeriodForm } from "@/components/orders/OrdersListPeriodForm";
 import { OrdersListTableHeaderRow } from "@/components/orders/OrdersListTableHeaderRow";
 import { OrdersListTableRow } from "@/components/orders/OrdersListTableRow";
 import { OrdersListChrome } from "@/components/orders/OrdersListChrome";
@@ -992,6 +993,17 @@ export default async function OrdersPage({
             : null}
           </div>
         </div>
+        </div>
+        <div className="shell-laptop:hidden">
+          <Suspense fallback={null}>
+            <OrdersListPeriodForm
+              pageSize={pageSize}
+              appliedFrom={fromUrl}
+              appliedTo={toUrl}
+              dense
+              idSuffix="mobile"
+            />
+          </Suspense>
         </div>
         {rawTag && !activeFilter ? (
           <div className="w-full rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-2.5 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">

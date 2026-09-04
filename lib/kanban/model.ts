@@ -16,7 +16,6 @@ import { buildKaitenCardTitle } from "@/lib/kaiten-card-title";
 import { normalizeKanbanColumnTitle } from "@/lib/kaiten-column-title";
 import {
   isKanbanStopColumnTitle,
-  KANBAN_STOP_COLUMN_TITLE,
 } from "@/lib/kanban/kanban-stop-column";
 import {
   linkedOrderRowHasDescriptionBody,
@@ -2122,89 +2121,6 @@ export function findCardInAppState(
   return null;
 }
 
-/**
- * При поиске — карточки из архива всех доступных досок (колонка = откуда ушли).
- * Иначе «079» не находит наряд, который уже автоархивирован из «Сдана админам».
- */
-function appendArchivedSearchHits(args: {
-  displayBoard: KanbanBoard;
-  homes: KanbanBoard[];
-  cardHomeBoardId: Map<string, string>;
-  textMatches: (card: KanbanCard, home: KanbanBoard) => boolean;
-  passesFilters: (card: KanbanCard, home: KanbanBoard) => boolean;
-  extraKeep?: (card: KanbanCard) => boolean;
-}): void {
-  const seen = new Set(
-    args.displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id)),
-  );
-  for (const home of args.homes) {
-    for (const row of home.archivedCards || []) {
-      const card = row.card;
-      if (!card || seen.has(card.id)) continue;
-      if (args.extraKeep && !args.extraKeep(card)) continue;
-      if (!args.textMatches(card, home)) continue;
-      if (!args.passesFilters(card, home)) continue;
-      const titleNorm = (row.sourceColumnTitle || "Архив").trim().toLowerCase();
-      let colView = args.displayBoard.columns.find(
-        (c) => c.title.trim().toLowerCase() === titleNorm,
-      );
-      if (!colView) {
-        colView = {
-          id: `search-arch-${home.id}-${titleNorm || "archive"}`,
-          title: row.sourceColumnTitle?.trim() || "Архив",
-          cards: [],
-        };
-        args.displayBoard.columns.push(colView);
-      }
-      seen.add(card.id);
-      colView.cards.push(card);
-      args.cardHomeBoardId.set(card.id, home.id);
-    }
-  }
-}
-
-/**
- * При поиске — карточки из СТОП в колонке «СТОП» (не в колонке, откуда сняли).
- * Иначе в списке / на доске показывается «НА СКАН» вместо статуса стопа.
- */
-function appendStoppedSearchHits(args: {
-  displayBoard: KanbanBoard;
-  homes: KanbanBoard[];
-  cardHomeBoardId: Map<string, string>;
-  textMatches: (card: KanbanCard, home: KanbanBoard) => boolean;
-  passesFilters: (card: KanbanCard, home: KanbanBoard) => boolean;
-  extraKeep?: (card: KanbanCard) => boolean;
-}): void {
-  const seen = new Set(
-    args.displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id)),
-  );
-  const stopTitle = KANBAN_STOP_COLUMN_TITLE;
-  const titleNorm = stopTitle.trim().toLowerCase();
-  for (const home of args.homes) {
-    for (const row of home.stoppedCards || []) {
-      const card = row.card;
-      if (!card || seen.has(card.id)) continue;
-      if (args.extraKeep && !args.extraKeep(card)) continue;
-      if (!args.textMatches(card, home)) continue;
-      if (!args.passesFilters(card, home)) continue;
-      let colView = args.displayBoard.columns.find(
-        (c) => c.title.trim().toLowerCase() === titleNorm,
-      );
-      if (!colView) {
-        colView = {
-          id: `search-stop-${home.id}`,
-          title: stopTitle,
-          cards: [],
-        };
-        args.displayBoard.columns.push(colView);
-      }
-      seen.add(card.id);
-      colView.cards.push(card);
-      args.cardHomeBoardId.set(card.id, home.id);
-    }
-  }
-}
-
 /** «МОИ» / «Ответственный»: люди на карточке; sticky только пока активен поиск. */
 export function kanbanAggregateKeepsCard(
   card: KanbanCard,
@@ -2334,35 +2250,7 @@ export function buildKanbanDisplayView(
         }
       }
     }
-    if (q) {
-      appendArchivedSearchHits({
-        displayBoard,
-        homes: sources,
-        cardHomeBoardId,
-        textMatches,
-        passesFilters: passesFiltersWithoutSearchText,
-        extraKeep: (card) =>
-          kanbanAggregateKeepsCard(card, uid, agg, {
-            searchActive: Boolean(q),
-            stickyOrderIds: stickyLinkedOrderIds,
-            memberHeads,
-          }),
-      });
-      appendStoppedSearchHits({
-        displayBoard,
-        homes: sources,
-        cardHomeBoardId,
-        textMatches,
-        passesFilters: passesFiltersWithoutSearchText,
-        extraKeep: (card) =>
-          kanbanAggregateKeepsCard(card, uid, agg, {
-            searchActive: Boolean(q),
-            stickyOrderIds: stickyLinkedOrderIds,
-            memberHeads,
-          }),
-      });
-      /* Пустые колонки шаблона оставляем: иначе fit-zoom раздувает 1–2 столбца. */
-    }
+    /* Архив/СТОП — только в своих панелях, не в колонках при поиске. */
     return { displayBoard, cardHomeBoardId };
   }
 
@@ -2427,22 +2315,7 @@ export function buildKanbanDisplayView(
     }
     colView.cards = acc;
   }
-  if (q) {
-    appendArchivedSearchHits({
-      displayBoard,
-      homes,
-      cardHomeBoardId,
-      textMatches,
-      passesFilters: passesFiltersWithoutSearchText,
-    });
-    appendStoppedSearchHits({
-      displayBoard,
-      homes,
-      cardHomeBoardId,
-      textMatches,
-      passesFilters: passesFiltersWithoutSearchText,
-    });
-  }
+  /* Архив/СТОП — только в своих панелях, не в колонках при поиске. */
   /* Свои колонки — всегда (скелет доски). Чужие заголовки — только если есть попадание. */
   const nativeTitles = new Set(
     active.columns.map((c) => c.title.trim().toLowerCase()),
@@ -2562,6 +2435,38 @@ export function dedupeLinkedOrderCardsOnBoard(board: KanbanBoard): void {
       next.push(c);
     }
     col.cards = next;
+  }
+}
+
+/**
+ * Убрать из колонок linked-карточки, которые уже в архиве или СТОП на этой доске.
+ * Иначе после дельта-плиток / поиска «призраки» снова видны на доске и в фильтре.
+ */
+export function stripParkedLinkedOrdersFromColumns(board: KanbanBoard): void {
+  const parked = new Set<string>();
+  for (const row of board.archivedCards || []) {
+    const oid = String(row.card?.linkedOrderId || "").trim();
+    if (oid) parked.add(oid);
+  }
+  for (const row of board.stoppedCards || []) {
+    const oid = String(row.card?.linkedOrderId || "").trim();
+    if (oid) parked.add(oid);
+  }
+  if (!parked.size) return;
+  for (const col of board.columns) {
+    col.cards = col.cards.filter((c) => {
+      const oid = String(c.linkedOrderId || "").trim();
+      return !oid || !parked.has(oid);
+    });
+  }
+}
+
+export function stripParkedLinkedOrdersFromAppState(
+  state: KanbanAppState,
+): void {
+  for (const board of state.boards || []) {
+    if (isKanbanAggregateBoardId(board.id)) continue;
+    stripParkedLinkedOrdersFromColumns(board);
   }
 }
 
@@ -3178,7 +3083,10 @@ export function mergeKaitenLinkedOrdersIntoAppState(
       reuseFromOtherBoard?.board.id,
     );
     if (!targetBoard || !targetBoard.columns.length) continue;
-    if (isLinkedOrderArchivedOnBoard(targetBoard, row.id)) continue;
+    if (isLinkedOrderArchivedOnBoard(targetBoard, row.id)) {
+      removeLinkedOrderCardFromBoard(targetBoard, row.id);
+      continue;
+    }
     if (isLinkedOrderStoppedOnBoard(targetBoard, row.id)) {
       if (
         isKanbanStopColumnTitle(row.kaitenColumnTitle) ||
@@ -3342,6 +3250,7 @@ export function mergeKaitenLinkedOrdersIntoAppState(
   for (const b of next.boards) {
     sortMirrorLinkedCardsInBoard(b);
     dedupeLinkedOrderCardsOnBoard(b);
+    stripParkedLinkedOrdersFromColumns(b);
   }
   return next;
 }

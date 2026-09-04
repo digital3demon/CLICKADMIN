@@ -82,6 +82,17 @@ html[data-ui="classic"] {
   --border-strong: #9aa3b2;
   --scrollbar-thumb: color-mix(in srgb, var(--text-muted) 38%, var(--app-bg));
   --scrollbar-thumb-hover: color-mix(in srgb, var(--text-muted) 52%, var(--app-bg));
+  /*
+   * Fluid type/spacing (поколение 2). rem + vw — зум браузера жив (WCAG 1.4.4).
+   * Потолок ≤ 2.5× пола. Не подменять sm/md/lg; Harmony/classic не унифицировать.
+   */
+  --step-0: clamp(0.875rem, 0.84rem + 0.18vw, 1rem);
+  --step-1: clamp(1rem, 0.94rem + 0.3vw, 1.125rem);
+  --step-2: clamp(1.125rem, 1.02rem + 0.5vw, 1.5rem);
+  --space-1: clamp(0.25rem, 0.22rem + 0.15vw, 0.375rem);
+  --space-2: clamp(0.5rem, 0.44rem + 0.3vw, 0.75rem);
+  --space-3: clamp(0.75rem, 0.66rem + 0.45vw, 1.125rem);
+  --space-4: clamp(1rem, 0.88rem + 0.6vw, 1.5rem);
 }
 
 /*
@@ -257,22 +268,11 @@ html {
   text-size-adjust: 100%;
   overflow-x: clip;
   /*
-   * Базовый размер как при ~110% зуме браузера: отступы/типографика в rem чуть крупнее,
-   * ширины в % и vw не меняются (без «разъезда» как у zoom на корне).
+   * Fluid root: 82.5% (~13.2px) при 320px → 110% (~17.6px) при ≥1024px.
+   * Было: жёсткий скачок 110% / 82.5% на пороге shell-laptop — CRM «меняла лицо».
+   * rem + vw: зум и user font-size работают (WCAG 1.4.4). Потолок/пол = 1.33×.
    */
-  font-size: 110%;
-}
-
-/*
- * Мобильный shell (≤1023px и низкие landscape-экраны): масштаб как у канбана —
- * браузерный зум ~75% при базовых 110% → 82.5%. Раньше 82.5% было только
- * при :has(.kanban-root), из‑за чего заказы/сайдбар «прыгали» относительно канбана.
- * Десктопный shell остаётся на 110%.
- */
-@media (max-width: 1023px), ((min-width: 1024px) and (max-height: 559px)) {
-  html {
-    font-size: 82.5%;
-  }
+  font-size: clamp(0.825rem, 0.7rem + 0.625vw, 1.1rem);
 }
 
 /*
@@ -292,12 +292,16 @@ html {
 
   .kanban-columns-fit {
     display: grid;
-    grid-template-columns: repeat(var(--kanban-col-count, 1), minmax(0, 1fr));
+    /* minmax(0) давил колонки при 125–150% zoom → «ПОСТОЯН…»; порог — скролл. */
+    grid-template-columns: repeat(
+      var(--kanban-col-count, 1),
+      minmax(var(--kanban-col-min, 200px), 1fr)
+    );
     align-items: stretch;
     align-self: stretch;
-    width: auto;
-    min-width: 0;
-    flex: 1 1 0%;
+    width: max-content;
+    min-width: 100%;
+    flex: 1 1 auto;
     height: 100%;
     min-height: 0;
   }
@@ -334,11 +338,26 @@ body {
  */
 /* Отступ под fixed-кнопку меню: вне shell-laptop (<1024px или низкая высота). */
 @media (max-width: 1023px), ((min-width: 1024px) and (max-height: 559px)) {
-  .module-frame-title-h1-wrap {
+  .module-frame-title-h1-wrap,
+  .crm-mobile-menu-pad {
     padding-inline-start: max(
       3.5rem,
       calc(env(safe-area-inset-left, 0px) + 2.75rem + 0.5rem)
     );
+  }
+}
+
+/* Модалки: живой viewport, не 90vh (chrome iOS). */
+.crm-modal-max-h {
+  max-height: min(90dvh, 920px);
+}
+
+/* iOS: меньше 16px на input — браузер зумит страницу при фокусе. */
+@media (max-width: 1023px), ((min-width: 1024px) and (max-height: 559px)) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
+  select,
+  textarea {
+    font-size: max(1rem, 16px);
   }
 }
 

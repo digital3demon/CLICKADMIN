@@ -16,6 +16,7 @@ import {
   type ListSortKey,
 } from "@/lib/kanban/list-view-sort";
 import { getKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import { SHELL_LAPTOP_MEDIA } from "@/lib/crm-layout-tiers";
 import {
   kanbanCardHoverPreviewBlockReason,
   kanbanCardHoverPreviewBody,
@@ -775,8 +776,8 @@ export function KanbanListView({
   const [mobileListScroll, setMobileListScroll] = useState(false);
   const mobileListRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    const sync = () => setMobileListScroll(mq.matches);
+    const mq = window.matchMedia(SHELL_LAPTOP_MEDIA);
+    const sync = () => setMobileListScroll(!mq.matches);
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
@@ -798,6 +799,20 @@ export function KanbanListView({
     },
     [rows.length, listRowPx],
   );
+  const listScrollElRef = useRef<HTMLDivElement | null>(null);
+  const setListScrollEl = useCallback(
+    (el: HTMLDivElement | null) => {
+      listScrollElRef.current = el;
+      if (mobileListScroll) {
+        mobileListRef.current = el;
+      }
+    },
+    [mobileListScroll],
+  );
+  useEffect(() => {
+    if (mobileListScroll) return;
+    onListScroll(listScrollElRef.current);
+  }, [mobileListScroll, onListScroll, rows.length]);
   const updateMobileListRange = useCallback(() => {
     const el = mobileListRef.current;
     if (!el) return;
@@ -861,13 +876,7 @@ export function KanbanListView({
       <div className="flex w-full min-h-0 max-w-full flex-1 flex-col max-sm:flex-none">
         <div
           className="min-h-0 flex-1 overflow-y-auto max-sm:overflow-visible max-sm:flex-none"
-          ref={(el) => {
-            if (mobileListScroll) {
-              mobileListRef.current = el;
-            } else {
-              onListScroll(el);
-            }
-          }}
+          ref={setListScrollEl}
           onScroll={
             mobileListScroll
               ? undefined

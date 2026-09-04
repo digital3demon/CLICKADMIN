@@ -239,7 +239,7 @@ export function OrderProstheticsBlock({
                 key={`${idPrefix}-c-${i}`}
                 className={rowCardClass}
               >
-                <label className="min-w-[160px] flex-1">
+                <label className="min-w-0 flex-1">
                   <span className={rowLabelClass}>
                     Что
                   </span>
@@ -332,7 +332,7 @@ export function OrderProstheticsBlock({
                   key={`${idPrefix}-o-${i}`}
                   className={rowCardClass}
                 >
-                  <div className="min-w-[140px] flex-1">
+                  <div className="min-w-0 flex-1">
                     <span
                       className={rowLabelClass}
                       id={`${idPrefix}-wh-lbl-${i}`}
@@ -351,7 +351,7 @@ export function OrderProstheticsBlock({
                       />
                     </div>
                   </div>
-                  <div className="min-w-[200px] flex-[2]">
+                  <div className="min-w-0 flex-[2] basis-full sm:basis-auto">
                     <span
                       className={rowLabelClass}
                       id={`${idPrefix}-pos-lbl-${i}`}

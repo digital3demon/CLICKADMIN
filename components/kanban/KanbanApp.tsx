@@ -47,6 +47,7 @@ import {
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
   mergeKanbanStatePreservingLocalBoards,
+  stripParkedLinkedOrdersFromAppState,
   withActiveBoard,
 } from "@/lib/kanban/model";
 import { applyOptimisticKaitenBlocksToLinkedRows } from "@/lib/kanban/optimistic-kaiten-block";
@@ -93,6 +94,7 @@ import {
   persistKanbanLinkedCardTimer,
   commitKanbanColumnFromKaitenRefresh,
   rememberCrmKanbanColumnLocal,
+  rememberCrmKanbanTrackLaneLocal,
   crmColumnPersistFromLinkedMove,
   persistMissingCrmPeopleFromState,
   persistMissingCrmStageDuesFromState,
@@ -459,6 +461,8 @@ export function KanbanApp({
   const boardTilesBoardRef = useRef("");
   const boardTilesInFlightRef = useRef(false);
   const boardTilesQueuedFullRef = useRef(false);
+  /** Смена дорожки уже пропатчила кэш — полный board-tiles сразу убивает UI и откатывает карточку. */
+  const skipNextBoardTilesFullRef = useRef(false);
   const tenantKanbanReadAtRef = useRef(0);
   const lastTenantKanbanRef = useRef<KanbanAppState | null>(null);
   /** F5: не писать default в tenant, пока GET не подтвердил живой снимок. */
@@ -468,6 +472,8 @@ export function KanbanApp({
   /** Backfill пишет kanban state на сервере — не перезаписывать устаревшим локальным автосохранением. */
   const kanbanPersistPausedRef = useRef(false);
   const childChecklistExpandInFlightRef = useRef<Set<string>>(new Set());
+  /** Уже пробовали expand для ключа cardId+zip — иначе пустой ZIP крутит setAppState → React #185. */
+  const childChecklistExpandDoneRef = useRef<Set<string>>(new Set());
   const archiveSettingsReadyRef = useRef(false);
   const lastArchiveSettingsSigRef = useRef("");
   const [cardTypeLanesReady, setCardTypeLanesReady] = useState(false);
@@ -532,6 +538,8 @@ export function KanbanApp({
           }
           return next;
         });
+        let mergedForPersist: ReturnType<typeof applyCrmBoardTilesToAppState> | null =
+          null;
         setAppState((prev) => {
           if (!prev) return prev;
           const replaceBoardId =
@@ -543,15 +551,22 @@ export function KanbanApp({
           const next = applyCrmBoardTilesToAppState(prev, tiles, {
             replaceBoardId,
             pruneMemberUserId,
+            confirmPendingMoves: true,
           });
           applyKanbanCardHeadsCache(next, loadKanbanCardHeadsCache());
-          persistMissingCrmStageDuesFromState(next, tiles);
-          persistMissingCrmPeopleFromState(next, tiles);
-          persistMissingCrmTimersFromState(next, tiles);
-          persistMissingCrmChecklistsFromState(next, tiles);
-          saveKanbanState(next, false);
+          mergedForPersist = next;
           return next;
         });
+        if (mergedForPersist) {
+          const snapshot = mergedForPersist;
+          queueMicrotask(() => {
+            persistMissingCrmStageDuesFromState(snapshot, tiles);
+            persistMissingCrmPeopleFromState(snapshot, tiles);
+            persistMissingCrmTimersFromState(snapshot, tiles);
+            persistMissingCrmChecklistsFromState(snapshot, tiles);
+            saveKanbanState(snapshot, false);
+          });
+        }
       } catch {
         /* offline */
       } finally {
@@ -878,6 +893,7 @@ export function KanbanApp({
         }
         const c = kanbanCardIdFromSearchParams(params);
         const pending = listPendingKanbanColumnMoves();
+        stripParkedLinkedOrdersFromAppState(next);
         setAppState(applyPendingKanbanColumnMoves(next, pending));
         if (c) setCardModalId(c);
 
@@ -1251,7 +1267,14 @@ export function KanbanApp({
           return next;
         });
       }
-      void syncCrmBoardTiles({ full: true });
+      if (skipNextBoardTilesFullRef.current) {
+        skipNextBoardTilesFullRef.current = false;
+        window.setTimeout(() => {
+          void syncCrmBoardTiles({ full: false });
+        }, 2500);
+      } else {
+        void syncCrmBoardTiles({ full: true });
+      }
     }
   }, [appState?.activeBoardId, appState, isDemo, syncCrmBoardTiles]);
 
@@ -1947,6 +1970,7 @@ export function KanbanApp({
             orderId: string;
             columnTitle: string;
             sortOrder?: number;
+            trackLane?: string;
           }
         | undefined;
       let moveFromTitle = "";
@@ -1998,6 +2022,11 @@ export function KanbanApp({
           ...(crmPersistFollowUp.sortOrder != null
             ? { sortOrder: crmPersistFollowUp.sortOrder }
             : {}),
+          ...(crmPersistFollowUp.trackLane
+            ? { trackLane: crmPersistFollowUp.trackLane }
+            : kaitenFollowUp?.kaitenTrackLane
+              ? { trackLane: kaitenFollowUp.kaitenTrackLane }
+              : {}),
         });
       }
       if (!isDemo && kaitenFollowUp) {
@@ -2467,6 +2496,29 @@ export function KanbanApp({
     setMoveTargetBoardId("");
     setCardModalId(id);
     showToast(`Карточка «${titleSnapshot}» перенесена`);
+    if (!isDemo && linkedOrderId && (targetLane || targetColTitle)) {
+      if (targetLane === "ORTHOPEDICS" || targetLane === "ORTHODONTICS") {
+        skipNextBoardTilesFullRef.current = true;
+        rememberCrmKanbanTrackLaneLocal({
+          cardId: id || linkedOrderId,
+          orderId: linkedOrderId,
+          trackLane: targetLane,
+        });
+      }
+      persistCrmBoardFieldsClient({
+        orderId: linkedOrderId,
+        columnTitle: targetColTitle || undefined,
+        sortOrder: 1,
+        trackLane: targetLane ?? undefined,
+      });
+      if (targetColTitle) {
+        rememberCrmKanbanColumnLocal({
+          cardId: linkedOrderId,
+          orderId: linkedOrderId,
+          columnTitle: targetColTitle,
+        });
+      }
+    }
     if (
       !isDemo &&
       linkedOrderId &&
@@ -2918,21 +2970,39 @@ export function KanbanApp({
         return isDemo ? normalizeDemoKanbanAppState(next) : next;
       });
       if (!moved) return;
-      if (
-        !isDemo &&
-        cardSnapshot.linkedOrderId &&
-        typeof cardSnapshot.kaitenCardId === "number" &&
-        Number.isFinite(cardSnapshot.kaitenCardId)
-      ) {
-        const kaitenTrackLane: KaitenTrackLane =
-          lane === "ORTHODONTICS" ? "ORTHODONTICS" : "ORTHOPEDICS";
-        void syncKaitenMirrorAfterKanbanMove({
+      const kaitenTrackLane: KaitenTrackLane =
+        lane === "ORTHODONTICS" ? "ORTHODONTICS" : "ORTHOPEDICS";
+      if (!isDemo && cardSnapshot.linkedOrderId) {
+        skipNextBoardTilesFullRef.current = true;
+        rememberCrmKanbanTrackLaneLocal({
+          cardId: cardSnapshot.id || cardSnapshot.linkedOrderId,
           orderId: cardSnapshot.linkedOrderId,
-          kaitenCardId: cardSnapshot.kaitenCardId,
-          columnTitle: moved.columnTitle,
-          kaitenTrackLane,
-          sortOrder: moved.sortOrder,
+          trackLane: kaitenTrackLane,
         });
+        rememberCrmKanbanColumnLocal({
+          cardId: cardSnapshot.linkedOrderId,
+          orderId: cardSnapshot.linkedOrderId,
+          columnTitle: moved.columnTitle,
+        });
+        const hasKaiten =
+          typeof cardSnapshot.kaitenCardId === "number" &&
+          Number.isFinite(cardSnapshot.kaitenCardId);
+        if (!hasKaiten) {
+          persistCrmBoardFieldsClient({
+            orderId: cardSnapshot.linkedOrderId,
+            columnTitle: moved.columnTitle,
+            sortOrder: moved.sortOrder,
+            trackLane: kaitenTrackLane,
+          });
+        } else {
+          void syncKaitenMirrorAfterKanbanMove({
+            orderId: cardSnapshot.linkedOrderId,
+            kaitenCardId: cardSnapshot.kaitenCardId as number,
+            columnTitle: moved.columnTitle,
+            kaitenTrackLane,
+            sortOrder: moved.sortOrder,
+          });
+        }
       }
       showToast(
         `Доска: «${lane === "ORTHODONTICS" ? "Ортодонтия" : "Ортопедия"}»`,
@@ -2952,13 +3022,22 @@ export function KanbanApp({
   const enrichProductionChecklistForChild = useCallback(async (boardId: string, childId: string) => {
     const cur = appStateRef.current;
     if (!cur) return;
+    const beforeLoc = findCardInAppState(cur, childId);
+    const beforeSig = JSON.stringify(beforeLoc?.card.productionChecklist || []);
     const next = structuredClone(cur);
     const b = next.boards.find((x) => x.id === boardId);
     if (!b) return;
     await expandProductionChecklistFromArchives(b, childId);
     syncProductionChecklistSnapshotsAcrossBoards(next.boards);
+    const afterLoc = findCardInAppState(next, childId);
+    const afterSig = JSON.stringify(afterLoc?.card.productionChecklist || []);
+    if (beforeSig === afterSig) return;
     setAppState(next);
   }, []);
+
+  useEffect(() => {
+    childChecklistExpandDoneRef.current.clear();
+  }, [cardModalId]);
 
   useEffect(() => {
     if (!cardModalId || !appState) return;
@@ -2966,19 +3045,30 @@ export function KanbanApp({
     if (!loc) return;
     const card = loc.card;
     if (!card.parentCardId) return;
-    const hasZipSource = (card.files || []).some((f) => {
-      const name = String(f.name || "").trim().toLowerCase();
-      const mime = String(f.mime || "").trim().toLowerCase();
-      return name.endsWith(".zip") || mime.includes("zip");
-    });
-    if (!hasZipSource) return;
-    const hasArchiveRows = (card.productionChecklist || []).some((row) => row.fromArchive === true);
-    if (hasArchiveRows) return;
+    const zipIds = (card.files || [])
+      .filter((f) => {
+        const name = String(f.name || "").trim().toLowerCase();
+        const mime = String(f.mime || "").trim().toLowerCase();
+        return name.endsWith(".zip") || mime.includes("zip");
+      })
+      .map((f) => String(f.id || "").trim())
+      .filter(Boolean);
+    if (zipIds.length === 0) return;
+    const hasArchiveRows = (card.productionChecklist || []).some(
+      (row) => row.fromArchive === true,
+    );
+    const attemptKey = `${card.id}:${zipIds.join(",")}`;
+    if (hasArchiveRows) {
+      childChecklistExpandDoneRef.current.add(attemptKey);
+      return;
+    }
+    if (childChecklistExpandDoneRef.current.has(attemptKey)) return;
     const inFlight = childChecklistExpandInFlightRef.current;
-    if (inFlight.has(card.id)) return;
-    inFlight.add(card.id);
+    if (inFlight.has(attemptKey)) return;
+    inFlight.add(attemptKey);
     void enrichProductionChecklistForChild(loc.board.id, card.id).finally(() => {
-      inFlight.delete(card.id);
+      inFlight.delete(attemptKey);
+      childChecklistExpandDoneRef.current.add(attemptKey);
     });
   }, [appState, cardModalId, enrichProductionChecklistForChild]);
 
@@ -3185,7 +3275,7 @@ export function KanbanApp({
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col max-sm:overflow-y-auto max-sm:overscroll-y-contain sm:overflow-hidden">
-          <div className="relative z-20 flex max-w-full shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] px-2 py-1.5 sm:gap-2.5 sm:px-4 sm:py-2.5">
+          <div className="relative z-20 flex max-w-full shrink-0 flex-wrap items-center gap-1.5 overflow-x-auto border-b border-[var(--kanban-border)] bg-[var(--kanban-rail-bg)] py-1.5 pe-2 ps-[var(--app-mobile-menu-inset,0.5rem)] sm:gap-2.5 sm:py-2.5 shell-laptop:overflow-visible shell-laptop:px-4">
             <div
               className="flex shrink-0 items-center gap-1 sm:gap-1.5"
               role="group"

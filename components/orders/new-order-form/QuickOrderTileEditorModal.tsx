@@ -156,7 +156,7 @@ export function QuickOrderTileEditorModal({
           role="dialog"
           aria-modal="true"
           aria-labelledby="qo-tile-editor-title"
-          className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl"
+          className="crm-modal-max-h w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           <h2

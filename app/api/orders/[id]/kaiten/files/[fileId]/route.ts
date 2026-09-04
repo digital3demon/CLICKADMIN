@@ -3,6 +3,8 @@ import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { getKaitenRestAuth, kaitenListComments } from "@/lib/kaiten-rest";
 import { orderTenantIdForSession } from "@/lib/order-tenant-access";
+import { isOrderAttachmentThumbRequest } from "@/lib/order-attachment-thumb";
+import { buildOrderAttachmentThumbJpeg } from "@/lib/order-attachment-thumb.server";
 
 function stringField(o: Record<string, unknown>, keys: readonly string[]): string | null {
   for (const key of keys) {
@@ -38,11 +40,20 @@ function fileMetaFromItem(
   item: unknown,
   fileId: number,
   apiBase: string,
+  preferThumb: boolean,
 ): { url: string; name: string | null } | null {
   if (item == null || typeof item !== "object" || Array.isArray(item)) return null;
   const file = item as Record<string, unknown>;
   if (numberField(file, ["id", "file_id", "attachment_id"]) !== fileId) return null;
-  const rawUrl = stringField(file, ["url", "download_url", "src"]);
+  const rawUrl = preferThumb
+    ? stringField(file, [
+        "thumbnail_url",
+        "preview_url",
+        "url",
+        "download_url",
+        "src",
+      ])
+    : stringField(file, ["url", "download_url", "src"]);
   if (!rawUrl) return null;
   return {
     url: resolveKaitenFileUrl(rawUrl, apiBase),
@@ -54,12 +65,13 @@ function findFileInRecord(
   record: Record<string, unknown>,
   fileId: number,
   apiBase: string,
+  preferThumb: boolean,
 ): { url: string; name: string | null } | null {
   for (const key of ["files", "attachments", "attached_files", "uploads"] as const) {
     const value = record[key];
     if (!Array.isArray(value)) continue;
     for (const item of value) {
-      const hit = fileMetaFromItem(item, fileId, apiBase);
+      const hit = fileMetaFromItem(item, fileId, apiBase, preferThumb);
       if (hit) return hit;
     }
   }
@@ -71,6 +83,7 @@ async function fetchKaitenCardFileUrl(
   token: string,
   cardId: number,
   fileId: number,
+  preferThumb: boolean,
 ): Promise<{ url: string; name: string | null } | null> {
   const cardRes = await fetch(`${apiBase}/cards/${cardId}`, {
     headers: {
@@ -81,7 +94,12 @@ async function fetchKaitenCardFileUrl(
   if (!cardRes.ok) return null;
   const card = (await cardRes.json().catch(() => null)) as unknown;
   if (card == null || typeof card !== "object" || Array.isArray(card)) return null;
-  const fromCard = findFileInRecord(card as Record<string, unknown>, fileId, apiBase);
+  const fromCard = findFileInRecord(
+    card as Record<string, unknown>,
+    fileId,
+    apiBase,
+    preferThumb,
+  );
   if (fromCard) return fromCard;
 
   /* Новые фото часто только во вложениях комментариев, не в card.files. */
@@ -91,14 +109,19 @@ async function fetchKaitenCardFileUrl(
   if (!comments.ok) return null;
   for (const raw of comments.comments) {
     if (raw == null || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const hit = findFileInRecord(raw as Record<string, unknown>, fileId, apiBase);
+    const hit = findFileInRecord(
+      raw as Record<string, unknown>,
+      fileId,
+      apiBase,
+      preferThumb,
+    );
     if (hit) return hit;
   }
   return null;
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; fileId: string }> },
 ) {
   const resolvedParams = await params;
@@ -128,11 +151,16 @@ export async function GET(
     return NextResponse.json({ error: "Карточка Kaiten не найдена" }, { status: 404 });
   }
 
+  const wantThumb = isOrderAttachmentThumbRequest(
+    new URL(request.url).searchParams,
+  );
+
   const file = await fetchKaitenCardFileUrl(
     auth.apiBase,
     auth.token,
     order.kaitenCardId,
     fileId,
+    wantThumb,
   );
   if (!file) {
     return NextResponse.json(
@@ -147,10 +175,45 @@ export async function GET(
       headers: { Authorization: `Bearer ${auth.token}` },
     });
   }
-  if (!res.ok || !res.body) {
+  if (!res.ok) {
     return NextResponse.json(
       { error: "Не удалось загрузить файл Kaiten" },
       { status: res.status || 502 },
+    );
+  }
+
+  if (wantThumb) {
+    const buf = Buffer.from(await res.arrayBuffer());
+    const thumb = await buildOrderAttachmentThumbJpeg(buf);
+    if (thumb) {
+      return new Response(new Uint8Array(thumb), {
+        status: 200,
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Content-Length": String(thumb.length),
+          "Cache-Control": "private, max-age=86400",
+          ...(safeInlineFileName(file.name)
+            ? {
+                "Content-Disposition": `inline; filename="${safeInlineFileName(file.name)}.jpg"`,
+              }
+            : {}),
+        },
+      });
+    }
+    return new Response(new Uint8Array(buf), {
+      status: 200,
+      headers: {
+        "Content-Type": res.headers.get("content-type") ?? "image/jpeg",
+        "Content-Length": String(buf.length),
+        "Cache-Control": "private, max-age=3600",
+      },
+    });
+  }
+
+  if (!res.body) {
+    return NextResponse.json(
+      { error: "Не удалось загрузить файл Kaiten" },
+      { status: 502 },
     );
   }
 

@@ -56,6 +56,8 @@ describe("role-module-bundles", () => {
 describe("defaultModuleAllowed bundles alignment", () => {
   it("USER: KANBAN_WORK без COORDINATE и без ORDERS", () => {
     expect(defaultModuleAllowed("USER", "KANBAN_ATTACH_FILES")).toBe(true);
+    expect(defaultModuleAllowed("USER", "KANBAN_MANAGE_ASSIGNEES")).toBe(true);
+    expect(defaultModuleAllowed("USER", "KANBAN_MANAGE_PARTICIPANTS")).toBe(true);
     expect(defaultModuleAllowed("USER", "KANBAN_DELETE_CARD")).toBe(false);
     expect(defaultModuleAllowed("USER", "ORDERS")).toBe(false);
     expect(defaultModuleAllowed("USER", "ORDERS_NOTIFICATIONS_ADMIN")).toBe(false);
@@ -65,6 +67,17 @@ describe("defaultModuleAllowed bundles alignment", () => {
     expect(defaultModuleAllowed("USER", "ORDERS_NOTIFICATIONS_PROSTHETICS")).toBe(
       false,
     );
+  });
+
+  it("PRODUCTION: ответственные и участники на доске", () => {
+    expect(defaultModuleAllowed("PRODUCTION", "KANBAN_MANAGE_ASSIGNEES")).toBe(true);
+    expect(defaultModuleAllowed("PRODUCTION", "KANBAN_MANAGE_PARTICIPANTS")).toBe(
+      true,
+    );
+    expect(defaultModuleAllowed("SENIOR_PRODUCTION", "KANBAN_MANAGE_ASSIGNEES")).toBe(
+      true,
+    );
+    expect(defaultModuleAllowed("PRODUCTION", "KANBAN_DELETE_CARD")).toBe(false);
   });
 
   it("SENIOR_TECHNICIAN: полный канбан, без заказов и тостов по нарядам", () => {

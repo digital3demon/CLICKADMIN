@@ -13,6 +13,7 @@ import {
   normalizeOrderAttachmentImages,
 } from "@/lib/order-attachment-image-normalize.client";
 import { isOrderAttachmentImageFile } from "@/lib/order-attachment-image-kind";
+import { withOrderAttachmentThumb } from "@/lib/order-attachment-thumb";
 import {
   enqueueOrderAttachmentFiles,
   listQueuedOrderAttachmentFiles,
@@ -101,7 +102,7 @@ function OrderAttachmentThumbButton({
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={href}
+        src={withOrderAttachmentThumb(href)}
         alt=""
         loading="lazy"
         className={`${thumbClass} object-cover`}

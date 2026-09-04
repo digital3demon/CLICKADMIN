@@ -15,6 +15,7 @@ import {
   openOrDownloadCardFile,
   readFileAsCardFile,
 } from "@/lib/kanban/card-files";
+import { withOrderAttachmentThumb } from "@/lib/order-attachment-thumb";
 import {
   deleteOrderAttachmentById,
   fetchKanbanMirrorCommentsForOrder,
@@ -81,6 +82,7 @@ import {
 import {
   persistCrmBoardFieldsClient,
   persistKanbanLinkedCardChecklist,
+  rememberCrmKanbanBlockLocal,
 } from "@/lib/kanban/persist-crm-board-fields-client";
 import {
   KANBAN_CARD_MODAL_STOP_COLUMN_ID,
@@ -122,11 +124,11 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAutosizeTextarea } from "@/lib/use-autosize-textarea";
 import {
-  KANBAN_CARD_MODAL_NARROW_MAX_PX,
   kanbanCardDescriptionAvailableHeight,
   kanbanCardDescriptionForceCollapseOnNarrow,
   kanbanCardDescriptionNeedsCollapse,
 } from "@/lib/kanban/kanban-card-desc-collapse";
+import { SHELL_LAPTOP_MEDIA } from "@/lib/crm-layout-tiers";
 import { createPortal } from "react-dom";
 import { KanbanCardTimerBlock } from "./KanbanCardTimerBlock";
 import { PayrollDonePanel } from "@/components/payroll/PayrollDonePanel";
@@ -806,9 +808,7 @@ export function KanbanCardModal({
       setDescExpanded(true);
       return;
     }
-    const narrow = window.matchMedia(
-      `(max-width: ${KANBAN_CARD_MODAL_NARROW_MAX_PX}px)`,
-    ).matches;
+    const narrow = !window.matchMedia(SHELL_LAPTOP_MEDIA).matches;
     if (kanbanCardDescriptionForceCollapseOnNarrow(narrow, true)) {
       setDescCanCollapse(true);
       setDescExpanded(false);
@@ -820,8 +820,11 @@ export function KanbanCardModal({
       (box ?? measure).getBoundingClientRect().top,
     );
     const needs = kanbanCardDescriptionNeedsCollapse(fullH, available);
-    setDescCanCollapse(needs);
-    setDescExpanded(!needs);
+    setDescCanCollapse((prev) => (prev === needs ? prev : needs));
+    setDescExpanded((prev) => {
+      const next = !needs;
+      return prev === next ? prev : next;
+    });
   }, [descDraft, embed]);
 
   useLayoutEffect(() => {
@@ -1145,6 +1148,13 @@ export function KanbanCardModal({
       blockedAt?: string | null,
       syncKaiten = true,
     ) => {
+      rememberCrmKanbanBlockLocal({
+        cardId: cardId || orderId,
+        orderId,
+        blocked: body.blocked,
+        blockReason: body.blockReason ?? "",
+        blockedAt: blockedAt ?? null,
+      });
       persistCrmBoardFieldsClient({
         orderId,
         blocked: body.blocked,
@@ -1174,7 +1184,7 @@ export function KanbanCardModal({
         );
       });
     },
-    [toast],
+    [cardId, toast],
   );
 
   const handleKanbanBlockToggle = useCallback(() => {
@@ -3474,10 +3484,12 @@ function KanbanAttachmentImg({
   file: CardFile;
   alt: string;
   className?: string;
-  /** В полноэкранном просмотре — светлый текст на чёрном фоне. */
+  /** В полноэкранном просмотре — светлый текст на чёрном фоне; оригинал без ?thumb. */
   variant?: "chat" | "viewer";
 }) {
-  const base = (file.dataUrl || "").trim();
+  const baseRaw = (file.dataUrl || "").trim();
+  const base =
+    variant === "chat" ? withOrderAttachmentThumb(baseRaw) : baseRaw;
   const [src, setSrc] = useState(base);
   const [failed, setFailed] = useState(!base);
   const retryIx = useRef(0);

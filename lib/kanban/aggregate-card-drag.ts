@@ -178,6 +178,7 @@ export function applyAggregateCardDrag(
       }
     | undefined;
 
+  const laneChange = fromHome.id !== toHome.id;
   if (
     sortPreview != null &&
     Number.isFinite(sortPreview) &&
@@ -187,7 +188,6 @@ export function applyAggregateCardDrag(
   ) {
     const cross = drag.fromDisplayColId !== drag.toDisplayColId;
     const toTitle = toCol.title?.trim() ?? "";
-    const laneChange = fromHome.id !== toHome.id;
     kaiten = {
       orderId: card.linkedOrderId,
       kaitenCardId: card.kaitenCardId,
@@ -203,6 +203,9 @@ export function applyAggregateCardDrag(
           linkedOrderId: card.linkedOrderId,
           columnTitle: toCol.title,
           sortOrder: sortPreview,
+          ...(laneChange
+            ? { trackLane: trackLaneForBoardId(toHome.id) }
+            : {}),
         }) ?? undefined
       : undefined;
 

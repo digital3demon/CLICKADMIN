@@ -82,9 +82,11 @@ import { useKanbanCardHoverPreview } from "./KanbanCardHoverPreview";
 import { KanbanTimerIcon } from "./KanbanTimerIcon";
 import type { AggregateCardDragArgs } from "@/lib/kanban/aggregate-card-drag";
 import {
+  KANBAN_COL_MIN_VISUAL_PX,
   SHELL_LAPTOP_MEDIA,
   kanbanBoardDesktopZoom,
   kanbanBoardFitZoom,
+  kanbanBoardNeedsHorizontalScroll,
   setKanbanBoardLiveZoom,
 } from "@/lib/crm-layout-tiers";
 
@@ -151,7 +153,7 @@ const BOARD_COLUMN_WIDTH_FIXED =
  * На ПК (shell-laptop) колонки — равные доли grid, без max-w 270 (9 столбцов иначе вылезают).
  * Mobile / низкое окно — прежние px + скролл.
  */
-const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-auto shell-laptop:min-w-0 shell-laptop:max-w-none shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:self-stretch`;
+const BOARD_COLUMN_WIDTH_CLASS = `${BOARD_COLUMN_WIDTH_FIXED} shrink-0 shell-laptop:!w-auto shell-laptop:min-w-[var(--kanban-col-min,200px)] shell-laptop:max-w-none shell-laptop:h-full shell-laptop:min-h-0 shell-laptop:self-stretch`;
 
 /** На touch-экранах: удержание перед перетаскиванием карточки, чтобы работал горизонтальный скролл. */
 const KANBAN_TOUCH_DRAG_DELAY_MS = 420;
@@ -965,9 +967,10 @@ export function BoardCanvas({
   );
 
   /**
-   * Laptop+: zoom и width/height в px от фактической ширины main,
-   * чтобы 9 колонок (и «Добавить колонку») не срезало overflow-x-clip.
+   * Laptop+: zoom и width/height в px от фактической ширины main.
+   * Если колонки стали бы уже min visual — не клипаем: горизонтальный скролл.
    */
+  const [boardNeedsScroll, setBoardNeedsScroll] = useState(false);
   useLayoutEffect(() => {
     const root = document.querySelector<HTMLElement>(".kanban-root.kanban-board-scale");
     const parent = root?.parentElement;
@@ -976,18 +979,30 @@ export function BoardCanvas({
     const apply = () => {
       if (!window.matchMedia(SHELL_LAPTOP_MEDIA).matches) {
         root.style.removeProperty("--kanban-board-zoom");
+        root.style.removeProperty("--kanban-col-min");
         root.style.removeProperty("width");
         root.style.removeProperty("height");
         root.style.removeProperty("zoom");
         setKanbanBoardLiveZoom(1);
+        setBoardNeedsScroll(false);
         return;
       }
       const extra = aggregateLayoutLocked ? 0 : 40;
+      const needsScroll = kanbanBoardNeedsHorizontalScroll(
+        parent.clientWidth,
+        columnIds.length,
+        extra,
+      );
+      setBoardNeedsScroll(needsScroll);
       const z = kanbanBoardFitZoom(parent.clientWidth, columnIds.length, extra);
       setKanbanBoardLiveZoom(z);
       root.style.setProperty("--kanban-board-zoom", String(z));
+      root.style.setProperty("--kanban-col-min", `${KANBAN_COL_MIN_VISUAL_PX}px`);
       root.style.width = `${parent.clientWidth / z}px`;
-      root.style.height = `${window.innerHeight / z}px`;
+      const cssH =
+        window.visualViewport?.height ??
+        document.documentElement.clientHeight;
+      root.style.height = `${cssH / z}px`;
     };
 
     apply();
@@ -995,9 +1010,12 @@ export function BoardCanvas({
     ro.observe(parent);
     const mq = window.matchMedia(SHELL_LAPTOP_MEDIA);
     mq.addEventListener("change", apply);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", apply);
     return () => {
       ro.disconnect();
       mq.removeEventListener("change", apply);
+      vv?.removeEventListener("resize", apply);
     };
   }, [columnIds.length, aggregateLayoutLocked]);
 
@@ -1597,9 +1615,17 @@ export function BoardCanvas({
     >
       <div
         ref={horizontalScrollRef}
-        className="relative z-0 flex min-h-0 min-w-0 flex-1 items-stretch touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2 shell-laptop:overflow-x-hidden"
+        className={`relative z-0 flex min-h-0 min-w-0 flex-1 items-stretch touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain p-1.5 [-webkit-overflow-scrolling:touch] sm:p-2 ${
+          boardNeedsScroll ? "" : "shell-laptop:overflow-x-hidden"
+        }`}
       >
-        <div className="flex w-max min-w-0 shrink-0 items-start gap-1.5 sm:gap-2 shell-laptop:h-full shell-laptop:w-full shell-laptop:max-w-full shell-laptop:min-w-0 shell-laptop:flex-1 shell-laptop:items-stretch">
+        <div
+          className={`flex w-max min-w-0 shrink-0 items-start gap-1.5 sm:gap-2 ${
+            boardNeedsScroll
+              ? "shell-laptop:h-full shell-laptop:min-w-0 shell-laptop:items-stretch"
+              : "shell-laptop:h-full shell-laptop:w-full shell-laptop:max-w-full shell-laptop:min-w-0 shell-laptop:flex-1 shell-laptop:items-stretch"
+          }`}
+        >
           <SortableContext
             items={columnIds}
             strategy={horizontalListSortingStrategy}
@@ -1751,16 +1777,28 @@ export function BoardCanvas({
             )}
           </SortableContext>
           {!aggregateLayoutLocked ? (
-            <div className={`flex ${BOARD_COLUMN_WIDTH_FIXED} shrink-0 self-start shell-laptop:w-9 shell-laptop:min-w-9 shell-laptop:max-w-9`}>
+            <div className={`flex ${BOARD_COLUMN_WIDTH_FIXED} shrink-0 self-start ${
+              boardNeedsScroll
+                ? ""
+                : "shell-laptop:w-9 shell-laptop:min-w-9 shell-laptop:max-w-9"
+            }`}>
               <button
                 type="button"
-                className="w-full rounded-md border-2 border-dashed border-[var(--kanban-border)] bg-black/[0.05] px-1.5 py-2 text-left text-[0.72rem] leading-snug text-[var(--kanban-text-muted)] hover:text-[var(--kanban-text)] dark:bg-white/[0.04] sm:px-2 sm:py-2 sm:text-[0.75rem] shell-laptop:px-1 shell-laptop:text-center"
+                className={`w-full rounded-md border-2 border-dashed border-[var(--kanban-border)] bg-black/[0.05] px-1.5 py-2 text-left text-[0.72rem] leading-snug text-[var(--kanban-text-muted)] hover:text-[var(--kanban-text)] dark:bg-white/[0.04] sm:px-2 sm:py-2 sm:text-[0.75rem] ${
+                  boardNeedsScroll ? "" : "shell-laptop:px-1 shell-laptop:text-center"
+                }`}
                 onClick={onAddColumn}
                 title="Добавить колонку"
               >
-                <span className="inline-flex items-center gap-1 shell-laptop:justify-center">
+                <span
+                  className={`inline-flex items-center gap-1 ${
+                    boardNeedsScroll ? "" : "shell-laptop:justify-center"
+                  }`}
+                >
                   <IconPlus />
-                  <span className="shell-laptop:hidden">Добавить колонку</span>
+                  <span className={boardNeedsScroll ? "" : "shell-laptop:hidden"}>
+                    Добавить колонку
+                  </span>
                 </span>
               </button>
             </div>

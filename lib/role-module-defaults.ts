@@ -225,13 +225,14 @@ const KANBAN_WORK_MODULES: readonly AppModule[] = [
   "KANBAN_ATTACH_FILES",
   "KANBAN_STOP",
   "KANBAN_MANAGE_BLOCK",
+  /** Обычные пользователи доски: снять себя, назначить других. */
+  "KANBAN_MANAGE_ASSIGNEES",
+  "KANBAN_MANAGE_PARTICIPANTS",
 ];
 
 const KANBAN_COORDINATE_EXTRA: readonly AppModule[] = [
   "KANBAN_EDIT_TITLE",
   "KANBAN_EDIT_DUE_DATE",
-  "KANBAN_MANAGE_ASSIGNEES",
-  "KANBAN_MANAGE_PARTICIPANTS",
   "KANBAN_MOVE_TO_OTHER_BOARD",
   "KANBAN_MANAGE_TIMER",
   "KANBAN_DELETE_CARD",
@@ -275,6 +276,8 @@ export function defaultModuleAllowed(
       module === "KANBAN_ATTACH_FILES" ||
       module === "KANBAN_STOP" ||
       module === "KANBAN_MANAGE_BLOCK" ||
+      module === "KANBAN_MANAGE_ASSIGNEES" ||
+      module === "KANBAN_MANAGE_PARTICIPANTS" ||
       module === "CONFIG_KANBAN_PRODUCTION"
     );
   }

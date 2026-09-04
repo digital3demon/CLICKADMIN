@@ -14,7 +14,7 @@ export default async function HomePage() {
   const actualRole = session?.actualRole ?? session?.role;
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-5 py-10 lg:px-8 lg:py-12">
+    <div className="crm-mobile-menu-pad flex min-h-dvh items-center justify-center px-5 py-10 shell-laptop:px-8 shell-laptop:py-12">
       <div className="flex w-full max-w-5xl flex-col gap-5 lg:max-w-6xl lg:gap-6">
         <section
           aria-label="Приветствие"

@@ -223,7 +223,7 @@ describe("buildKanbanDisplayView · search on board", () => {
     expect(displayBoard.columns[0]!.cards.map((c) => c.id)).toEqual(["shubina"]);
   });
 
-  it("при поиске показывает попадание из архива в колонке, откуда ушла карточка", () => {
+  it("при поиске не подмешивает архив в колонки доски", () => {
     const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
     const shipped = ortho.columns.find((c) => c.title === "Сдана админам")!;
     const archivedCard = createCard({
@@ -261,12 +261,12 @@ describe("buildKanbanDisplayView · search on board", () => {
       sessionUserId: "me",
       sessionUserRole: "ADMIN",
     });
-    const shippedView = displayBoard.columns.find((c) => c.title === "Сдана админам");
-    expect(shippedView?.cards.map((c) => c.id)).toEqual(["arch-079"]);
-    expect(cardHomeBoardId.get("arch-079")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).not.toContain("arch-079");
+    expect(cardHomeBoardId.has("arch-079")).toBe(false);
   });
 
-  it("при поиске показывает попадание из СТОП в колонке СТОП", () => {
+  it("при поиске не подмешивает СТОП в колонки доски", () => {
     const ortho = mirrorBoard(KANBAN_BOARD_ORTHOPEDICS_ID, "Ортопедия");
     const queue = ortho.columns.find((c) => c.title === "К исполнению")!;
     const stoppedCard = createCard({
@@ -302,14 +302,10 @@ describe("buildKanbanDisplayView · search on board", () => {
       sessionUserId: "me",
       sessionUserRole: "ADMIN",
     });
-    const stopView = displayBoard.columns.find((c) => c.title === "СТОП");
-    expect(stopView?.cards.map((c) => c.id)).toEqual(["stop-171"]);
-    expect(
-      displayBoard.columns
-        .find((c) => c.title === "К исполнению")
-        ?.cards.map((c) => c.id),
-    ).not.toContain("stop-171");
-    expect(cardHomeBoardId.get("stop-171")).toBe(KANBAN_BOARD_ORTHOPEDICS_ID);
+    const allIds = displayBoard.columns.flatMap((c) => c.cards.map((x) => x.id));
+    expect(allIds).not.toContain("stop-171");
+    expect(displayBoard.columns.find((c) => c.title === "СТОП")).toBeUndefined();
+    expect(cardHomeBoardId.has("stop-171")).toBe(false);
   });
 });
 

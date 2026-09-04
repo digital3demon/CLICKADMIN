@@ -88,7 +88,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="min-h-screen w-full"
+      className="min-h-dvh w-full"
       data-sidebar-collapsed={collapsed ? "1" : "0"}
       style={
         {
@@ -155,7 +155,7 @@ function AppShellChrome({ children }: { children: ReactNode }) {
         <Sidebar />
         <button
           type="button"
-          className={`absolute left-full top-8 z-[80] h-11 w-3.5 -translate-x-px items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-[2px_1px_6px_rgba(0,0,0,0.18)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] ${
+          className={`absolute left-full top-8 z-[80] flex h-11 min-w-11 w-11 -translate-x-px items-center justify-center rounded-r-md border border-l-0 border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] text-[var(--sidebar-text)] shadow-[2px_1px_6px_rgba(0,0,0,0.18)] hover:bg-[var(--surface-hover)] hover:text-[var(--sidebar-text-strong)] ${
             permanentRail ? "flex" : "hidden shell-laptop:flex"
           }`}
           aria-expanded={!collapsed}
@@ -197,7 +197,7 @@ export function AppShell({ children }: AppShellProps) {
 
   if (isLogin || isTgApp || isPublicSticker || isClickMigPublic) {
     return (
-      <div className="min-h-screen w-full bg-[var(--app-bg)]">{children}</div>
+      <div className="min-h-dvh w-full bg-[var(--app-bg)]">{children}</div>
     );
   }
 

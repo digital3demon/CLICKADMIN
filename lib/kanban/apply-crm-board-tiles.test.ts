@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import { applyCrmBoardTilesToAppState } from "@/lib/kanban/apply-crm-board-tiles";
 import type { CrmBoardTile } from "@/lib/kanban/crm-board-tile";
 import {
@@ -13,6 +13,27 @@ import {
 import { findCardByLinkedOrderId } from "@/lib/kanban/chat-sync";
 import { countLinkedCardsInKanbanState } from "@/lib/kanban/kanban-tenant-chrome";
 import { setKanbanStageDue } from "@/lib/kanban/kanban-stage-due";
+import {
+  clearPendingKanbanColumnMovesForTests,
+  listPendingKanbanColumnMoves,
+  rememberPendingKanbanColumnMove,
+} from "@/lib/kanban/pending-column-moves";
+import {
+  clearPendingKanbanBlocksForTests,
+  listPendingKanbanBlocks,
+  rememberPendingKanbanBlock,
+} from "@/lib/kanban/pending-kanban-blocks";
+import {
+  clearPendingKanbanTrackLanesForTests,
+  listPendingKanbanTrackLanes,
+  rememberPendingKanbanTrackLane,
+} from "@/lib/kanban/pending-track-lane-moves";
+
+afterEach(() => {
+  clearPendingKanbanColumnMovesForTests();
+  clearPendingKanbanBlocksForTests();
+  clearPendingKanbanTrackLanesForTests();
+});
 
 function linkedCountOnBoard(state: ReturnType<typeof defaultAppState>, boardId: string): number {
   const board = state.boards.find((b) => b.id === boardId);
@@ -427,6 +448,81 @@ describe("applyCrmBoardTilesToAppState", () => {
     expect(state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.id).toBe(toCol.id);
   });
 
+  it("кэш-плитка с новой колонкой не снимает pending без confirmPendingMoves", () => {
+    rememberPendingKanbanColumnMove({
+      cardId: "остренкова-карта",
+      orderId: "наряд-остренкова",
+      toColumnTitle: "Производство",
+      at: Date.now(),
+    });
+    let state = defaultAppState();
+    const ortho = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID)!;
+    const approval = ortho.columns.find((c) => c.title === "Согласование")!;
+    approval.cards.push(
+      createCard({
+        id: "остренкова-карта",
+        title: "2608-078 Остренкова",
+        linkedOrderId: "наряд-остренкова",
+      }),
+    );
+    // Как boot из localStorage: кэш уже «Производство», БД ещё «Согласование».
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "наряд-остренкова",
+          columnTitle: "Производство",
+          trackLane: "ORTHOPEDICS",
+          boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+        }),
+      ],
+      { confirmPendingMoves: false },
+    );
+    expect(listPendingKanbanColumnMoves().some((m) => m.orderId === "наряд-остренкова")).toBe(
+      true,
+    );
+    // Свежий серверный ответ всё ещё на Согласовании — pending держит Производство.
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "наряд-остренкова",
+          columnTitle: "Согласование",
+          trackLane: "ORTHOPEDICS",
+          boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+        }),
+      ],
+      { confirmPendingMoves: true },
+    );
+    const loc = findCardByLinkedOrderId(state, "наряд-остренкова");
+    expect(state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.title).toBe(
+      "Производство",
+    );
+    expect(listPendingKanbanColumnMoves().some((m) => m.orderId === "наряд-остренкова")).toBe(
+      true,
+    );
+    // Когда БД догнала — снимаем pending.
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "наряд-остренкова",
+          columnTitle: "Производство",
+          trackLane: "ORTHOPEDICS",
+          boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+        }),
+      ],
+      { confirmPendingMoves: true },
+    );
+    expect(listPendingKanbanColumnMoves().some((m) => m.orderId === "наряд-остренкова")).toBe(
+      false,
+    );
+    const loc2 = findCardByLinkedOrderId(state, "наряд-остренкова");
+    expect(state.boards[loc2!.boardIndex]!.columns[loc2!.columnIndex]!.title).toBe(
+      "Производство",
+    );
+  });
+
   it("таймер с плитки остаётся, локальный не затирается пустой плиткой", () => {
     let state = defaultAppState();
     const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
@@ -521,6 +617,31 @@ describe("applyCrmBoardTilesToAppState", () => {
     );
   });
 
+  it("плитка с новой доской переносит карточку, а не дублирует", () => {
+    let state = defaultAppState();
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "наряд-степанов",
+        title: "2608-200 Степанов",
+        trackLane: "ORTHODONTICS",
+        boardId: KANBAN_BOARD_ORTHODONTICS_ID,
+      }),
+    ]);
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "наряд-степанов",
+        title: "2608-200 Степанов",
+        trackLane: "ORTHOPEDICS",
+        boardId: KANBAN_BOARD_ORTHOPEDICS_ID,
+      }),
+    ]);
+    expect(findCardByLinkedOrderId(state, "наряд-степанов")?.boardIndex).toBe(
+      state.boards.findIndex((b) => b.id === KANBAN_BOARD_ORTHOPEDICS_ID),
+    );
+    expect(linkedCountOnBoard(state, KANBAN_BOARD_ORTHODONTICS_ID)).toBe(0);
+    expect(linkedCountOnBoard(state, KANBAN_BOARD_ORTHOPEDICS_ID)).toBe(1);
+  });
+
   it("плитка несёт снимок снятого таймера (кириллица в oid)", () => {
     let state = defaultAppState();
     state = applyCrmBoardTilesToAppState(state, [
@@ -582,5 +703,163 @@ describe("applyCrmBoardTilesToAppState", () => {
       state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
     expect(card.blocked).toBe(true);
     expect(card.blockReason).toBe("Не те данные от Анискиной");
+  });
+
+  it("pending-разблокировка не возвращает стоп со старой плитки", () => {
+    rememberPendingKanbanBlock({
+      cardId: "карта-анискина",
+      orderId: "наряд-анискина",
+      blocked: false,
+      blockReason: "",
+      blockedAt: null,
+    });
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    odon.columns[0]!.cards.push(
+      createCard({
+        id: "карта-анискина",
+        title: "стоп снят",
+        linkedOrderId: "наряд-анискина",
+        blocked: false,
+        blockReason: "",
+      }),
+    );
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "наряд-анискина",
+        blocked: true,
+        blockReason: "Не те данные от Анискиной",
+      }),
+    ]);
+    const loc = findCardByLinkedOrderId(state, "наряд-анискина");
+    const card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.blocked).toBe(false);
+    expect(card.blockReason).toBe("");
+    expect(listPendingKanbanBlocks()).toHaveLength(1);
+  });
+
+  it("серверная плитка с тем же снятием стопа чистит pending", () => {
+    rememberPendingKanbanBlock({
+      cardId: "карта-анискина",
+      orderId: "наряд-анискина",
+      blocked: false,
+      blockReason: "",
+      blockedAt: null,
+    });
+    let state = defaultAppState();
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "наряд-анискина",
+          blocked: false,
+          blockReason: "",
+        }),
+      ],
+      { confirmPendingMoves: true },
+    );
+    const loc = findCardByLinkedOrderId(state, "наряд-анискина");
+    const card =
+      state.boards[loc!.boardIndex]!.columns[loc!.columnIndex]!.cards[loc!.cardIndex]!;
+    expect(card.blocked).toBe(false);
+    expect(listPendingKanbanBlocks()).toHaveLength(0);
+  });
+
+  it("плитка не возвращает архивную карточку в колонку и снимает призрак", () => {
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    const ghost = createCard({
+      id: "ghost-arch",
+      title: "уже в архиве",
+      linkedOrderId: "наряд-архив-призрак",
+    });
+    odon.columns[0]!.cards.push(ghost);
+    odon.archivedCards = [
+      {
+        id: "arch-row",
+        card: structuredClone(ghost),
+        archivedAt: "2026-09-01T00:00:00.000Z",
+        deleteAfterAt: "2027-09-01T00:00:00.000Z",
+        sourceColumnId: odon.columns[0]!.id,
+        sourceColumnTitle: odon.columns[0]!.title,
+        reason: "auto",
+      },
+    ];
+    state = applyCrmBoardTilesToAppState(state, [
+      tile({
+        orderId: "наряд-архив-призрак",
+        title: "уже в архиве",
+        columnTitle: odon.columns[0]!.title,
+      }),
+    ]);
+    const board = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    expect(
+      board.columns.flatMap((c) => c.cards).some(
+        (c) => c.linkedOrderId === "наряд-архив-призрак",
+      ),
+    ).toBe(false);
+    expect(board.archivedCards).toHaveLength(1);
+  });
+
+  it("pending-дорожка не даёт replaceBoardId вычистить карточку с новой доски", () => {
+    rememberPendingKanbanTrackLane({
+      cardId: "карта-степанов",
+      orderId: "наряд-степанов",
+      trackLane: "ORTHODONTICS",
+    });
+    let state = defaultAppState();
+    const odon = state.boards.find((b) => b.id === KANBAN_BOARD_ORTHODONTICS_ID)!;
+    odon.columns[0]!.cards.push(
+      createCard({
+        id: "карта-степанов",
+        title: "2608-100 Степанов",
+        linkedOrderId: "наряд-степанов",
+        trackLane: "ORTHODONTICS",
+      }),
+    );
+    state.activeBoardId = KANBAN_BOARD_ORTHODONTICS_ID;
+    /* Полный снимок ортодонтии ещё без этой плитки (БД лагает). */
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "чужой-наряд",
+          title: "другой",
+          boardId: KANBAN_BOARD_ORTHODONTICS_ID,
+          trackLane: "ORTHODONTICS",
+        }),
+      ],
+      { replaceBoardId: KANBAN_BOARD_ORTHODONTICS_ID, confirmPendingMoves: true },
+    );
+    const loc = findCardByLinkedOrderId(state, "наряд-степанов");
+    expect(loc).not.toBeNull();
+    expect(state.boards[loc!.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(listPendingKanbanTrackLanes()).toHaveLength(1);
+  });
+
+  it("плитка с новой дорожкой подтверждает pending-track-lane", () => {
+    rememberPendingKanbanTrackLane({
+      cardId: "карта-степанов",
+      orderId: "наряд-степанов",
+      trackLane: "ORTHODONTICS",
+    });
+    let state = defaultAppState();
+    state = applyCrmBoardTilesToAppState(
+      state,
+      [
+        tile({
+          orderId: "наряд-степанов",
+          title: "2608-100 Степанов",
+          boardId: KANBAN_BOARD_ORTHODONTICS_ID,
+          trackLane: "ORTHODONTICS",
+        }),
+      ],
+      { confirmPendingMoves: true },
+    );
+    const loc = findCardByLinkedOrderId(state, "наряд-степанов");
+    expect(loc).not.toBeNull();
+    expect(state.boards[loc!.boardIndex]!.id).toBe(KANBAN_BOARD_ORTHODONTICS_ID);
+    expect(listPendingKanbanTrackLanes()).toHaveLength(0);
   });
 });

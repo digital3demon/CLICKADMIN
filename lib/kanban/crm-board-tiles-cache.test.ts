@@ -11,6 +11,8 @@ import {
   mergeCrmBoardTilesCache,
   patchCrmBoardTilesCacheColumn,
   patchCrmBoardTilesCacheTimer,
+  patchCrmBoardTilesCacheTrackLane,
+  patchCrmBoardTilesCacheBlock,
   saveCrmBoardTilesCache,
 } from "@/lib/kanban/crm-board-tiles-cache";
 
@@ -89,6 +91,19 @@ describe("crm-board-tiles-cache", () => {
     ).toBe("Согласование Жеребцов");
   });
 
+  it("патч дорожки перекладывает плитку на другую доску (кириллица в oid)", () => {
+    saveCrmBoardTilesCache("kanban_board_orthodontics", [
+      { ...tile, orderId: "наряд-степанов", trackLane: "ORTHODONTICS" },
+    ]);
+    patchCrmBoardTilesCacheTrackLane("наряд-степанов", "ORTHOPEDICS");
+    expect(loadCrmBoardTilesCache("kanban_board_orthodontics")).toEqual([]);
+    const dest = loadCrmBoardTilesCache("kanban_board_orthopedics");
+    expect(dest).toHaveLength(1);
+    expect(dest[0]?.orderId).toBe("наряд-степанов");
+    expect(dest[0]?.trackLane).toBe("ORTHOPEDICS");
+    expect(dest[0]?.boardId).toBe("kanban_board_orthopedics");
+  });
+
   it("патч таймера в кэше плиток (кириллица в oid)", () => {
     saveCrmBoardTilesCache("kanban_board_orthodontics", [
       { ...tile, orderId: "наряд-остренкова", timerStartedAt: "2026-08-31T10:00:00.000Z" },
@@ -104,6 +119,24 @@ describe("crm-board-tiles-cache", () => {
     const cached = loadCrmBoardTilesCache("kanban_board_orthodontics")[0];
     expect(cached?.timerStartedAt).toBeNull();
     expect(cached?.timerParkedRemainingMs).toBe(600_000);
+  });
+
+  it("патч блокировки в кэше плиток (кириллица в oid)", () => {
+    saveCrmBoardTilesCache("kanban_board_orthodontics", [
+      {
+        ...tile,
+        orderId: "наряд-анискина",
+        blocked: true,
+        blockReason: "Не те данные от Анискиной",
+      },
+    ]);
+    patchCrmBoardTilesCacheBlock("наряд-анискина", {
+      blocked: false,
+      blockReason: "",
+    });
+    const cached = loadCrmBoardTilesCache("kanban_board_orthodontics")[0];
+    expect(cached?.blocked).toBe(false);
+    expect(cached?.blockReason).toBe("");
   });
 
   it("appointment snaps для Актуального с первого кадра", () => {

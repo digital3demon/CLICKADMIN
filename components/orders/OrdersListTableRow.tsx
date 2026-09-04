@@ -37,9 +37,9 @@ function getNarrowSnapshot() {
   return !window.matchMedia(SHELL_LAPTOP_MEDIA).matches;
 }
 
-/** SSR: desktop-строка; после гидрации — одна ветка по viewport. */
+/** SSR mobile-first: на телефоне нет вспышки десктоп-таблицы. */
 function getNarrowServerSnapshot() {
-  return false;
+  return true;
 }
 
 /**

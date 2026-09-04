@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createCard,
   dedupeLinkedOrderCardsOnBoard,
+  stripParkedLinkedOrdersFromColumns,
   type KanbanBoard,
   type KanbanColumn,
 } from "@/lib/kanban/model";
@@ -55,5 +56,61 @@ describe("dedupeLinkedOrderCardsOnBoard", () => {
     dedupeLinkedOrderCardsOnBoard(board);
     const all = board.columns.flatMap((c) => c.cards);
     expect(all.map((c) => c.id)).toEqual(["c1", "c4"]);
+  });
+});
+
+describe("stripParkedLinkedOrdersFromColumns", () => {
+  it("убирает призрак архива из колонки (кириллица в oid)", () => {
+    const board = boardWithCards([
+      {
+        id: "col-a",
+        cards: [
+          { id: "ghost", linkedOrderId: "наряд-архив" },
+          { id: "live", linkedOrderId: "наряд-живой" },
+        ],
+      },
+    ]);
+    board.archivedCards = [
+      {
+        id: "arch-row",
+        card: createCard({
+          id: "ghost",
+          title: "архив",
+          linkedOrderId: "наряд-архив",
+        }),
+        archivedAt: "2026-09-01T00:00:00.000Z",
+        deleteAfterAt: "2027-09-01T00:00:00.000Z",
+        sourceColumnId: "col-a",
+        sourceColumnTitle: "col-a",
+        reason: "auto",
+      },
+    ];
+    stripParkedLinkedOrdersFromColumns(board);
+    expect(board.columns[0]!.cards.map((c) => c.id)).toEqual(["live"]);
+    expect(board.archivedCards).toHaveLength(1);
+  });
+
+  it("убирает призрак СТОП из колонки", () => {
+    const board = boardWithCards([
+      {
+        id: "col-a",
+        cards: [{ id: "ghost-stop", linkedOrderId: "наряд-стоп" }],
+      },
+    ]);
+    board.stoppedCards = [
+      {
+        id: "stop-row",
+        card: createCard({
+          id: "ghost-stop",
+          title: "стоп",
+          linkedOrderId: "наряд-стоп",
+        }),
+        stoppedAt: "2026-09-01T00:00:00.000Z",
+        sourceColumnId: "col-a",
+        sourceColumnTitle: "col-a",
+      },
+    ];
+    stripParkedLinkedOrdersFromColumns(board);
+    expect(board.columns[0]!.cards).toHaveLength(0);
   });
 });
