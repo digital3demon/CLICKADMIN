@@ -302,6 +302,11 @@ export type KanbanBoard = {
   automations?: KanbanAutomationRule[];
   /** Колонка остановки таймера по умолчанию (конфигурация канбана). */
   defaultTimerStopColumnId?: string | null;
+  /**
+   * Столбец новых карточек из модалки канбана при создании наряда.
+   * Пусто — «К исполнению». СТОП сюда не задаём (только вручную в форме).
+   */
+  defaultNewCardColumnTitle?: string | null;
   /** Автоархивация: выбор колонки и таймаут до архива. */
   autoArchiveRules?: KanbanAutoArchiveRule[];
   /** Сколько дней хранить карточки в архиве до удаления (в UI задаётся в годах, 1 г. = 365 дн.). */

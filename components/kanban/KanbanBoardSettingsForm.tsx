@@ -2,7 +2,12 @@
 
 import type { KanbanBoard } from "@/lib/kanban/types";
 import { defaultTrackLaneForCardTypeName } from "@/lib/kanban/card-type-default-lane";
-import { generateId, trackLanes } from "@/lib/kanban/model";
+import { isKanbanStopColumnTitle } from "@/lib/kanban/kanban-stop-column";
+import {
+  generateId,
+  KAITEN_MIRROR_DEFAULT_QUEUE_TITLE,
+  trackLanes,
+} from "@/lib/kanban/model";
 import { memo } from "react";
 import { IconTrash } from "./kanban-icons";
 
@@ -164,6 +169,42 @@ function KanbanBoardSettingsFormImpl({
             Нет доступа к редактированию типов карточек канбана.
           </p>
         ) : null}
+      </section>
+
+      <section>
+        <h3 className="mb-2 mt-0 text-sm font-semibold text-[var(--text-strong)]">
+          Новые заказы
+        </h3>
+        <label className="flex max-w-md flex-col gap-1 text-sm">
+          <span className="text-[var(--text-muted)]">
+            Столбец по умолчанию
+          </span>
+          <select
+            value={board.defaultNewCardColumnTitle || ""}
+            onChange={(e) =>
+              onPatchBoard((b) => {
+                b.defaultNewCardColumnTitle = e.target.value.trim() || null;
+              })
+            }
+            className="h-9 rounded border border-[var(--input-border)] bg-[var(--input-bg)] px-2 text-[var(--app-text)]"
+          >
+            <option value="">
+              {KAITEN_MIRROR_DEFAULT_QUEUE_TITLE} (очередь)
+            </option>
+            {(board.columns || [])
+              .filter((col) => !isKanbanStopColumnTitle(col.title))
+              .map((col) => (
+                <option key={col.id} value={col.title}>
+                  {col.title}
+                </option>
+              ))}
+          </select>
+        </label>
+        <p className="mt-1.5 max-w-md text-xs text-[var(--text-muted)]">
+          В модалке канбана при создании наряда подставится этот столбец
+          выбранной доски. СТОП по умолчанию не задаём — его можно выбрать
+          вручную в форме нового заказа.
+        </p>
       </section>
 
       <section>

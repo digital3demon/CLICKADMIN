@@ -1282,7 +1282,7 @@ export function DirectoryKanbanBoardsClient({
           </h2>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Изменения типа (название, цвет, пространство по умолчанию) применяются ко всем доскам.
-            Остальные настройки ниже остаются для активной доски «{board.title}».
+            Столбец новых заказов и таймер — только для активной доски «{board.title}».
           </p>
           <div className="mt-6">
             <KanbanBoardSettingsForm

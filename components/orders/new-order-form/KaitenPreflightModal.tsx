@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { KaitenTrackLane } from "@prisma/client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DueDatetimeComboPicker } from "@/components/ui/DueDatetimeComboPicker";
 import { KanbanCrmUsersProvider, useKanbanCrmUsers } from "@/components/kanban/kanban-crm-users-context";
@@ -11,6 +11,12 @@ import { KanbanPersonAvatar } from "@/components/kanban/KanbanPersonAvatar";
 import { readClientState } from "@/lib/client-state-client";
 import type { KanbanMemberPickerMode } from "@/lib/kanban/kanban-card-members-client";
 import {
+  isKanbanStopColumnTitle,
+  KANBAN_STOP_COLUMN_TITLE,
+} from "@/lib/kanban/kanban-stop-column";
+import {
+  KAITEN_MIRROR_DEFAULT_QUEUE_TITLE,
+  KAITEN_MIRROR_KANBAN_COLUMNS,
   KANBAN_BOARD_ORTHODONTICS_ID,
   KANBAN_BOARD_ORTHOPEDICS_ID,
 } from "@/lib/kanban/model";
@@ -34,6 +40,8 @@ export type KaitenSavePayload =
       /** Пусто = никого не назначили при создании. */
       kanbanAssigneeIds?: string[];
       kanbanParticipantIds?: string[];
+      /** Столбец CRM-доски; пусто → «К исполнению». */
+      kaitenColumnTitle?: string;
     }
   | {
       kaitenDecideLater: false;
@@ -43,6 +51,7 @@ export type KaitenSavePayload =
       kaitenCardTitleLabel: string;
       kanbanAssigneeIds?: string[];
       kanbanParticipantIds?: string[];
+      kaitenColumnTitle?: string;
     };
 
 const SPACE_OPTIONS: {
@@ -170,6 +179,111 @@ export function resolvePreferredSpaceForCardType(opts: {
   if (op) return op;
   if (opts.availableSpaces.length === 1) return opts.availableSpaces[0] ?? null;
   return null;
+}
+
+const FALLBACK_KANBAN_COLUMN_TITLES = KAITEN_MIRROR_KANBAN_COLUMNS.map(
+  (c) => c.title,
+);
+
+/** Заголовки столбцов доски; СТОП канонизируем, если он есть в колонках. */
+export function listKanbanColumnTitlesForPreflight(rawColumns: unknown): string[] {
+  if (!Array.isArray(rawColumns)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const c of rawColumns) {
+    if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+    const rawTitle = String((c as { title?: unknown }).title ?? "").trim();
+    if (!rawTitle) continue;
+    const title = isKanbanStopColumnTitle(rawTitle)
+      ? KANBAN_STOP_COLUMN_TITLE
+      : rawTitle;
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(title);
+  }
+  return out;
+}
+
+/** В селекте создания наряда СТОП всегда есть — это не обычная колонка доски. */
+export function withPreflightStopColumn(titles: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of titles) {
+    const title = isKanbanStopColumnTitle(raw)
+      ? KANBAN_STOP_COLUMN_TITLE
+      : String(raw || "").trim();
+    if (!title) continue;
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(title);
+  }
+  if (!seen.has(KANBAN_STOP_COLUMN_TITLE.toLowerCase())) {
+    out.push(KANBAN_STOP_COLUMN_TITLE);
+  }
+  return out;
+}
+
+export function columnTitlesBySpaceFromTenantKanbanState(
+  raw: unknown,
+): Partial<Record<KaitenTrackLane, string[]>> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const state = raw as { boards?: unknown };
+  if (!Array.isArray(state.boards)) return {};
+  const out: Partial<Record<KaitenTrackLane, string[]>> = {};
+  for (const item of state.boards) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const board = item as { id?: unknown; columns?: unknown };
+    const boardId = String(board.id ?? "");
+    const titles = listKanbanColumnTitlesForPreflight(board.columns);
+    if (titles.length === 0) continue;
+    if (boardId === KANBAN_BOARD_ORTHOPEDICS_ID) out.ORTHOPEDICS = titles;
+    if (boardId === KANBAN_BOARD_ORTHODONTICS_ID) out.ORTHODONTICS = titles;
+  }
+  if (out.ORTHOPEDICS?.length) out.TEST = out.ORTHOPEDICS;
+  return out;
+}
+
+export function defaultColumnTitleBySpaceFromTenantKanbanState(
+  raw: unknown,
+): Partial<Record<KaitenTrackLane, string>> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const state = raw as { boards?: unknown };
+  if (!Array.isArray(state.boards)) return {};
+  const out: Partial<Record<KaitenTrackLane, string>> = {};
+  for (const item of state.boards) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const board = item as {
+      id?: unknown;
+      defaultNewCardColumnTitle?: unknown;
+    };
+    const boardId = String(board.id ?? "");
+    const rawTitle = String(board.defaultNewCardColumnTitle ?? "").trim();
+    // Конфиг: СТОП не бывает «по умолчанию» — только выбор в форме нового заказа.
+    if (!rawTitle || isKanbanStopColumnTitle(rawTitle)) continue;
+    const title = rawTitle;
+    if (boardId === KANBAN_BOARD_ORTHOPEDICS_ID) out.ORTHOPEDICS = title;
+    if (boardId === KANBAN_BOARD_ORTHODONTICS_ID) out.ORTHODONTICS = title;
+  }
+  if (out.ORTHOPEDICS) out.TEST = out.ORTHOPEDICS;
+  return out;
+}
+
+export function pickDefaultKanbanColumnTitle(
+  titles: readonly string[],
+  preferred?: string | null,
+): string {
+  const wantRaw = String(preferred ?? "").trim();
+  // Автоподстановка из конфига: СТОП не подставляем.
+  if (wantRaw && !isKanbanStopColumnTitle(wantRaw) && titles.includes(wantRaw)) {
+    return wantRaw;
+  }
+  if (titles.includes(KAITEN_MIRROR_DEFAULT_QUEUE_TITLE)) {
+    return KAITEN_MIRROR_DEFAULT_QUEUE_TITLE;
+  }
+  const firstNonStop = titles.find((t) => !isKanbanStopColumnTitle(t));
+  return firstNonStop ?? KAITEN_MIRROR_DEFAULT_QUEUE_TITLE;
 }
 
 function boardLaneOptionsBySpaceFromTenantKanbanState(
@@ -399,6 +513,16 @@ export function KaitenPreflightModal({
   const [boardLaneOptionsBySpace, setBoardLaneOptionsBySpace] = useState<
     Partial<Record<KaitenTrackLane, string[]>>
   >({});
+  const [columnTitlesBySpace, setColumnTitlesBySpace] = useState<
+    Partial<Record<KaitenTrackLane, string[]>>
+  >({});
+  const [defaultColumnBySpace, setDefaultColumnBySpace] = useState<
+    Partial<Record<KaitenTrackLane, string>>
+  >({});
+  const [kanbanColumnTitle, setKanbanColumnTitle] = useState(
+    KAITEN_MIRROR_DEFAULT_QUEUE_TITLE,
+  );
+  const userPickedColumnRef = useRef(false);
   const [cardTypeColorById, setCardTypeColorById] = useState<Record<string, string>>({});
   const [cardTypeColorByName, setCardTypeColorByName] = useState<Record<string, string>>({});
   const [boardLaneName, setBoardLaneName] = useState("");
@@ -421,6 +545,10 @@ export function KaitenPreflightModal({
     setDistributionLaneAllowlist(null);
     setDefaultSpaceByCardType({});
     setBoardLaneOptionsBySpace({});
+    setColumnTitlesBySpace({});
+    setDefaultColumnBySpace({});
+    setKanbanColumnTitle(KAITEN_MIRROR_DEFAULT_QUEUE_TITLE);
+    userPickedColumnRef.current = false;
     setBoardLaneName("");
     setWorkLabel("");
     setAssigneeUserIds([]);
@@ -471,6 +599,12 @@ export function KaitenPreflightModal({
           setBoardLaneOptionsBySpace(
             boardLaneOptionsBySpaceFromTenantKanbanState(tenantKanbanState),
           );
+          setColumnTitlesBySpace(
+            columnTitlesBySpaceFromTenantKanbanState(tenantKanbanState),
+          );
+          setDefaultColumnBySpace(
+            defaultColumnTitleBySpaceFromTenantKanbanState(tenantKanbanState),
+          );
           const colors = cardTypeColorsFromTenantKanbanState(tenantKanbanState);
           setCardTypeColorById(colors.byId);
           setCardTypeColorByName(colors.byName);
@@ -508,6 +642,16 @@ export function KaitenPreflightModal({
   const laneOptionsForSelectedSpace =
     space && isTrackLane(space) ? (boardLaneOptionsBySpace[space] ?? []) : [];
 
+  const columnOptionsForSelectedSpace = useMemo(() => {
+    const fromBoard =
+      space && isTrackLane(space) ? columnTitlesBySpace[space] : undefined;
+    return withPreflightStopColumn(
+      fromBoard && fromBoard.length > 0
+        ? fromBoard
+        : FALLBACK_KANBAN_COLUMN_TITLES,
+    );
+  }, [space, columnTitlesBySpace]);
+
   useEffect(() => {
     if (laneOptionsForSelectedSpace.length <= 1) {
       setBoardLaneName("");
@@ -517,6 +661,27 @@ export function KaitenPreflightModal({
       setBoardLaneName("");
     }
   }, [laneOptionsForSelectedSpace, boardLaneName]);
+
+  useEffect(() => {
+    const preferred =
+      space && isTrackLane(space) ? defaultColumnBySpace[space] : undefined;
+    if (
+      userPickedColumnRef.current &&
+      columnOptionsForSelectedSpace.includes(kanbanColumnTitle)
+    ) {
+      return;
+    }
+    const next = pickDefaultKanbanColumnTitle(
+      columnOptionsForSelectedSpace,
+      preferred,
+    );
+    if (next !== kanbanColumnTitle) setKanbanColumnTitle(next);
+  }, [
+    space,
+    columnOptionsForSelectedSpace,
+    defaultColumnBySpace,
+    kanbanColumnTitle,
+  ]);
 
   /** Тип и пространство нужны всегда: карточка CRM-канбана создаётся первой. */
   const kaitenFieldsRequired = true;
@@ -576,6 +741,8 @@ export function KaitenPreflightModal({
       const kanbanParticipantIds = participantUserIds
         .map((id) => id.trim())
         .filter(Boolean);
+      const kaitenColumnTitle =
+        kanbanColumnTitle.trim() || KAITEN_MIRROR_DEFAULT_QUEUE_TITLE;
       if (decideLater) {
         onConfirm(
           {
@@ -586,6 +753,7 @@ export function KaitenPreflightModal({
             kaitenCardTitleLabel: workLabel.trim(),
             kanbanAssigneeIds,
             kanbanParticipantIds,
+            kaitenColumnTitle,
           },
           { printPdf },
         );
@@ -600,6 +768,7 @@ export function KaitenPreflightModal({
           kaitenCardTitleLabel: workLabel.trim(),
           kanbanAssigneeIds,
           kanbanParticipantIds,
+          kaitenColumnTitle,
         },
         { printPdf },
       );
@@ -614,6 +783,7 @@ export function KaitenPreflightModal({
       workLabel,
       assigneeUserIds,
       participantUserIds,
+      kanbanColumnTitle,
       missingSelectionMessage,
     ],
   );
@@ -774,7 +944,10 @@ export function KaitenPreflightModal({
                         defaultSpaceByCardType,
                         availableSpaces: spaceOptions.map((x) => x.value),
                       });
-                      if (preferred) setSpace(preferred);
+                      if (preferred) {
+                        userPickedColumnRef.current = false;
+                        setSpace(preferred);
+                      }
                     }}
                   >
                     <span className="min-w-0 text-sm font-medium text-[var(--text-strong)]">
@@ -824,6 +997,7 @@ export function KaitenPreflightModal({
                         value={o.value}
                         checked={space === o.value}
                         onChange={() => {
+                          userPickedColumnRef.current = false;
                           setSpace(o.value);
                           setSelectionHint(null);
                         }}
@@ -881,6 +1055,38 @@ export function KaitenPreflightModal({
                   disabled={!!loadError}
                   onOpen={() => setPickerMode("part")}
                 />
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <label
+                  htmlFor="kaiten-preflight-column"
+                  className="block text-xs font-bold uppercase tracking-wide text-[var(--text-muted)]"
+                >
+                  Столбец
+                </label>
+                <div className="relative min-w-0">
+                  <select
+                    id="kaiten-preflight-column"
+                    value={kanbanColumnTitle}
+                    disabled={!!loadError || columnOptionsForSelectedSpace.length === 0}
+                    onChange={(e) => {
+                      userPickedColumnRef.current = true;
+                      setKanbanColumnTitle(e.target.value);
+                    }}
+                    className="h-10 w-full min-w-0 appearance-none rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 pr-8 text-sm text-[var(--app-text)] shadow-sm outline-none focus:border-[var(--sidebar-blue)] focus:ring-1 focus:ring-[var(--sidebar-blue)] disabled:opacity-50 dark:[color-scheme:dark]"
+                  >
+                    {columnOptionsForSelectedSpace.map((title) => (
+                      <option key={title} value={title}>
+                        {title}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+                    aria-hidden
+                  >
+                    ▾
+                  </span>
+                </div>
               </div>
             </div>
           </div>

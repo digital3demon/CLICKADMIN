@@ -23,9 +23,7 @@ import { withResolvedKaitenBoards } from "@/lib/kaiten-resolve-boards";
 import { resolveOrderCreateKaitenMode } from "@/lib/order-create-kaiten-mode";
 import { gateKaitenSyncForTenant } from "@/lib/kaiten-integration/sync";
 import { normalizeCrmUserIds } from "@/lib/kanban/crm-board-tile";
-
-/** Совпадает с KAITEN_MIRROR_DEFAULT_QUEUE_TITLE — без импорта тяжёлого model. */
-const CRM_DEFAULT_KANBAN_COLUMN_TITLE = "К исполнению";
+import { resolveCreateOrderKanbanColumnTitle } from "@/lib/order-create-kanban-column";
 import {
   normalizeProstheticsInput,
   prostheticsToJson,
@@ -125,6 +123,8 @@ export type CreateOrderBody = {
   /** CRM-канбан: ответственные / участники при создании (пусто = никто). */
   kanbanAssigneeIds?: string[];
   kanbanParticipantIds?: string[];
+  /** Столбец доски CRM; пусто / СТОП → «К исполнению». */
+  kaitenColumnTitle?: string | null;
   dueDate?: string | null;
   dueToAdminsAt?: string | null;
   /** Когда работа поступила; null/пусто — только createdAt в CRM */
@@ -503,7 +503,7 @@ export async function createOrderFromBody(
     kaitenCardTypeId: needKaitenPlacementFields ? kaitenCardTypeId : null,
     kaitenTrackLane: needKaitenPlacementFields ? kaitenTrackLane : null,
     kaitenColumnTitle: needKaitenPlacementFields
-      ? CRM_DEFAULT_KANBAN_COLUMN_TITLE
+      ? resolveCreateOrderKanbanColumnTitle(body.kaitenColumnTitle)
       : null,
     kaitenAdminDueHasTime,
     dueToAdminsHasTime,
