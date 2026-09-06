@@ -39,7 +39,9 @@ export async function GET(req: Request) {
       select: { priceListItemId: true },
     });
     orderPriceIds = new Set(
-      constructions.map((c) => c.priceListItemId).filter(Boolean),
+      constructions
+        .map((c) => c.priceListItemId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
     );
   }
 
