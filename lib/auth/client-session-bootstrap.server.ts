@@ -10,6 +10,7 @@ import { getTenantIdForSession } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
 import {
   getEffectiveModuleAccess,
+  getEffectiveModuleAccessForSessionUser,
   moduleAccessForResponse,
 } from "@/lib/role-module-resolver";
 import { normalizeKanbanAdminMentionTag } from "@/lib/kanban-admin-mention";
@@ -67,7 +68,7 @@ export async function getClientSessionBootstrap(): Promise<ClientSessionBootstra
   }
 
   const [mod, tid] = await Promise.all([
-    getEffectiveModuleAccess(s.tid, s.role),
+    getEffectiveModuleAccessForSessionUser(s.tid, s.role, s.sub),
     getTenantIdForSession(s).catch(() => s.tid ?? null),
   ]);
 

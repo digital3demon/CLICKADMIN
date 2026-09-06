@@ -6,19 +6,18 @@ import { getActivePriceListId } from "@/lib/price-list-workspace";
 import {
   canConfigurePayroll,
   normalizePayrollAmount,
-  parsePayrollWorkKind,
-  PAYROLL_WORK_KIND_LABELS,
 } from "@/lib/payroll";
+import { ensureDefaultPayrollStaffRoles } from "@/lib/payroll-staff-roles.server";
+import { isPayrollUserRole } from "@/lib/payroll";
 
 export const dynamic = "force-dynamic";
 
 type Body = {
   id?: unknown;
-  priceListItemId?: unknown;
-  priceListItemIds?: unknown;
-  kind?: unknown;
+  name?: unknown;
   amountRub?: unknown;
-  description?: unknown;
+  staffRoleIds?: unknown;
+  priceListItemIds?: unknown;
 };
 
 function trimString(value: unknown): string {
@@ -28,79 +27,103 @@ function trimString(value: unknown): string {
 function trimStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return Array.from(
-    new Set(
-      value
-        .map((x) => trimString(x))
-        .filter(Boolean),
-    ),
+    new Set(value.map((x) => trimString(x)).filter(Boolean)),
   );
 }
 
-async function requirePayrollConfigAccess() {
-  const session = await getSessionFromCookies();
-  if (!session?.sub) {
-    return { error: NextResponse.json({ error: "Требуется вход" }, { status: 401 }) };
-  }
-  if (!canConfigurePayroll(session.role)) {
-    return { error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }) };
-  }
-  const tenantId = await requireSessionTenantId(session);
-  const prisma = await getPrisma();
-  return { session, tenantId, prisma };
-}
-
-const configSelect = {
-  id: true,
-  priceListItemId: true,
-  kind: true,
-  amountRub: true,
-  description: true,
-  sortOrder: true,
-  priceListItem: {
+const configInclude = {
+  staffRoles: {
     select: {
-      code: true,
-      name: true,
-      sectionTitle: true,
-      subsectionTitle: true,
+      staffRoleId: true,
+      staffRole: { select: { id: true, name: true } },
+    },
+  },
+  priceItems: {
+    select: {
+      priceListItemId: true,
+      priceListItem: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          sectionTitle: true,
+          subsectionTitle: true,
+        },
+      },
     },
   },
 } as const;
 
-function configPayload(c: {
+type ConfigRow = {
   id: string;
-  priceListItemId: string;
-  kind: keyof typeof PAYROLL_WORK_KIND_LABELS;
+  name: string;
   amountRub: number;
-  description: string;
   sortOrder: number;
-  priceListItem: {
-    code: string;
-    name: string;
-    sectionTitle: string | null;
-    subsectionTitle: string | null;
-  };
-}) {
+  staffRoles: {
+    staffRoleId: string;
+    staffRole: { id: string; name: string };
+  }[];
+  priceItems: {
+    priceListItemId: string;
+    priceListItem: {
+      id: string;
+      code: string;
+      name: string;
+      sectionTitle: string | null;
+      subsectionTitle: string | null;
+    };
+  }[];
+};
+
+function configPayload(c: ConfigRow) {
   return {
     id: c.id,
-    priceListItemId: c.priceListItemId,
-    kind: c.kind,
-    kindLabel: PAYROLL_WORK_KIND_LABELS[c.kind],
+    name: c.name,
     amountRub: c.amountRub,
-    description: c.description,
     sortOrder: c.sortOrder,
-    priceCode: c.priceListItem.code,
-    priceName: c.priceListItem.name,
-    sectionTitle: c.priceListItem.sectionTitle,
-    subsectionTitle: c.priceListItem.subsectionTitle,
+    staffRoleIds: c.staffRoles.map((s) => s.staffRoleId),
+    staffRoles: c.staffRoles.map((s) => ({
+      id: s.staffRole.id,
+      name: s.staffRole.name,
+    })),
+    priceListItemIds: c.priceItems.map((p) => p.priceListItemId),
+    priceItems: c.priceItems.map((p) => ({
+      id: p.priceListItem.id,
+      code: p.priceListItem.code,
+      name: p.priceListItem.name,
+      sectionTitle: p.priceListItem.sectionTitle,
+      subsectionTitle: p.priceListItem.subsectionTitle,
+    })),
   };
 }
 
+async function requireConfigAccess(opts?: { allowPayrollRead?: boolean }) {
+  const session = await getSessionFromCookies();
+  if (!session?.sub) {
+    return { error: NextResponse.json({ error: "Требуется вход" }, { status: 401 }) };
+  }
+  const canWrite = canConfigurePayroll(session.role);
+  const canRead =
+    canWrite ||
+    (opts?.allowPayrollRead === true && isPayrollUserRole(session.role));
+  if (!canRead) {
+    return { error: NextResponse.json({ error: "Недостаточно прав" }, { status: 403 }) };
+  }
+  const tenantId = await requireSessionTenantId(session);
+  const prisma = await getPrisma();
+  return { session, tenantId, prisma, canWrite };
+}
+
 export async function GET() {
-  const access = await requirePayrollConfigAccess();
+  const access = await requireConfigAccess({ allowPayrollRead: true });
   if ("error" in access) return access.error;
 
+  if (access.canWrite) {
+    await ensureDefaultPayrollStaffRoles(access.prisma, access.tenantId);
+  }
+
   const activePriceListId = await getActivePriceListId(access.prisma);
-  const [priceItems, configs] = await Promise.all([
+  const [priceItems, staffRoles, configs] = await Promise.all([
     access.prisma.priceListItem.findMany({
       where: { priceListId: activePriceListId, isActive: true },
       orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
@@ -112,25 +135,49 @@ export async function GET() {
         subsectionTitle: true,
       },
     }),
+    access.prisma.payrollStaffRole.findMany({
+      where: { tenantId: access.tenantId },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, sortOrder: true },
+    }),
     access.prisma.payrollPriceItemConfig.findMany({
       where: { tenantId: access.tenantId },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: configSelect,
+      include: configInclude,
     }),
   ]);
+
+  let visible = configs.map(configPayload);
+  if (!access.canWrite && access.session.role === "USER") {
+    const user = await access.prisma.user.findFirst({
+      where: { id: access.session.sub, tenantId: access.tenantId },
+      select: { payrollStaffRoleId: true },
+    });
+    const roleId = user?.payrollStaffRoleId ?? null;
+    visible = visible.filter(
+      (c) =>
+        c.staffRoleIds.length === 0 ||
+        (roleId != null && c.staffRoleIds.includes(roleId)),
+    );
+  }
 
   return NextResponse.json(
     {
       priceItems,
-      configs: configs.map(configPayload),
+      staffRoles,
+      configs: visible,
+      canConfigure: access.canWrite,
     },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }
 
 export async function POST(req: Request) {
-  const access = await requirePayrollConfigAccess();
+  const access = await requireConfigAccess();
   if ("error" in access) return access.error;
+  if (!access.canWrite) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -138,58 +185,68 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const priceListItemIds = trimStringArray(body.priceListItemIds);
-  const fallbackPriceListItemId = trimString(body.priceListItemId);
-  const targetPriceListItemIds =
-    priceListItemIds.length > 0
-      ? priceListItemIds
-      : fallbackPriceListItemId
-        ? [fallbackPriceListItemId]
-        : [];
-  const kind = parsePayrollWorkKind(body.kind);
+  const name = trimString(body.name);
   const amountRub = normalizePayrollAmount(body.amountRub);
-  const description = trimString(body.description);
-  if (targetPriceListItemIds.length === 0 || !kind || !amountRub || !description) {
+  const staffRoleIds = trimStringArray(body.staffRoleIds);
+  const priceListItemIds = trimStringArray(body.priceListItemIds);
+  if (!name || !amountRub) {
     return NextResponse.json(
-      { error: "Укажите позицию прайса, тип, сумму и описание" },
+      { error: "Укажите название и сумму" },
       { status: 400 },
     );
   }
-  const items = await access.prisma.priceListItem.findMany({
-    where: { id: { in: targetPriceListItemIds } },
-    select: { id: true },
-  });
-  if (items.length !== targetPriceListItemIds.length) {
-    return NextResponse.json({ error: "Одна или несколько позиций прайса не найдены" }, { status: 404 });
+
+  if (staffRoleIds.length > 0) {
+    const roles = await access.prisma.payrollStaffRole.findMany({
+      where: { tenantId: access.tenantId, id: { in: staffRoleIds } },
+      select: { id: true },
+    });
+    if (roles.length !== staffRoleIds.length) {
+      return NextResponse.json({ error: "Роль не найдена" }, { status: 404 });
+    }
+  }
+  if (priceListItemIds.length > 0) {
+    const items = await access.prisma.priceListItem.findMany({
+      where: { id: { in: priceListItemIds } },
+      select: { id: true },
+    });
+    if (items.length !== priceListItemIds.length) {
+      return NextResponse.json(
+        { error: "Одна или несколько позиций прайса не найдены" },
+        { status: 404 },
+      );
+    }
   }
 
   const maxSort = await access.prisma.payrollPriceItemConfig.aggregate({
     where: { tenantId: access.tenantId },
     _max: { sortOrder: true },
   });
-  const baseSort = maxSort._max.sortOrder ?? 0;
-  const configs = await access.prisma.$transaction(
-    targetPriceListItemIds.map((priceListItemId, index) =>
-      access.prisma.payrollPriceItemConfig.create({
-        data: {
-          tenantId: access.tenantId,
-          priceListItemId,
-          kind,
-          amountRub,
-          description,
-          sortOrder: baseSort + (index + 1) * 10,
-        },
-        select: configSelect,
-      }),
-    ),
-  );
-  const payload = configs.map(configPayload);
-  return NextResponse.json({ ok: true, config: payload[0] ?? null, configs: payload });
+  const config = await access.prisma.payrollPriceItemConfig.create({
+    data: {
+      tenantId: access.tenantId,
+      name,
+      amountRub,
+      sortOrder: (maxSort._max.sortOrder ?? 0) + 10,
+      priceListItemId: priceListItemIds[0] ?? null,
+      staffRoles: {
+        create: staffRoleIds.map((staffRoleId) => ({ staffRoleId })),
+      },
+      priceItems: {
+        create: priceListItemIds.map((priceListItemId) => ({ priceListItemId })),
+      },
+    },
+    include: configInclude,
+  });
+  return NextResponse.json({ ok: true, config: configPayload(config) });
 }
 
 export async function PATCH(req: Request) {
-  const access = await requirePayrollConfigAccess();
+  const access = await requireConfigAccess();
   if ("error" in access) return access.error;
+  if (!access.canWrite) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -207,27 +264,59 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Строка ФОТ не найдена" }, { status: 404 });
   }
 
-  const priceListItemId = trimString(body.priceListItemId);
-  const kind = parsePayrollWorkKind(body.kind);
+  const name = trimString(body.name);
   const amountRub = normalizePayrollAmount(body.amountRub);
-  const description = trimString(body.description);
-  if (!priceListItemId || !kind || !amountRub || !description) {
+  const staffRoleIds = trimStringArray(body.staffRoleIds);
+  const priceListItemIds = trimStringArray(body.priceListItemIds);
+  if (!name || !amountRub) {
     return NextResponse.json(
-      { error: "Укажите позицию прайса, тип, сумму и описание" },
+      { error: "Укажите название и сумму" },
       { status: 400 },
     );
   }
-  const config = await access.prisma.payrollPriceItemConfig.update({
+
+  if (staffRoleIds.length > 0) {
+    const roles = await access.prisma.payrollStaffRole.findMany({
+      where: { tenantId: access.tenantId, id: { in: staffRoleIds } },
+      select: { id: true },
+    });
+    if (roles.length !== staffRoleIds.length) {
+      return NextResponse.json({ error: "Роль не найдена" }, { status: 404 });
+    }
+  }
+
+  await access.prisma.$transaction([
+    access.prisma.payrollConfigStaffRole.deleteMany({ where: { configId: id } }),
+    access.prisma.payrollConfigPriceItem.deleteMany({ where: { configId: id } }),
+    access.prisma.payrollPriceItemConfig.update({
+      where: { id },
+      data: {
+        name,
+        amountRub,
+        priceListItemId: priceListItemIds[0] ?? null,
+        staffRoles: {
+          create: staffRoleIds.map((staffRoleId) => ({ staffRoleId })),
+        },
+        priceItems: {
+          create: priceListItemIds.map((priceListItemId) => ({ priceListItemId })),
+        },
+      },
+    }),
+  ]);
+
+  const config = await access.prisma.payrollPriceItemConfig.findFirstOrThrow({
     where: { id },
-    data: { priceListItemId, kind, amountRub, description },
-    select: configSelect,
+    include: configInclude,
   });
   return NextResponse.json({ ok: true, config: configPayload(config) });
 }
 
 export async function DELETE(req: Request) {
-  const access = await requirePayrollConfigAccess();
+  const access = await requireConfigAccess();
   if ("error" in access) return access.error;
+  if (!access.canWrite) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
   let body: Body;
   try {
     body = (await req.json()) as Body;

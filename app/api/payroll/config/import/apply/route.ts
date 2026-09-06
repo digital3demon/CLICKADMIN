@@ -2,21 +2,26 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
-import {
-  canConfigurePayroll,
-  normalizePayrollAmount,
-  parsePayrollWorkKind,
-} from "@/lib/payroll";
+import { canConfigurePayroll, normalizePayrollAmount } from "@/lib/payroll";
 
 export const dynamic = "force-dynamic";
 
 type ApplyRow = {
-  priceListItemId?: unknown;
-  kind?: unknown;
+  name?: unknown;
   amountRub?: unknown;
-  description?: unknown;
-  existingConfigId?: unknown;
+  staffRoleIds?: unknown;
+  priceListItemIds?: unknown;
+  skip?: unknown;
 };
+
+function trimString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function trimStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((x) => trimString(x)).filter(Boolean)));
+}
 
 export async function POST(req: Request) {
   const session = await getSessionFromCookies();
@@ -29,97 +34,80 @@ export async function POST(req: Request) {
   const tenantId = await requireSessionTenantId(session);
   const prisma = await getPrisma();
 
-  let body: { confirmed?: unknown; rows?: unknown };
+  let body: { rows?: ApplyRow[] };
   try {
-    body = (await req.json()) as { confirmed?: unknown; rows?: unknown };
+    body = (await req.json()) as { rows?: ApplyRow[] };
   } catch {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
-  if (body.confirmed !== true) {
-    return NextResponse.json(
-      { error: "Подтвердите галочкой «Данные корректны»" },
-      { status: 400 },
-    );
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  if (rows.length === 0) {
+    return NextResponse.json({ error: "Нет строк для применения" }, { status: 400 });
   }
-  if (!Array.isArray(body.rows) || body.rows.length === 0) {
-    return NextResponse.json({ error: "Нет строк для импорта" }, { status: 400 });
-  }
-
-  const maxSort = await prisma.payrollPriceItemConfig.aggregate({
-    where: { tenantId },
-    _max: { sortOrder: true },
-  });
-  let sortCursor = maxSort._max.sortOrder ?? 0;
 
   let created = 0;
-  let updated = 0;
   let skipped = 0;
+  const errors: string[] = [];
 
-  for (const raw of body.rows as ApplyRow[]) {
-    const priceListItemId =
-      typeof raw.priceListItemId === "string" ? raw.priceListItemId.trim() : "";
-    const kind = parsePayrollWorkKind(raw.kind);
-    const amountRub = normalizePayrollAmount(raw.amountRub);
-    const description =
-      typeof raw.description === "string" ? raw.description.trim() : "";
-    const existingConfigId =
-      typeof raw.existingConfigId === "string" ? raw.existingConfigId.trim() : "";
-
-    if (!priceListItemId || !kind || !amountRub || !description) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
+    if (row.skip === true) {
       skipped += 1;
       continue;
     }
-
-    const item = await prisma.priceListItem.findFirst({
-      where: { id: priceListItemId, isActive: true },
-      select: { id: true },
-    });
-    if (!item) {
-      skipped += 1;
+    const name = trimString(row.name);
+    const amountRub = normalizePayrollAmount(row.amountRub);
+    const staffRoleIds = trimStringArray(row.staffRoleIds);
+    const priceListItemIds = trimStringArray(row.priceListItemIds);
+    if (!name || !amountRub) {
+      errors.push(`Строка ${i + 1}: нужно название и сумма`);
       continue;
     }
-
-    if (existingConfigId) {
-      const row = await prisma.payrollPriceItemConfig.findFirst({
-        where: { id: existingConfigId, tenantId },
-        select: { id: true },
+    if (staffRoleIds.length > 0) {
+      const n = await prisma.payrollStaffRole.count({
+        where: { tenantId, id: { in: staffRoleIds } },
       });
-      if (row) {
-        await prisma.payrollPriceItemConfig.update({
-          where: { id: existingConfigId },
-          data: { priceListItemId, kind, amountRub, description },
-        });
-        updated += 1;
+      if (n !== staffRoleIds.length) {
+        errors.push(`Строка ${i + 1}: неизвестная роль`);
+        continue;
+      }
+    }
+    if (priceListItemIds.length > 0) {
+      const n = await prisma.priceListItem.count({
+        where: { id: { in: priceListItemIds } },
+      });
+      if (n !== priceListItemIds.length) {
+        errors.push(`Строка ${i + 1}: неизвестная позиция прайса`);
         continue;
       }
     }
 
-    const existing = await prisma.payrollPriceItemConfig.findFirst({
-      where: { tenantId, priceListItemId, kind },
-      select: { id: true },
+    const maxSort = await prisma.payrollPriceItemConfig.aggregate({
+      where: { tenantId },
+      _max: { sortOrder: true },
     });
-    if (existing) {
-      await prisma.payrollPriceItemConfig.update({
-        where: { id: existing.id },
-        data: { amountRub, description },
-      });
-      updated += 1;
-      continue;
-    }
-
-    sortCursor += 10;
     await prisma.payrollPriceItemConfig.create({
       data: {
         tenantId,
-        priceListItemId,
-        kind,
+        name,
         amountRub,
-        description,
-        sortOrder: sortCursor,
+        sortOrder: (maxSort._max.sortOrder ?? 0) + 10 + created,
+        priceListItemId: priceListItemIds[0] ?? null,
+        staffRoles: {
+          create: staffRoleIds.map((staffRoleId) => ({ staffRoleId })),
+        },
+        priceItems: {
+          create: priceListItemIds.map((priceListItemId) => ({ priceListItemId })),
+        },
       },
     });
     created += 1;
   }
 
-  return NextResponse.json({ ok: true, created, updated, skipped });
+  return NextResponse.json({
+    ok: errors.length === 0,
+    created,
+    skipped,
+    errors,
+  });
 }

@@ -1,49 +1,68 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import type { PayrollImportPreviewRow } from "@/lib/payroll-xlsx";
+import { useMemo, useRef, useState } from "react";
 
-type PreviewPayload = {
-  parseIssues: string[];
-  rows: PayrollImportPreviewRow[];
-  summary: {
-    total: number;
-    toCreate: number;
-    toUpdate: number;
-    unchanged: number;
-    withIssues: number;
-  };
+type StaffRole = { id: string; name: string };
+type PriceItem = { id: string; code: string; name: string };
+
+export type FreeformImportDraftRow = {
+  key: string;
+  name: string;
+  amountRub: number;
+  staffRoleIds: string[];
+  priceListItemIds: string[];
+  skip: boolean;
+  sheet?: string;
+  row?: number;
+};
+
+type PreviewCandidate = {
+  name?: string;
+  amountRub?: number;
+  sheet?: string;
+  row?: number;
 };
 
 type Props = {
+  staffRoles: StaffRole[];
+  priceItems: PriceItem[];
   onApplied: () => void;
 };
 
-function actionLabel(action: PayrollImportPreviewRow["action"]): string {
-  if (action === "create") return "Создать";
-  if (action === "update") return "Обновить";
-  return "Без изменений";
+function parseAmount(value: string, fallback: number): number {
+  const n = Number.parseInt(value.replace(/\s/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export function PayrollImportExportPanel({ onApplied }: Props) {
+export function PayrollImportExportPanel({
+  staffRoles,
+  priceItems,
+  onApplied,
+}: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<PreviewPayload | null>(null);
-  const [draftRows, setDraftRows] = useState<PayrollImportPreviewRow[]>([]);
-  const [confirmed, setConfirmed] = useState(false);
+  const [draftRows, setDraftRows] = useState<FreeformImportDraftRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [priceQuery, setPriceQuery] = useState("");
 
-  const exportTemplate = () => {
-    window.location.assign("/api/payroll/config/export");
-  };
+  const filteredPrices = useMemo(() => {
+    const q = priceQuery.trim().toLowerCase();
+    if (!q) return priceItems.slice(0, 40);
+    return priceItems
+      .filter(
+        (p) =>
+          p.code.toLowerCase().includes(q) ||
+          p.name.toLowerCase().includes(q),
+      )
+      .slice(0, 40);
+  }, [priceItems, priceQuery]);
 
   const uploadPreview = async (file: File) => {
     setLoading(true);
     setError(null);
     setOk(null);
-    setConfirmed(false);
     try {
       const fd = new FormData();
       fd.set("file", file);
@@ -51,15 +70,33 @@ export function PayrollImportExportPanel({ onApplied }: Props) {
         method: "POST",
         body: fd,
       });
-      const data = (await res.json()) as PreviewPayload & { error?: string };
+      const data = (await res.json()) as {
+        candidates?: PreviewCandidate[];
+        error?: string;
+      };
       if (!res.ok) throw new Error(data.error || "Не удалось разобрать файл");
-      setPreview(data);
-      setDraftRows(data.rows.filter((r) => r.action !== "unchanged"));
-      if (data.rows.length === 0 && data.parseIssues.length === 0) {
-        setError("В файле нет строк с ценами для импорта");
+      const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+      if (candidates.length === 0) {
+        setDraftRows([]);
+        setError("В файле не найдено пар «название + сумма»");
+        return;
       }
+      setDraftRows(
+        candidates.map((c, i) => ({
+          key: `${c.sheet ?? "sheet"}-${c.row ?? i}-${c.name ?? ""}-${i}`,
+          name: String(c.name ?? "").trim() || `Строка ${i + 1}`,
+          amountRub:
+            typeof c.amountRub === "number" && c.amountRub > 0
+              ? Math.round(c.amountRub)
+              : 0,
+          staffRoleIds: [],
+          priceListItemIds: [],
+          skip: false,
+          sheet: typeof c.sheet === "string" ? c.sheet : undefined,
+          row: typeof c.row === "number" ? c.row : undefined,
+        })),
+      );
     } catch (e) {
-      setPreview(null);
       setDraftRows([]);
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
     } finally {
@@ -68,47 +105,36 @@ export function PayrollImportExportPanel({ onApplied }: Props) {
   };
 
   const applyRows = async () => {
-    if (!confirmed) return;
     setApplying(true);
     setError(null);
     setOk(null);
     try {
-      const payload = draftRows
-        .filter(
-          (r) =>
-            r.issues.length === 0 &&
-            r.priceListItemId &&
-            r.amountRub > 0 &&
-            r.description.trim(),
-        )
-        .map((r) => ({
-          priceListItemId: r.priceListItemId,
-          kind: r.kind,
-          amountRub: r.amountRub,
-          description: r.description.trim(),
-          existingConfigId: r.existingConfigId,
-        }));
-      if (payload.length === 0) {
-        throw new Error("Нет строк для применения");
+      const rows = draftRows.map((r) => ({
+        name: r.name.trim(),
+        amountRub: r.amountRub,
+        staffRoleIds: r.staffRoleIds,
+        priceListItemIds: r.priceListItemIds,
+        skip: r.skip || !r.name.trim() || r.amountRub <= 0,
+      }));
+      const active = rows.filter((r) => !r.skip);
+      if (active.length === 0) {
+        throw new Error("Нет строк для применения (все пропущены или пустые)");
       }
       const res = await fetch("/api/payroll/config/import/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmed: true, rows: payload }),
+        body: JSON.stringify({ rows }),
       });
       const data = (await res.json()) as {
         error?: string;
         created?: number;
-        updated?: number;
         skipped?: number;
       };
       if (!res.ok) throw new Error(data.error || "Импорт не выполнен");
       setOk(
-        `Импорт выполнен: создано ${data.created ?? 0}, обновлено ${data.updated ?? 0}.`,
+        `Импорт выполнен: создано ${data.created ?? active.length}, пропущено ${data.skipped ?? rows.length - active.length}.`,
       );
-      setPreview(null);
       setDraftRows([]);
-      setConfirmed(false);
       if (fileRef.current) fileRef.current.value = "";
       onApplied();
     } catch (e) {
@@ -118,45 +144,58 @@ export function PayrollImportExportPanel({ onApplied }: Props) {
     }
   };
 
-  const patchRow = useCallback(
-    (rowNumber: number, kind: string, patch: Partial<PayrollImportPreviewRow>) => {
-      setDraftRows((prev) =>
-        prev.map((row) =>
-          row.rowNumber === rowNumber && row.kind === kind ? { ...row, ...patch } : row,
-        ),
-      );
-      setConfirmed(false);
-    },
-    [],
-  );
+  const patchRow = (key: string, patch: Partial<FreeformImportDraftRow>) => {
+    setDraftRows((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, ...patch } : r)),
+    );
+  };
 
-  const displayRows = useMemo(() => preview?.rows ?? [], [preview]);
+  const toggleRole = (key: string, roleId: string) => {
+    setDraftRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        const has = r.staffRoleIds.includes(roleId);
+        return {
+          ...r,
+          staffRoleIds: has
+            ? r.staffRoleIds.filter((id) => id !== roleId)
+            : [...r.staffRoleIds, roleId],
+        };
+      }),
+    );
+  };
+
+  const togglePrice = (key: string, priceId: string) => {
+    setDraftRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== key) return r;
+        const has = r.priceListItemIds.includes(priceId);
+        return {
+          ...r,
+          priceListItemIds: has
+            ? r.priceListItemIds.filter((id) => id !== priceId)
+            : [...r.priceListItemIds, priceId],
+        };
+      }),
+    );
+  };
 
   const inputCls =
-    "w-full rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-sm text-[var(--text-strong)]";
+    "w-full rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-2 py-1 text-sm text-[var(--text-strong)] outline-none focus:border-[var(--sidebar-blue)]";
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
       <h2 className="text-base font-semibold text-[var(--text-strong)]">
-        Импорт и выгрузка цен
+        Импорт из Excel (свободный)
       </h2>
       <p className="mt-1 text-sm text-[var(--text-secondary)]">
-        Скачайте шаблон с позициями активного прайса, заполните столбцы CAD, CAD
-        Хирургия, Мануал и Обработка. Внизу листа — блок «Без категории»
-        (название плашки и цена). Загрузите файл, проверьте таблицу и подтвердите
-        импорт.
+        Загрузите .xlsx: система найдёт пары «название + сумма». Роли и позиции
+        прайса назначьте в таблице превью (без ролей = общий ФОТ).
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={exportTemplate}
-          className="rounded-md border border-[var(--input-border)] bg-[var(--surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--text-strong)] hover:bg-[var(--surface-hover)]"
-        >
-          Скачать шаблон Excel
-        </button>
         <label className="cursor-pointer rounded-md bg-[var(--sidebar-blue)] px-3 py-2 text-sm font-semibold text-white hover:opacity-90">
-          {loading ? "Чтение…" : "Загрузить заполненный файл"}
+          {loading ? "Чтение…" : "Загрузить Excel"}
           <input
             ref={fileRef}
             type="file"
@@ -169,149 +208,166 @@ export function PayrollImportExportPanel({ onApplied }: Props) {
             }}
           />
         </label>
+        {draftRows.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              setDraftRows([]);
+              setError(null);
+              if (fileRef.current) fileRef.current.value = "";
+            }}
+            className="rounded-md border border-[var(--input-border)] px-3 py-2 text-sm text-[var(--text-strong)]"
+          >
+            Очистить превью
+          </button>
+        ) : null}
       </div>
 
       {error ? (
-        <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-300">{error}</p>
+        <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-300">
+          {error}
+        </p>
       ) : null}
       {ok ? (
-        <p className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">{ok}</p>
+        <p className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+          {ok}
+        </p>
       ) : null}
 
-      {preview ? (
+      {draftRows.length > 0 ? (
         <div className="mt-4 space-y-3">
-          {preview.parseIssues.length > 0 ? (
-            <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-200">
-              {preview.parseIssues.map((msg) => (
-                <li key={msg}>{msg}</li>
-              ))}
-            </ul>
-          ) : null}
           <p className="text-sm text-[var(--text-secondary)]">
-            К импорту: создать {preview.summary.toCreate}, обновить{" "}
-            {preview.summary.toUpdate}, без изменений {preview.summary.unchanged}.
-            {preview.summary.withIssues > 0
-              ? ` Строк с ошибками: ${preview.summary.withIssues} — исправьте в Excel или в таблице ниже.`
-              : null}
+            Найдено строк: {draftRows.length}. Отметьте «Пропуск», чтобы не
+            создавать ФОТ.
           </p>
 
           <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-[var(--surface-subtle)] text-xs uppercase text-[var(--text-muted)]">
                 <tr>
-                  <th className="px-2 py-2">Действие</th>
-                  <th className="px-2 py-2">Тип</th>
-                  <th className="px-2 py-2">Код</th>
-                  <th className="px-2 py-2">Позиция</th>
-                  <th className="px-2 py-2">Цена ₽</th>
-                  <th className="px-2 py-2">Описание плашки</th>
-                  <th className="px-2 py-2">Замечания</th>
+                  <th className="px-2 py-2">Пропуск</th>
+                  <th className="px-2 py-2">Название</th>
+                  <th className="px-2 py-2">Сумма ₽</th>
+                  <th className="px-2 py-2">Роли</th>
+                  <th className="px-2 py-2">Прайс (опц.)</th>
+                  <th className="px-2 py-2">Лист</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--card-border)]">
-                {displayRows.map((row) => {
-                  const draft =
-                    draftRows.find(
-                      (d) => d.rowNumber === row.rowNumber && d.kind === row.kind,
-                    ) ?? row;
-                  const editable = row.action !== "unchanged";
-                  const inDraft =
-                    editable && draft.issues.length === 0 && Boolean(draft.priceListItemId);
-                  return (
-                    <tr
-                      key={`${row.rowNumber}-${row.kind}-${row.description}`}
-                      className={
-                        row.issues.length > 0
-                          ? "bg-red-500/5"
-                          : row.action === "unchanged"
-                            ? "opacity-60"
-                            : inDraft
-                              ? "bg-emerald-500/5"
-                              : ""
-                      }
-                    >
-                      <td className="px-2 py-2">{actionLabel(row.action)}</td>
-                      <td className="px-2 py-2">{row.kindLabel}</td>
-                      <td className="px-2 py-2 font-mono text-xs">{row.priceCode}</td>
-                      <td className="max-w-[200px] px-2 py-2">{row.priceName}</td>
-                      <td className="px-2 py-2">
-                        {editable ? (
-                          <input
-                            className={inputCls}
-                            inputMode="numeric"
-                            value={draft.amountRub}
-                            onChange={(e) => {
-                              const n = Number.parseInt(
-                                e.target.value.replace(/\s/g, ""),
-                                10,
-                              );
-                              patchRow(row.rowNumber, row.kind, {
-                                amountRub: Number.isFinite(n) ? n : draft.amountRub,
-                              });
-                            }}
-                          />
+                {draftRows.map((row) => (
+                  <tr
+                    key={row.key}
+                    className={row.skip ? "opacity-50" : "bg-emerald-500/5"}
+                  >
+                    <td className="px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={row.skip}
+                        onChange={(e) =>
+                          patchRow(row.key, { skip: e.target.checked })
+                        }
+                        className="h-4 w-4 rounded border-[var(--input-border)]"
+                      />
+                    </td>
+                    <td className="min-w-[160px] px-2 py-2">
+                      <input
+                        className={inputCls}
+                        value={row.name}
+                        onChange={(e) =>
+                          patchRow(row.key, { name: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="min-w-[100px] px-2 py-2">
+                      <input
+                        className={inputCls}
+                        inputMode="numeric"
+                        value={row.amountRub || ""}
+                        onChange={(e) =>
+                          patchRow(row.key, {
+                            amountRub: parseAmount(
+                              e.target.value,
+                              row.amountRub,
+                            ),
+                          })
+                        }
+                      />
+                    </td>
+                    <td className="min-w-[180px] px-2 py-2">
+                      <div className="flex max-h-24 flex-col gap-1 overflow-y-auto">
+                        {staffRoles.length === 0 ? (
+                          <span className="text-xs text-[var(--text-muted)]">
+                            Общий
+                          </span>
                         ) : (
-                          row.amountRub.toLocaleString("ru-RU")
+                          staffRoles.map((role) => (
+                            <label
+                              key={role.id}
+                              className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-strong)]"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={row.staffRoleIds.includes(role.id)}
+                                onChange={() => toggleRole(row.key, role.id)}
+                                className="h-3.5 w-3.5 rounded border-[var(--input-border)]"
+                              />
+                              {role.name}
+                            </label>
+                          ))
                         )}
-                      </td>
-                      <td className="max-w-[220px] px-2 py-2">
-                        {editable ? (
-                          <input
-                            className={inputCls}
-                            value={draft.description}
-                            onChange={(e) =>
-                              patchRow(row.rowNumber, row.kind, {
-                                description: e.target.value,
-                              })
-                            }
-                          />
-                        ) : (
-                          row.description
-                        )}
-                      </td>
-                      <td className="px-2 py-2 text-xs text-red-600 dark:text-red-300">
-                        {row.issues.map((i) => i.message).join("; ")}
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </div>
+                    </td>
+                    <td className="min-w-[220px] px-2 py-2">
+                      <input
+                        className={`${inputCls} mb-1`}
+                        value={priceQuery}
+                        onChange={(e) => setPriceQuery(e.target.value)}
+                        placeholder="Поиск прайса…"
+                      />
+                      <div className="max-h-24 overflow-y-auto text-xs">
+                        {filteredPrices.map((p) => (
+                          <label
+                            key={p.id}
+                            className="flex cursor-pointer items-start gap-1.5 py-0.5 text-[var(--text-strong)]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={row.priceListItemIds.includes(p.id)}
+                              onChange={() => togglePrice(row.key, p.id)}
+                              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-[var(--input-border)]"
+                            />
+                            <span>
+                              {p.code} · {p.name}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      {row.priceListItemIds.length > 0 ? (
+                        <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          Выбрано: {row.priceListItemIds.length}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 text-xs text-[var(--text-muted)]">
+                      {row.sheet ?? "—"}
+                      {row.row != null ? ` · ${row.row}` : ""}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          {draftRows.some((r) => r.issues.length === 0 && r.priceListItemId) ? (
-            <div className="flex flex-wrap items-center gap-4 border-t border-[var(--card-border)] pt-3">
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-strong)]">
-                <input
-                  type="checkbox"
-                  checked={confirmed}
-                  onChange={(e) => setConfirmed(e.target.checked)}
-                  className="h-4 w-4 rounded border-[var(--input-border)]"
-                />
-                Данные корректны, применить в ФОТ
-              </label>
-              <button
-                type="button"
-                disabled={!confirmed || applying}
-                onClick={() => void applyRows()}
-                className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
-              >
-                {applying ? "Применение…" : "Применить импорт"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPreview(null);
-                  setDraftRows([]);
-                  setConfirmed(false);
-                  if (fileRef.current) fileRef.current.value = "";
-                }}
-                className="rounded-md border border-[var(--input-border)] px-3 py-2 text-sm text-[var(--text-strong)]"
-              >
-                Отмена
-              </button>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--card-border)] pt-3">
+            <button
+              type="button"
+              disabled={applying}
+              onClick={() => void applyRows()}
+              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-40"
+            >
+              {applying ? "Применение…" : "Применить импорт"}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>

@@ -5,11 +5,11 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ChartResponsiveContainer } from "@/components/analytics/ChartResponsiveContainer";
 import {
   COMPARE_PERIOD_COLORS,
   deltaPercent,
@@ -140,7 +140,7 @@ function GroupedBars({
   });
   return (
     <div className="h-[260px] w-full rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
-      <ResponsiveContainer width="100%" height="100%">
+      <ChartResponsiveContainer>
         <BarChart data={data} margin={{ bottom: 8, left: 4, right: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
           <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} />
@@ -164,7 +164,7 @@ function GroupedBars({
             />
           ))}
         </BarChart>
-      </ResponsiveContainer>
+      </ChartResponsiveContainer>
     </div>
   );
 }

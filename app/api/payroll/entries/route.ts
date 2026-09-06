@@ -8,12 +8,12 @@ import {
   isPayrollUserRole,
   PAYROLL_WORK_KIND_LABELS,
   normalizePayrollQuantity,
+  type PayrollWorkKindValue,
 } from "@/lib/payroll";
 import {
-  isPayrollKindVisibleForTrack,
-  shouldFilterPayrollOptionsByTrack,
-} from "@/lib/payroll-tracks";
-import { getPayrollKindTrackMap } from "@/lib/payroll-tracks.server";
+  isPayrollConfigVisibleForStaffRole,
+  shouldFilterPayrollOptionsByStaffRole,
+} from "@/lib/payroll-staff-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -62,13 +62,14 @@ const entrySelect = {
     select: { code: true, name: true, sectionTitle: true, subsectionTitle: true },
   },
   payrollConfig: {
-    select: { description: true },
+    select: { name: true },
   },
 } satisfies Prisma.PayrollWorkEntrySelect;
 
 type EntryRow = Prisma.PayrollWorkEntryGetPayload<{ select: typeof entrySelect }>;
 
 function entryPayload(row: EntryRow) {
+  const kind = row.kind as PayrollWorkKindValue | null;
   return {
     id: row.id,
     orderId: row.orderId,
@@ -76,7 +77,7 @@ function entryPayload(row: EntryRow) {
     payrollConfigId: row.payrollConfigId,
     priceListItemId: row.priceListItemId,
     kind: row.kind,
-    kindLabel: PAYROLL_WORK_KIND_LABELS[row.kind],
+    kindLabel: kind ? PAYROLL_WORK_KIND_LABELS[kind] : "",
     quantity: row.quantity,
     amountRub: row.amountRub,
     userId: row.userId,
@@ -86,11 +87,12 @@ function entryPayload(row: EntryRow) {
     orderNumber: row.order.orderNumber,
     patientName: row.order.patientName ?? "",
     doctorName: row.order.doctor.fullName,
-    priceCode: row.priceListItem.code,
-    priceName: row.priceListItem.name,
-    configDescription: row.payrollConfig?.description ?? row.priceListItem.name,
-    sectionTitle: row.priceListItem.sectionTitle,
-    subsectionTitle: row.priceListItem.subsectionTitle,
+    priceCode: row.priceListItem?.code ?? "",
+    priceName: row.priceListItem?.name ?? "",
+    configDescription: row.payrollConfig?.name ?? row.priceListItem?.name ?? "",
+    configName: row.payrollConfig?.name ?? "",
+    sectionTitle: row.priceListItem?.sectionTitle ?? null,
+    subsectionTitle: row.priceListItem?.subsectionTitle ?? null,
   };
 }
 
@@ -176,7 +178,8 @@ export async function POST(req: Request) {
   const payrollConfigId =
     typeof body.payrollConfigId === "string" ? body.payrollConfigId.trim() : "";
   const requestedUserId = typeof body.userId === "string" ? body.userId.trim() : "";
-  const userId = canReviewPayroll(session.role) && requestedUserId ? requestedUserId : session.sub;
+  const userId =
+    canReviewPayroll(session.role) && requestedUserId ? requestedUserId : session.sub;
   const quantity = normalizePayrollQuantity(body.quantity);
   if (!orderId || !payrollConfigId) {
     return NextResponse.json(
@@ -193,7 +196,7 @@ export async function POST(req: Request) {
     }),
     prisma.user.findFirst({
       where: { id: userId, tenantId, isActive: true },
-      select: { id: true, role: true, payrollTrack: true },
+      select: { id: true, role: true, payrollStaffRoleId: true },
     }),
     prisma.payrollPriceItemConfig.findFirst({
       where: { id: payrollConfigId, tenantId },
@@ -202,6 +205,8 @@ export async function POST(req: Request) {
         priceListItemId: true,
         kind: true,
         amountRub: true,
+        staffRoles: { select: { staffRoleId: true } },
+        priceItems: { select: { priceListItemId: true }, take: 1 },
       },
     }),
   ]);
@@ -215,21 +220,17 @@ export async function POST(req: Request) {
   if (config.amountRub <= 0) {
     return NextResponse.json({ error: "Для выбранной плашки не задана сумма" }, { status: 400 });
   }
-  if (targetUser && shouldFilterPayrollOptionsByTrack(targetUser.role)) {
-    const kindTrackMap = await getPayrollKindTrackMap(prisma, tenantId);
-    if (
-      !isPayrollKindVisibleForTrack(
-        config.kind,
-        targetUser.payrollTrack,
-        kindTrackMap,
-      )
-    ) {
+  if (shouldFilterPayrollOptionsByStaffRole(targetUser.role)) {
+    const roleIds = config.staffRoles.map((s) => s.staffRoleId);
+    if (!isPayrollConfigVisibleForStaffRole(roleIds, targetUser.payrollStaffRoleId)) {
       return NextResponse.json(
-        { error: "Эта категория ФОТ недоступна для направления пользователя" },
+        { error: "Этот ФОТ недоступен для роли пользователя" },
         { status: 403 },
       );
     }
   }
+  const priceListItemId =
+    config.priceItems[0]?.priceListItemId ?? config.priceListItemId ?? null;
   const amountRub = config.amountRub * quantity;
 
   const entry = await prisma.payrollWorkEntry.upsert({
@@ -245,7 +246,7 @@ export async function POST(req: Request) {
       orderId,
       kanbanCardId,
       payrollConfigId,
-      priceListItemId: config.priceListItemId,
+      priceListItemId,
       kind: config.kind,
       quantity,
       amountRub,

@@ -8,7 +8,6 @@ import {
   ComposedChart,
   Legend,
   Line,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -23,6 +22,7 @@ import { emptyContractorsLifecycle } from "@/lib/analytics/clients-lifecycle";
 import { AnalyticsDeadlinesPanel } from "@/components/analytics/AnalyticsDeadlinesPanel";
 import { AnalyticsCompareModal } from "@/components/analytics/AnalyticsCompareModal";
 import { AnalyticsContractorsLifecyclePanel } from "@/components/analytics/AnalyticsContractorsLifecyclePanel";
+import { ChartResponsiveContainer } from "@/components/analytics/ChartResponsiveContainer";
 
 const TABS = [
   { id: "finance" as const, label: "Финансы" },
@@ -681,7 +681,7 @@ export function AnalyticsPageClient() {
             </div>
           ) : null}
           <div className="h-[320px] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
-            <ResponsiveContainer width="100%" height="100%">
+            <ChartResponsiveContainer>
               <ComposedChart data={finance.series}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                 <XAxis
@@ -746,7 +746,7 @@ export function AnalyticsPageClient() {
                   dot={false}
                 />
               </ComposedChart>
-            </ResponsiveContainer>
+            </ChartResponsiveContainer>
           </div>
           <div className="rounded-lg border border-[var(--card-border)]">
             <div className="flex items-center justify-between border-b border-[var(--card-border)] bg-[var(--surface-subtle)] px-3 py-2">
@@ -1067,7 +1067,7 @@ export function AnalyticsPageClient() {
           </div>
           {priceChartData.length > 0 ? (
             <div className="h-[min(400px,60vh)] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
-              <ResponsiveContainer width="100%" height="100%">
+              <ChartResponsiveContainer>
                 <BarChart data={priceChartData} layout="vertical" margin={{ left: 8, right: 16 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                   <XAxis type="number" tick={{ fontSize: 11, fill: CHART_COLORS.muted }} />
@@ -1090,7 +1090,7 @@ export function AnalyticsPageClient() {
                   />
                   <Bar dataKey="revenue" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
+              </ChartResponsiveContainer>
             </div>
           ) : (
             <p className="text-sm text-[var(--text-muted)]">Нет данных за период.</p>
@@ -1144,7 +1144,7 @@ export function AnalyticsPageClient() {
               Клиники
             </h3>
             <div className="h-[280px] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
-              <ResponsiveContainer width="100%" height="100%">
+              <ChartResponsiveContainer>
                 <BarChart
                   data={contractors.clinics.slice(0, 12)}
                   margin={{ bottom: 48, left: 8 }}
@@ -1173,7 +1173,7 @@ export function AnalyticsPageClient() {
                   <Legend />
                   <Bar dataKey="revenue" name="Выручка" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
+              </ChartResponsiveContainer>
             </div>
           </section>
           <section>
@@ -1181,7 +1181,7 @@ export function AnalyticsPageClient() {
               Врачи (топ по выручке)
             </h3>
             <div className="h-[280px] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
-              <ResponsiveContainer width="100%" height="100%">
+              <ChartResponsiveContainer>
                 <BarChart
                   data={contractors.doctors.slice(0, 12)}
                   margin={{ bottom: 48, left: 8 }}
@@ -1209,7 +1209,7 @@ export function AnalyticsPageClient() {
                   />
                   <Bar dataKey="orderCount" name="Заказов" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
+              </ChartResponsiveContainer>
             </div>
           </section>
           <AnalyticsContractorsLifecyclePanel
@@ -1237,7 +1237,7 @@ export function AnalyticsPageClient() {
             <strong className="tabular-nums">{warehouse.movementCount}</strong>
           </p>
           <div className="h-[260px] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
-            <ResponsiveContainer width="100%" height="100%">
+            <ChartResponsiveContainer>
               <BarChart data={warehouse.byKind}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
                 <XAxis
@@ -1254,7 +1254,7 @@ export function AnalyticsPageClient() {
                 />
                 <Bar dataKey="count" name="Операций" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ChartResponsiveContainer>
           </div>
           <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
             <table className="w-full min-w-[560px] border-collapse text-left text-sm">

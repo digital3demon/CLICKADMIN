@@ -1,18 +1,11 @@
 import { NextResponse } from "next/server";
+import ExcelJS from "exceljs";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
-import { getPrisma } from "@/lib/get-prisma";
 import { canConfigurePayroll } from "@/lib/payroll";
-import { getActivePriceListId } from "@/lib/price-list-workspace";
-import {
-  buildPayrollImportPreview,
-  parsePayrollConfigXlsxBuffer,
-} from "@/lib/payroll-xlsx";
+import { extractFreeformPayrollCandidates } from "@/lib/payroll-xlsx-freeform";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
-
-const MAX_BYTES = 8 * 1024 * 1024;
 
 export async function POST(req: Request) {
   const session = await getSessionFromCookies();
@@ -22,62 +15,35 @@ export async function POST(req: Request) {
   if (!canConfigurePayroll(session.role)) {
     return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
   }
-  const tenantId = await requireSessionTenantId(session);
-  const prisma = await getPrisma();
+  await requireSessionTenantId(session);
 
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Ожидается multipart/form-data" }, { status: 400 });
-  }
+  const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Выберите файл .xlsx" }, { status: 400 });
-  }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "Файл слишком большой (макс. 8 МБ)" }, { status: 400 });
+    return NextResponse.json({ error: "Ожидается файл file" }, { status: 400 });
   }
   const buf = Buffer.from(await file.arrayBuffer());
-  const parsed = await parsePayrollConfigXlsxBuffer(buf);
+  const wb = new ExcelJS.Workbook();
+  // exceljs typings expect ArrayBuffer-like
+  await wb.xlsx.load(buf as unknown as ExcelJS.Buffer);
 
-  const activePriceListId = await getActivePriceListId(prisma);
-  const [priceItems, existingConfigs] = await Promise.all([
-    prisma.priceListItem.findMany({
-      where: { priceListId: activePriceListId, isActive: true },
-      select: { id: true, code: true, name: true },
-    }),
-    prisma.payrollPriceItemConfig.findMany({
-      where: { tenantId },
-      select: {
-        id: true,
-        priceListItemId: true,
-        kind: true,
-        amountRub: true,
-        description: true,
-      },
-    }),
-  ]);
+  const sheets: { name: string; rows: unknown[][] }[] = [];
+  for (const ws of wb.worksheets) {
+    const rows: unknown[][] = [];
+    ws.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+      const vals: unknown[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        vals[col - 1] = cell.value;
+      });
+      while (rows.length < rowNumber) rows.push([]);
+      rows[rowNumber - 1] = vals;
+    });
+    sheets.push({ name: ws.name, rows });
+  }
 
-  const rows = buildPayrollImportPreview({
-    priceItems,
-    existingConfigs,
-    main: parsed.main,
-    uncategorized: parsed.uncategorized,
-  });
-
-  const actionable = rows.filter((r) => r.action !== "unchanged");
-  const withIssues = rows.filter((r) => r.issues.length > 0);
-
-  return NextResponse.json({
-    parseIssues: parsed.parseIssues,
-    rows,
-    summary: {
-      total: rows.length,
-      toCreate: actionable.filter((r) => r.action === "create").length,
-      toUpdate: actionable.filter((r) => r.action === "update").length,
-      unchanged: rows.filter((r) => r.action === "unchanged").length,
-      withIssues: withIssues.length,
-    },
-  });
+  const candidates = extractFreeformPayrollCandidates(sheets);
+  return NextResponse.json(
+    { candidates },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }

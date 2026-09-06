@@ -2,18 +2,19 @@ import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/get-prisma";
 import { getSessionWithModuleAccess } from "@/lib/auth/session-with-modules";
 import { canChangeUserRoles, canManageUsers } from "@/lib/auth/permissions";
-import type { PayrollUserTrack, UserRole } from "@prisma/client";
+import type { UserRole } from "@prisma/client";
 import { parseUserRole } from "@/lib/user-role-labels";
-import {
-  parsePayrollUserTrack,
-  payrollTrackRequiredForRole,
-} from "@/lib/payroll-tracks";
+import { payrollStaffRoleRequiredForRole } from "@/lib/payroll-staff-roles";
 import { deleteUserAvatarFile } from "@/lib/user-custom-avatar";
 import { userInTenantWhere } from "@/lib/auth/user-in-tenant";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-type PatchBody = { isActive?: boolean; role?: unknown; payrollTrack?: unknown };
+type PatchBody = {
+  isActive?: boolean;
+  role?: unknown;
+  payrollStaffRoleId?: unknown;
+};
 
 async function otherOwnerCount(
   prisma: Awaited<ReturnType<typeof getPrisma>>,
@@ -44,33 +45,31 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 
   const hasActive = typeof body.isActive === "boolean";
-  const newRole =
-    body.role !== undefined ? parseUserRole(body.role) : undefined;
+  const newRole = body.role !== undefined ? parseUserRole(body.role) : undefined;
   const hasRole = body.role !== undefined;
-  const hasPayrollTrack = body.payrollTrack !== undefined;
-  const newPayrollTrack = hasPayrollTrack
-    ? body.payrollTrack === null
+  const hasStaffRole = body.payrollStaffRoleId !== undefined;
+  const newStaffRoleId = hasStaffRole
+    ? body.payrollStaffRoleId === null
       ? null
-      : parsePayrollUserTrack(body.payrollTrack)
+      : typeof body.payrollStaffRoleId === "string"
+        ? body.payrollStaffRoleId.trim() || null
+        : null
     : undefined;
 
-  if (!hasActive && !hasRole && !hasPayrollTrack) {
+  if (!hasActive && !hasRole && !hasStaffRole) {
     return NextResponse.json(
-      { error: "Ожидается isActive, role и/или payrollTrack" },
+      { error: "Ожидается isActive, role и/или payrollStaffRoleId" },
       { status: 400 },
     );
   }
   if (hasRole && newRole == null) {
     return NextResponse.json({ error: "Некорректная роль" }, { status: 400 });
   }
-  if ((hasRole || hasPayrollTrack) && !canChangeUserRoles(s.role)) {
+  if ((hasRole || hasStaffRole) && !canChangeUserRoles(s.role)) {
     return NextResponse.json(
-      { error: "Смена роли и направления доступна только владельцу" },
+      { error: "Смена роли доступна только владельцу" },
       { status: 403 },
     );
-  }
-  if (hasPayrollTrack && body.payrollTrack !== null && newPayrollTrack == null) {
-    return NextResponse.json({ error: "Некорректное направление" }, { status: 400 });
   }
 
   const where = userInTenantWhere(id, s.tid);
@@ -81,7 +80,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const prisma = await getPrisma();
   const target = await prisma.user.findFirst({
     where,
-    select: { id: true, role: true, payrollTrack: true, isActive: true },
+    select: { id: true, role: true, payrollStaffRoleId: true, isActive: true },
   });
   if (!target) {
     return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
@@ -115,7 +114,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (target.role === "OWNER" && newRole !== "OWNER") {
       if ((await otherOwnerCount(prisma, id, where.tenantId)) < 1) {
         return NextResponse.json(
-          { error: "Нельзя снять роль владельца с последнего пользователя с ролью «Владелец»" },
+          {
+            error:
+              "Нельзя снять роль владельца с последнего пользователя с ролью «Владелец»",
+          },
           { status: 400 },
         );
       }
@@ -130,17 +132,27 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
   }
 
+  if (newStaffRoleId) {
+    const roleOk = await prisma.payrollStaffRole.findFirst({
+      where: { id: newStaffRoleId, tenantId: where.tenantId },
+      select: { id: true },
+    });
+    if (!roleOk) {
+      return NextResponse.json({ error: "Роль ФОТ не найдена" }, { status: 400 });
+    }
+  }
+
   const effectiveRole = hasRole && newRole != null ? newRole : target.role;
-  if (payrollTrackRequiredForRole(effectiveRole)) {
-    const trackAfter =
-      hasPayrollTrack && newPayrollTrack !== undefined
-        ? newPayrollTrack
+  if (payrollStaffRoleRequiredForRole(effectiveRole)) {
+    const staffAfter =
+      hasStaffRole && newStaffRoleId !== undefined
+        ? newStaffRoleId
         : hasRole
           ? null
-          : target.payrollTrack;
-    if (!trackAfter) {
+          : target.payrollStaffRoleId;
+    if (!staffAfter) {
       return NextResponse.json(
-        { error: "Для роли «Пользователь» укажите направление (Цифра, Мануал и т.д.)" },
+        { error: "Для роли «Пользователь» укажите роль сотрудника ФОТ" },
         { status: 400 },
       );
     }
@@ -149,20 +161,24 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const data: {
     isActive?: boolean;
     role?: UserRole;
-    payrollTrack?: PayrollUserTrack | null;
+    payrollStaffRoleId?: string | null;
   } = {};
   if (hasActive) data.isActive = body.isActive;
   if (hasRole && newRole != null) {
     data.role = newRole;
-    if (!payrollTrackRequiredForRole(newRole)) {
-      data.payrollTrack = null;
+    if (!payrollStaffRoleRequiredForRole(newRole)) {
+      data.payrollStaffRoleId = null;
     }
   }
-  if (hasPayrollTrack && newPayrollTrack !== undefined) {
-    data.payrollTrack = newPayrollTrack;
-  } else if (hasRole && newRole != null && payrollTrackRequiredForRole(newRole)) {
+  if (hasStaffRole && newStaffRoleId !== undefined) {
+    data.payrollStaffRoleId = newStaffRoleId;
+  } else if (
+    hasRole &&
+    newRole != null &&
+    payrollStaffRoleRequiredForRole(newRole)
+  ) {
     return NextResponse.json(
-      { error: "При смене на роль «Пользователь» укажите направление" },
+      { error: "При смене на роль «Пользователь» укажите роль сотрудника ФОТ" },
       { status: 400 },
     );
   }
@@ -171,10 +187,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Нет изменений" }, { status: 400 });
   }
 
-  const updated = await prisma.user.updateMany({
-    where,
-    data,
-  });
+  const updated = await prisma.user.updateMany({ where, data });
   if (updated.count === 0) {
     return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   }

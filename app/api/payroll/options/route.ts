@@ -2,16 +2,16 @@ import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth/session-server";
 import { requireSessionTenantId } from "@/lib/auth/tenant-for-session";
 import { getPrisma } from "@/lib/get-prisma";
-import { isPayrollUserRole, PAYROLL_WORK_KIND_LABELS } from "@/lib/payroll";
+import { isPayrollUserRole } from "@/lib/payroll";
 import {
-  isPayrollKindVisibleForTrack,
-  shouldFilterPayrollOptionsByTrack,
-} from "@/lib/payroll-tracks";
-import { getPayrollKindTrackMap } from "@/lib/payroll-tracks.server";
+  configMatchesOrderPriceItems,
+  isPayrollConfigVisibleForStaffRole,
+  shouldFilterPayrollOptionsByStaffRole,
+} from "@/lib/payroll-staff-roles";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getSessionFromCookies();
   if (!session?.sub) {
     return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
@@ -21,69 +21,91 @@ export async function GET() {
   }
   const tenantId = await requireSessionTenantId(session);
   const prisma = await getPrisma();
-  const filterByTrack = shouldFilterPayrollOptionsByTrack(session.role);
-  const [kindTrackMap, sessionUser] = await Promise.all([
-    filterByTrack ? getPayrollKindTrackMap(prisma, tenantId) : Promise.resolve(null),
-    filterByTrack
-      ? prisma.user.findFirst({
-          where: { id: session.sub, tenantId },
-          select: { payrollTrack: true },
-        })
-      : Promise.resolve(null),
-  ]);
+  const url = new URL(req.url);
+  const orderId = url.searchParams.get("orderId")?.trim() ?? "";
+
+  const filterByRole = shouldFilterPayrollOptionsByStaffRole(session.role);
+  const sessionUser = filterByRole
+    ? await prisma.user.findFirst({
+        where: { id: session.sub, tenantId },
+        select: { payrollStaffRoleId: true },
+      })
+    : null;
+
+  let orderPriceIds = new Set<string>();
+  if (orderId) {
+    const constructions = await prisma.orderConstruction.findMany({
+      where: { orderId, order: { tenantId } },
+      select: { priceListItemId: true },
+    });
+    orderPriceIds = new Set(
+      constructions.map((c) => c.priceListItemId).filter(Boolean),
+    );
+  }
+
   const rows = await prisma.payrollPriceItemConfig.findMany({
     where: {
       tenantId,
       amountRub: { gt: 0 },
-      priceListItem: { isActive: true },
     },
-    orderBy: [
-      { sortOrder: "asc" },
-      { priceListItem: { sortOrder: "asc" } },
-      { priceListItem: { code: "asc" } },
-    ],
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: {
       id: true,
-      priceListItemId: true,
-      kind: true,
+      name: true,
       amountRub: true,
-      description: true,
-      priceListItem: {
+      staffRoles: { select: { staffRoleId: true } },
+      priceItems: {
         select: {
-          code: true,
-          name: true,
-          sectionTitle: true,
-          subsectionTitle: true,
+          priceListItemId: true,
+          priceListItem: {
+            select: { code: true, name: true, isActive: true },
+          },
         },
       },
     },
   });
-  const visibleRows =
-    filterByTrack && kindTrackMap
-      ? rows.filter((r) =>
-          isPayrollKindVisibleForTrack(
-            r.kind,
-            sessionUser?.payrollTrack,
-            kindTrackMap,
-          ),
-        )
-      : rows;
+
+  const mapped = rows
+    .map((r) => {
+      const staffRoleIds = r.staffRoles.map((s) => s.staffRoleId);
+      const priceItems = r.priceItems
+        .filter((p) => p.priceListItem.isActive)
+        .map((p) => ({
+          id: p.priceListItemId,
+          code: p.priceListItem.code,
+          name: p.priceListItem.name,
+        }));
+      const linkedIds = priceItems.map((p) => p.id);
+      const matchedOrder = configMatchesOrderPriceItems(linkedIds, orderPriceIds);
+      return {
+        payrollConfigId: r.id,
+        name: r.name,
+        amountRub: r.amountRub,
+        staffRoleIds,
+        priceItems,
+        matchedOrder,
+        // legacy fields for older UI
+        description: r.name,
+        kind: null as string | null,
+        kindLabel: "",
+        code: priceItems[0]?.code ?? "",
+        priceListItemId: priceItems[0]?.id ?? null,
+      };
+    })
+    .filter((r) => {
+      if (!filterByRole) return true;
+      return isPayrollConfigVisibleForStaffRole(
+        r.staffRoleIds,
+        sessionUser?.payrollStaffRoleId,
+      );
+    })
+    .sort((a, b) => {
+      if (a.matchedOrder !== b.matchedOrder) return a.matchedOrder ? -1 : 1;
+      return a.name.localeCompare(b.name, "ru");
+    });
 
   return NextResponse.json(
-    {
-      items: visibleRows.map((r) => ({
-        payrollConfigId: r.id,
-        priceListItemId: r.priceListItemId,
-        kind: r.kind,
-        kindLabel: PAYROLL_WORK_KIND_LABELS[r.kind],
-        amountRub: r.amountRub,
-        description: r.description,
-        code: r.priceListItem.code,
-        name: r.priceListItem.name,
-        sectionTitle: r.priceListItem.sectionTitle,
-        subsectionTitle: r.priceListItem.subsectionTitle,
-      })),
-    },
+    { items: mapped },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

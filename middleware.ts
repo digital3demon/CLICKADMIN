@@ -18,7 +18,7 @@ import {
   requiredModuleForPath,
 } from "@/lib/role-module-paths";
 import { isOrdersShipmentListPath } from "@/lib/orders-shipment-list-query";
-import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
+import { getEffectiveModuleAccessForSessionUser } from "@/lib/role-module-resolver";
 import { getOrdersPrisma } from "@/lib/get-domain-prisma";
 import { canOpenMailSettingsModule } from "@/lib/mail/mail-settings-access";
 import type { UserRole } from "@prisma/client";
@@ -723,7 +723,11 @@ export async function middleware(req: NextRequest) {
   }
 
   if (!session.demo && !isSingleUserPortable() && effectiveTenantId) {
-    const access = await getEffectiveModuleAccess(effectiveTenantId, role);
+    const access = await getEffectiveModuleAccessForSessionUser(
+      effectiveTenantId,
+      role,
+      session.sub,
+    );
     const mod = getModuleForPathname(pathname);
     const requiredModule = requiredModuleForPath(
       pathname,

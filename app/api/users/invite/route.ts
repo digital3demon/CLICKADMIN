@@ -13,15 +13,14 @@ import {
 import { sendInviteActivationEmail } from "@/lib/email/send-invite-email";
 import { PLACEHOLDER_INVITED_DISPLAY_NAME } from "@/lib/user-invite-defaults";
 import {
-  parsePayrollUserTrack,
-  payrollTrackRequiredForRole,
-} from "@/lib/payroll-tracks";
+  payrollStaffRoleRequiredForRole,
+} from "@/lib/payroll-staff-roles";
 
 type Body = {
   email?: string;
   phone?: string;
   role?: string;
-  payrollTrack?: string;
+  payrollStaffRoleId?: string;
 };
 
 function normEmail(v: string): string {
@@ -55,17 +54,38 @@ export async function POST(req: Request) {
   if (!isInvitableRole(roleRaw)) {
     return NextResponse.json({ error: "Выберите роль из списка" }, { status: 400 });
   }
-  const payrollTrack = parsePayrollUserTrack(body.payrollTrack);
-  if (payrollTrackRequiredForRole(roleRaw) && !payrollTrack) {
+  const payrollStaffRoleId =
+    typeof body.payrollStaffRoleId === "string"
+      ? body.payrollStaffRoleId.trim()
+      : "";
+  if (payrollStaffRoleRequiredForRole(roleRaw) && !payrollStaffRoleId) {
     return NextResponse.json(
-      { error: "Для роли «Пользователь» укажите направление (Цифра, Мануал и т.д.)" },
+      { error: "Для роли «Пользователь» укажите роль сотрудника ФОТ" },
       { status: 400 },
     );
   }
-  const payrollTrackData =
-    payrollTrackRequiredForRole(roleRaw) && payrollTrack
-      ? { payrollTrack }
-      : { payrollTrack: null as null };
+  const payrollStaffRoleData =
+    payrollStaffRoleRequiredForRole(roleRaw) && payrollStaffRoleId
+      ? { payrollStaffRoleId }
+      : { payrollStaffRoleId: null as null };
+
+  if (payrollStaffRoleData.payrollStaffRoleId) {
+    const dbCheck = await getPrisma();
+    const inviterCheck = await dbCheck.user.findUniqueOrThrow({
+      where: { id: s.sub },
+      select: { tenantId: true },
+    });
+    const roleOk = await dbCheck.payrollStaffRole.findFirst({
+      where: {
+        id: payrollStaffRoleData.payrollStaffRoleId,
+        tenantId: inviterCheck.tenantId,
+      },
+      select: { id: true },
+    });
+    if (!roleOk) {
+      return NextResponse.json({ error: "Роль ФОТ не найдена" }, { status: 400 });
+    }
+  }
 
   /** Приглашение по телефону — вход только через Telegram с этим номером. */
   if (phoneRaw) {
@@ -120,7 +140,7 @@ export async function POST(req: Request) {
         phone: norm,
         displayName: PLACEHOLDER_INVITED_DISPLAY_NAME,
         role: roleRaw,
-        ...payrollTrackData,
+        ...payrollStaffRoleData,
         inviteCodeHash: null,
         passwordHash: null,
         isActive: true,
@@ -128,7 +148,7 @@ export async function POST(req: Request) {
       update: {
         phone: norm,
         role: roleRaw,
-        ...payrollTrackData,
+        ...payrollStaffRoleData,
         inviteCodeHash: null,
         passwordHash: null,
         isActive: true,
@@ -184,14 +204,14 @@ export async function POST(req: Request) {
       email,
       displayName: PLACEHOLDER_INVITED_DISPLAY_NAME,
       role: roleRaw,
-      ...payrollTrackData,
+      ...payrollStaffRoleData,
       inviteCodeHash,
       passwordHash: null,
       isActive: true,
     },
     update: {
       role: roleRaw,
-      ...payrollTrackData,
+      ...payrollStaffRoleData,
       inviteCodeHash,
       passwordHash: null,
       isActive: true,

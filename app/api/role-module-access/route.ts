@@ -20,9 +20,8 @@ import {
   requiredParentBundle,
   type BundleId,
 } from "@/lib/role-module-bundles";
-import {
-  getEffectiveModuleAccess,
-} from "@/lib/role-module-resolver";
+import { getEffectiveModuleAccess } from "@/lib/role-module-resolver";
+import { ensureDefaultPayrollStaffRoles } from "@/lib/payroll-staff-roles.server";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +34,6 @@ function bundleAccessForResponse(
   );
 }
 
-/**
- * Матрица «роль × пакет» (только владелец).
- * effective — итог с учётом БД, свёрнутый до пакетов.
- * tenantId — через getTenantIdForSession (в демо JWT может не содержать tid).
- */
 export async function GET() {
   const s = await getSessionFromCookies();
   if (!s || s.role !== "OWNER") {
@@ -51,10 +45,26 @@ export async function GET() {
   }
 
   const prisma = await getPrisma();
+  await ensureDefaultPayrollStaffRoles(prisma, tenantId);
+
   const effective: Record<string, Record<string, boolean>> = {};
   for (const role of ROLES_IN_ACCESS_MATRIX) {
     const acc = await getEffectiveModuleAccess(tenantId, role, { db: prisma });
     effective[role] = bundleAccessForResponse(acc);
+  }
+
+  const staffRoles = await prisma.payrollStaffRole.findMany({
+    where: { tenantId },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true },
+  });
+  const staffEffective: Record<string, Record<string, boolean>> = {};
+  for (const sr of staffRoles) {
+    const acc = await getEffectiveModuleAccess(tenantId, "USER", {
+      db: prisma,
+      payrollStaffRoleId: sr.id,
+    });
+    staffEffective[sr.id] = bundleAccessForResponse(acc);
   }
 
   return NextResponse.json({
@@ -69,12 +79,15 @@ export async function GET() {
       bundles: g.bundles,
     })),
     roles: ROLES_IN_ACCESS_MATRIX,
+    staffRoles,
     effective,
+    staffEffective,
   });
 }
 
 type PutBody = {
   role?: UserRole;
+  staffRoleId?: string;
   bundle?: BundleId;
   allowed?: boolean;
 };
@@ -96,27 +109,16 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Некорректный JSON" }, { status: 400 });
   }
 
-  const role = body.role;
   const bundle = body.bundle;
-  if (
-    role == null ||
-    bundle == null ||
-    typeof body.allowed !== "boolean" ||
-    !isBundleId(bundle)
-  ) {
+  const staffRoleId =
+    typeof body.staffRoleId === "string" ? body.staffRoleId.trim() : "";
+  const role = body.role;
+
+  if (bundle == null || typeof body.allowed !== "boolean" || !isBundleId(bundle)) {
     return NextResponse.json(
-      { error: "Ожидается role, bundle, allowed" },
+      { error: "Ожидается role или staffRoleId, bundle, allowed" },
       { status: 400 },
     );
-  }
-  if (role === "OWNER") {
-    return NextResponse.json(
-      { error: "Роль владельца не настраивается" },
-      { status: 400 },
-    );
-  }
-  if (!ROLES_IN_ACCESS_MATRIX.includes(role)) {
-    return NextResponse.json({ error: "Некорректная роль" }, { status: 400 });
   }
   if (isClickMigOwnerOnlyBundle(bundle)) {
     return NextResponse.json(
@@ -129,6 +131,90 @@ export async function PUT(req: Request) {
   }
 
   const prisma = await getPrisma();
+
+  if (staffRoleId) {
+    const sr = await prisma.payrollStaffRole.findFirst({
+      where: { id: staffRoleId, tenantId },
+      select: { id: true },
+    });
+    if (!sr) {
+      return NextResponse.json({ error: "Роль ФОТ не найдена" }, { status: 404 });
+    }
+    const accBefore = await getEffectiveModuleAccess(tenantId, "USER", {
+      db: prisma,
+      payrollStaffRoleId: staffRoleId,
+    });
+    const bundlesBefore = collapseToBundles(accBefore);
+    if (body.allowed) {
+      const parent = requiredParentBundle(bundle);
+      if (parent && !bundlesBefore[parent]) {
+        return NextResponse.json(
+          { error: `Сначала включите «${BUNDLE_LABELS[parent]}» для этой роли.` },
+          { status: 400 },
+        );
+      }
+    } else {
+      for (const child of childBundlesOf(bundle)) {
+        if (bundlesBefore[child]) {
+          return NextResponse.json(
+            {
+              error: `Сначала отключите «${BUNDLE_LABELS[child]}» для этой роли.`,
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
+    const modulesToWrite = atomicModulesForBundleToggle(bundle);
+    for (const module of modulesToWrite) {
+      if (!ALL_APP_MODULES.includes(module)) continue;
+      const def = defaultModuleAllowed("USER", module);
+      if (body.allowed === def) {
+        await prisma.staffRoleModuleAccess.deleteMany({
+          where: { tenantId, staffRoleId, module },
+        });
+      } else {
+        await prisma.staffRoleModuleAccess.upsert({
+          where: {
+            tenantId_staffRoleId_module: { tenantId, staffRoleId, module },
+          },
+          create: {
+            tenantId,
+            staffRoleId,
+            module,
+            allowed: body.allowed,
+          },
+          update: { allowed: body.allowed },
+        });
+      }
+    }
+    const accAfter = await getEffectiveModuleAccess(tenantId, "USER", {
+      db: prisma,
+      payrollStaffRoleId: staffRoleId,
+    });
+    return NextResponse.json({
+      ok: true,
+      staffRoleId,
+      effective: bundleAccessForResponse(accAfter),
+    });
+  }
+
+  if (role == null) {
+    return NextResponse.json(
+      { error: "Ожидается role или staffRoleId" },
+      { status: 400 },
+    );
+  }
+  if (role === "OWNER") {
+    return NextResponse.json(
+      { error: "Роль владельца не настраивается" },
+      { status: 400 },
+    );
+  }
+  if (!ROLES_IN_ACCESS_MATRIX.includes(role)) {
+    return NextResponse.json({ error: "Некорректная роль" }, { status: 400 });
+  }
+
   const accBefore = await getEffectiveModuleAccess(tenantId, role, { db: prisma });
   const bundlesBefore = collapseToBundles(accBefore);
 
@@ -136,9 +222,7 @@ export async function PUT(req: Request) {
     const parent = requiredParentBundle(bundle);
     if (parent && !bundlesBefore[parent]) {
       return NextResponse.json(
-        {
-          error: `Сначала включите «${BUNDLE_LABELS[parent]}» для этой роли.`,
-        },
+        { error: `Сначала включите «${BUNDLE_LABELS[parent]}» для этой роли.` },
         { status: 400 },
       );
     }
@@ -156,7 +240,6 @@ export async function PUT(req: Request) {
   }
 
   const modulesToWrite = atomicModulesForBundleToggle(bundle);
-
   for (const module of modulesToWrite) {
     if (!ALL_APP_MODULES.includes(module)) continue;
     const def = defaultModuleAllowed(role, module);

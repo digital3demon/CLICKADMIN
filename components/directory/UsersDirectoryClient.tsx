@@ -1,17 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PayrollUserTrack, UserRole } from "@prisma/client";
 import {
   ALL_USER_ROLES,
   INVITABLE_ROLES,
   USER_ROLE_LABELS,
 } from "@/lib/user-role-labels";
-import {
-  PAYROLL_USER_TRACK_LABELS,
-  PAYROLL_USER_TRACK_VALUES,
-} from "@/lib/payroll-tracks";
 
 export type UserDirectoryRow = {
   id: string;
@@ -19,7 +15,10 @@ export type UserDirectoryRow = {
   phone: string | null;
   displayName: string;
   role: UserRole;
-  payrollTrack: PayrollUserTrack | null;
+  payrollStaffRoleId: string | null;
+  payrollStaffRoleName: string | null;
+  /** @deprecated unused — replaced by payrollStaffRoleId */
+  payrollTrack?: PayrollUserTrack | null;
   createdAt: string;
   lastLoginAt: string | null;
   isActive: boolean;
@@ -28,6 +27,8 @@ export type UserDirectoryRow = {
   hasPassword: boolean;
   awaitingTelegram: boolean;
 };
+
+type StaffRoleOption = { id: string; name: string };
 
 const inputClass =
   "mt-1 w-full rounded-md border border-[var(--input-border)] bg-[var(--card-bg)] px-2.5 py-1.5 text-sm text-[var(--app-text)] shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500";
@@ -70,6 +71,7 @@ export function UsersDirectoryClient({
   canInviteUsers,
 }: UsersDirectoryClientProps) {
   const [users, setUsers] = useState<UserDirectoryRow[]>(initialUsers);
+  const [staffRoles, setStaffRoles] = useState<StaffRoleOption[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,10 +81,10 @@ export function UsersDirectoryClient({
     id: string;
     displayName: string;
     role: UserRole;
-    payrollTrack: PayrollUserTrack | null;
+    payrollStaffRoleId: string | null;
   } | null>(null);
   const [rolePick, setRolePick] = useState<UserRole>("ADMINISTRATOR");
-  const [trackPick, setTrackPick] = useState<PayrollUserTrack>("DIGITAL");
+  const [staffRolePick, setStaffRolePick] = useState<string>("");
   const [resetBusyId, setResetBusyId] = useState<string | null>(null);
   const [resetCodeModal, setResetCodeModal] = useState<{
     displayName: string;
@@ -96,7 +98,35 @@ export function UsersDirectoryClient({
   const [phone, setPhone] = useState("");
   const [inviteByEmail, setInviteByEmail] = useState(false);
   const [role, setRole] = useState<UserRole>("ADMINISTRATOR");
-  const [inviteTrack, setInviteTrack] = useState<PayrollUserTrack>("DIGITAL");
+  const [inviteStaffRoleId, setInviteStaffRoleId] = useState("");
+
+  useEffect(() => {
+    if (!canChangeUserRoles && !canInviteUsers) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/payroll/staff-roles", {
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const j = (await res.json()) as { roles?: StaffRoleOption[] };
+        if (!cancelled && Array.isArray(j.roles)) {
+          setStaffRoles(j.roles.map((r) => ({ id: r.id, name: r.name })));
+        }
+      } catch {
+        /* ignore — invite/role UI покажет пустой список */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canChangeUserRoles, canInviteUsers]);
+
+  useEffect(() => {
+    if (staffRoles.length === 0) return;
+    setInviteStaffRoleId((prev) => prev || staffRoles[0]!.id);
+    setStaffRolePick((prev) => prev || staffRoles[0]!.id);
+  }, [staffRoles]);
 
   const reload = useCallback(async () => {
     const res = await fetch("/api/users", { cache: "no-store" });
@@ -106,6 +136,8 @@ export function UsersDirectoryClient({
       j.users.map((u) => ({
         ...u,
         phone: u.phone ?? null,
+        payrollStaffRoleId: u.payrollStaffRoleId ?? null,
+        payrollStaffRoleName: u.payrollStaffRoleName ?? null,
         awaitingTelegram: Boolean(u.awaitingTelegram),
         pendingPasswordReset: Boolean(u.pendingPasswordReset),
         hasPassword: Boolean(u.hasPassword),
@@ -125,16 +157,20 @@ export function UsersDirectoryClient({
   const patchUserRole = useCallback(
     async (
       id: string,
-      patch: { role?: UserRole; payrollTrack?: PayrollUserTrack | null },
+      patch: { role?: UserRole; payrollStaffRoleId?: string | null },
     ): Promise<boolean> => {
       setError(null);
       setOkMsg(null);
       setRoleBusyId(id);
       try {
-        const body: { role?: UserRole; payrollTrack?: PayrollUserTrack | null } =
-          {};
+        const body: {
+          role?: UserRole;
+          payrollStaffRoleId?: string | null;
+        } = {};
         if (patch.role !== undefined) body.role = patch.role;
-        if (patch.payrollTrack !== undefined) body.payrollTrack = patch.payrollTrack;
+        if (patch.payrollStaffRoleId !== undefined) {
+          body.payrollStaffRoleId = patch.payrollStaffRoleId;
+        }
         if (Object.keys(body).length === 0) return true;
         const res = await fetch(`/api/users/${id}`, {
           method: "PATCH",
@@ -259,16 +295,22 @@ export function UsersDirectoryClient({
   const submitInvite = useCallback(async () => {
     setError(null);
     setOkMsg(null);
+    if (role === "USER" && !inviteStaffRoleId) {
+      setError("Выберите роль сотрудника (ФОТ)");
+      return;
+    }
     setBusy(true);
     try {
+      const staffPayload =
+        role === "USER" ? { payrollStaffRoleId: inviteStaffRoleId } : {};
       const res = await fetch("/api/users/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(
           inviteByEmail
-            ? { email, role, payrollTrack: role === "USER" ? inviteTrack : null }
-            : { phone, role, payrollTrack: role === "USER" ? inviteTrack : null },
+            ? { email, role, ...staffPayload }
+            : { phone, role, ...staffPayload },
         ),
       });
       const j = (await res.json().catch(() => ({}))) as {
@@ -303,7 +345,7 @@ export function UsersDirectoryClient({
       setEmail("");
       setPhone("");
       setRole("ADMINISTRATOR");
-      setInviteTrack("DIGITAL");
+      setInviteStaffRoleId(staffRoles[0]?.id ?? "");
       setInviteOpen(false);
       await reload();
     } catch {
@@ -311,7 +353,7 @@ export function UsersDirectoryClient({
     } finally {
       setBusy(false);
     }
-  }, [email, phone, inviteByEmail, inviteTrack, reload, role]);
+  }, [email, phone, inviteByEmail, inviteStaffRoleId, reload, role, staffRoles]);
 
   return (
     <div>
@@ -377,9 +419,9 @@ export function UsersDirectoryClient({
                     <span className="font-medium text-[var(--app-text)]">
                       {USER_ROLE_LABELS[u.role]}
                     </span>
-                    {u.role === "USER" && u.payrollTrack ? (
+                    {u.role === "USER" && u.payrollStaffRoleName ? (
                       <span className="text-xs text-[var(--text-muted)]">
-                        {PAYROLL_USER_TRACK_LABELS[u.payrollTrack]}
+                        {u.payrollStaffRoleName}
                       </span>
                     ) : null}
                     {canChangeUserRoles ? (
@@ -391,12 +433,14 @@ export function UsersDirectoryClient({
                           setError(null);
                           setOkMsg(null);
                           setRolePick(u.role);
-                          setTrackPick(u.payrollTrack ?? "DIGITAL");
+                          setStaffRolePick(
+                            u.payrollStaffRoleId ?? staffRoles[0]?.id ?? "",
+                          );
                           setRoleModal({
                             id: u.id,
                             displayName: u.displayName,
                             role: u.role,
-                            payrollTrack: u.payrollTrack,
+                            payrollStaffRoleId: u.payrollStaffRoleId,
                           });
                         }}
                       >
@@ -529,24 +573,28 @@ export function UsersDirectoryClient({
             </label>
             {rolePick === "USER" ? (
               <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
-                Направление (для ФОТ)
+                Роль сотрудника (ФОТ)
                 <select
                   className={inputClass}
-                  value={trackPick}
-                  disabled={roleBusyId === roleModal.id}
-                  onChange={(e) => setTrackPick(e.target.value as PayrollUserTrack)}
+                  value={staffRolePick}
+                  disabled={roleBusyId === roleModal.id || staffRoles.length === 0}
+                  onChange={(e) => setStaffRolePick(e.target.value)}
                 >
-                  {PAYROLL_USER_TRACK_VALUES.map((track) => (
-                    <option key={track} value={track}>
-                      {PAYROLL_USER_TRACK_LABELS[track]}
-                    </option>
-                  ))}
+                  {staffRoles.length === 0 ? (
+                    <option value="">Нет ролей ФОТ</option>
+                  ) : (
+                    staffRoles.map((sr) => (
+                      <option key={sr.id} value={sr.id}>
+                        {sr.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </label>
             ) : null}
             <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">
-              Для роли «Пользователь» укажите направление: от него зависит набор плашек
-              в блоке «Что сделано».
+              Для роли «Пользователь» укажите роль сотрудника (ФОТ): от неё зависят
+              плашки «Что сделано» и доступ к модулям.
             </p>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
@@ -561,25 +609,26 @@ export function UsersDirectoryClient({
                 type="button"
                 disabled={
                   roleBusyId === roleModal.id ||
+                  (rolePick === "USER" && !staffRolePick) ||
                   (rolePick === roleModal.role &&
                     (rolePick !== "USER" ||
-                      trackPick === (roleModal.payrollTrack ?? "DIGITAL")))
+                      staffRolePick === (roleModal.payrollStaffRoleId ?? "")))
                 }
                 onClick={() => {
                   void (async () => {
                     const roleChanged = rolePick !== roleModal.role;
-                    const trackChanged =
+                    const staffChanged =
                       rolePick === "USER" &&
-                      trackPick !== (roleModal.payrollTrack ?? "DIGITAL");
+                      staffRolePick !== (roleModal.payrollStaffRoleId ?? "");
                     const patch: {
                       role?: UserRole;
-                      payrollTrack?: PayrollUserTrack | null;
+                      payrollStaffRoleId?: string | null;
                     } = {};
                     if (roleChanged) patch.role = rolePick;
-                    if (rolePick === "USER" && (trackChanged || roleChanged)) {
-                      patch.payrollTrack = trackPick;
+                    if (rolePick === "USER" && (staffChanged || roleChanged)) {
+                      patch.payrollStaffRoleId = staffRolePick;
                     } else if (roleChanged && rolePick !== "USER") {
-                      patch.payrollTrack = null;
+                      patch.payrollStaffRoleId = null;
                     }
                     const ok = await patchUserRole(roleModal.id, patch);
                     if (ok) setRoleModal(null);
@@ -741,17 +790,22 @@ export function UsersDirectoryClient({
             </label>
             {role === "USER" ? (
               <label className="mt-3 block text-sm font-medium text-[var(--text-body)]">
-                Направление (для ФОТ)
+                Роль сотрудника (ФОТ)
                 <select
                   className={inputClass}
-                  value={inviteTrack}
-                  onChange={(e) => setInviteTrack(e.target.value as PayrollUserTrack)}
+                  value={inviteStaffRoleId}
+                  onChange={(e) => setInviteStaffRoleId(e.target.value)}
+                  disabled={staffRoles.length === 0}
                 >
-                  {PAYROLL_USER_TRACK_VALUES.map((track) => (
-                    <option key={track} value={track}>
-                      {PAYROLL_USER_TRACK_LABELS[track]}
-                    </option>
-                  ))}
+                  {staffRoles.length === 0 ? (
+                    <option value="">Нет ролей ФОТ</option>
+                  ) : (
+                    staffRoles.map((sr) => (
+                      <option key={sr.id} value={sr.id}>
+                        {sr.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </label>
             ) : null}
@@ -767,7 +821,7 @@ export function UsersDirectoryClient({
               </button>
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || (role === "USER" && !inviteStaffRoleId)}
                 onClick={() => void submitInvite()}
                 className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
               >

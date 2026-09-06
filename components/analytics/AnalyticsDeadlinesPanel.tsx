@@ -5,11 +5,11 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { ChartResponsiveContainer } from "@/components/analytics/ChartResponsiveContainer";
 import { DeadlinesScheduleSettings } from "@/components/analytics/DeadlinesScheduleSettings";
 import {
   DEFAULT_ADMIN_SLA_HOURS,
@@ -112,7 +112,7 @@ function BucketChart({
   ];
   return (
     <div className="h-56 w-full min-w-0">
-      <ResponsiveContainer width="100%" height="100%">
+      <ChartResponsiveContainer>
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" opacity={0.2} vertical={false} />
           <XAxis
@@ -137,7 +137,7 @@ function BucketChart({
           />
           <Bar dataKey="count" fill="var(--sidebar-blue)" radius={[6, 6, 0, 0]} />
         </BarChart>
-      </ResponsiveContainer>
+      </ChartResponsiveContainer>
     </div>
   );
 }
@@ -379,7 +379,7 @@ export function AnalyticsDeadlinesPanel({
           </p>
           {workChartData.length > 0 ? (
             <div className="h-[min(400px,60vh)] w-full rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-2">
-              <ResponsiveContainer width="100%" height="100%">
+              <ChartResponsiveContainer>
                 <BarChart
                   data={workChartData}
                   layout="vertical"
@@ -415,7 +415,7 @@ export function AnalyticsDeadlinesPanel({
                     radius={[0, 4, 4, 0]}
                   />
                 </BarChart>
-              </ResponsiveContainer>
+              </ChartResponsiveContainer>
             </div>
           ) : (
             <p className="text-sm text-[var(--text-muted)]">

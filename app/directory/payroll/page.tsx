@@ -15,7 +15,7 @@ export default async function DirectoryPayrollPage() {
   return (
     <ModuleFrame
       title="ФОТ"
-      description="Сделочные начисления для техников: ручная настройка, импорт и выгрузка Excel по позициям активного прайса и категориям CAD / Мануал / Обработка."
+      description="Сделочные начисления для техников: роли сотрудников, плашки ФОТ и свободный импорт из Excel."
     >
       <PayrollConfigClient />
       <p className="mt-8 text-sm">

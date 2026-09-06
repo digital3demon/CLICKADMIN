@@ -140,6 +140,10 @@ model Tenant {
   subscriptionInvoices              SubscriptionInvoice[]
   /// Переопределения доступа к модулям; если записи нет — см. `lib/role-module-defaults`
   roleModuleAccess                  RoleModuleAccess[]
+  /// Роли сотрудников для ФОТ (Цифра / Мануал / …) — tenant-defined
+  payrollStaffRoles                 PayrollStaffRole[]
+  /// Доступ к модулям по роли сотрудника ФОТ
+  staffRoleModuleAccess             StaffRoleModuleAccess[]
   /// Локальные карточки канбана без наряда (синхронизация между пользователями тенанта)
   kanbanStandaloneCards             KanbanStandaloneCard[]
   /// Клиентские состояния на уровне организации (общие для всех пользователей)
@@ -854,8 +858,11 @@ model User {
   email                     String
   displayName               String
   role                      UserRole
-  /// Направление работы (роль USER): фильтр плашек «Что сделано» по категориям ФОТ.
+  /// @deprecated Бэкфилл → payrollStaffRoleId; колонка дропается в миграции.
   payrollTrack              PayrollUserTrack?
+  /// Роль сотрудника ФОТ (для USER): фильтр плашек и матрица доступов staff role.
+  payrollStaffRoleId        String?
+  payrollStaffRole          PayrollStaffRole? @relation(fields: [payrollStaffRoleId], references: [id], onDelete: SetNull)
   /// Bcrypt-хэш пароля (вход после активации приглашения)
   passwordHash              String?
   /// Bcrypt одноразового кода приглашения; null после установки пароля
@@ -931,6 +938,7 @@ model User {
   @@index([isActive])
   @@index([tenantId])
   @@index([tenantId, kaitenUserId])
+  @@index([payrollStaffRoleId])
 }
 
 model UserDeviceSession {
@@ -992,6 +1000,38 @@ model RoleModuleAccess {
 
   @@unique([tenantId, role, module])
   @@index([tenantId, role])
+}
+
+/// Tenant-роль сотрудника для ФОТ (карточки на /directory/payroll).
+model PayrollStaffRole {
+  id           String                   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  sortOrder    Int                      @default(0)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  users        User[]
+  configLinks  PayrollConfigStaffRole[]
+  moduleAccess StaffRoleModuleAccess[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, sortOrder])
+}
+
+/// Доступ к модулю для роли сотрудника ФОТ (строка в матрице доступов).
+model StaffRoleModuleAccess {
+  id          String           @id @default(cuid())
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staffRoleId String
+  staffRole   PayrollStaffRole @relation(fields: [staffRoleId], references: [id], onDelete: Cascade)
+  module      AppModule
+  allowed     Boolean
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([tenantId, staffRoleId, module])
+  @@index([tenantId, staffRoleId])
 }
 
 /// Аккаунт Яндекс.Почты, подключенный через пароль приложения (без OAuth).
@@ -2340,6 +2380,7 @@ model PriceListItem {
   constructions         OrderConstruction[]
   costingLines          CostingLine[]
   payrollConfigs        PayrollPriceItemConfig[]
+  payrollConfigLinks    PayrollConfigPriceItem[]
   payrollWorkEntries    PayrollWorkEntry[]
   createdAt             DateTime                    @default(now())
   updatedAt             DateTime                    @updatedAt
@@ -2349,23 +2390,49 @@ model PriceListItem {
 }
 
 model PayrollPriceItemConfig {
-  id                 String             @id @default(cuid())
+  id                 String                   @id @default(cuid())
   tenantId           String
-  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  priceListItemId    String
-  priceListItem      PriceListItem      @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
-  kind               PayrollWorkKind
+  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Legacy / denorm первого прайс-линка; канон — payrollConfigPriceItems.
+  priceListItemId    String?
+  priceListItem      PriceListItem?           @relation(fields: [priceListItemId], references: [id], onDelete: SetNull)
+  /// Legacy kind; видимость теперь через staffRoles.
+  kind               PayrollWorkKind?
   amountRub          Int
-  description        String
-  sortOrder          Int                @default(0)
+  /// Название плашки ФОТ.
+  name               String
+  sortOrder          Int                      @default(0)
   payrollWorkEntries PayrollWorkEntry[]
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  staffRoles         PayrollConfigStaffRole[]
+  priceItems         PayrollConfigPriceItem[]
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 
   @@index([tenantId, priceListItemId])
   @@index([tenantId, kind])
   @@index([priceListItemId])
   @@index([tenantId, updatedAt])
+  @@index([tenantId, name])
+}
+
+model PayrollConfigStaffRole {
+  configId    String
+  staffRoleId String
+  config      PayrollPriceItemConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  staffRole   PayrollStaffRole       @relation(fields: [staffRoleId], references: [id], onDelete: Cascade)
+
+  @@id([configId, staffRoleId])
+  @@index([staffRoleId])
+}
+
+model PayrollConfigPriceItem {
+  configId        String
+  priceListItemId String
+  config          PayrollPriceItemConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  priceListItem   PriceListItem          @relation(fields: [priceListItemId], references: [id], onDelete: Cascade)
+
+  @@id([configId, priceListItemId])
+  @@index([priceListItemId])
 }
 
 model PayrollWorkEntry {
@@ -2377,9 +2444,9 @@ model PayrollWorkEntry {
   kanbanCardId    String?
   payrollConfigId String?
   payrollConfig   PayrollPriceItemConfig? @relation(fields: [payrollConfigId], references: [id], onDelete: Restrict)
-  priceListItemId String
-  priceListItem   PriceListItem           @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
-  kind            PayrollWorkKind
+  priceListItemId String?
+  priceListItem   PriceListItem?          @relation(fields: [priceListItemId], references: [id], onDelete: Restrict)
+  kind            PayrollWorkKind?
   quantity        Int                     @default(1)
   amountRub       Int
   userId          String

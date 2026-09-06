@@ -3,27 +3,20 @@
 import type { UserRole } from "@prisma/client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type PayrollKind = "CAD" | "CAD_SURGERY" | "MANUAL" | "PROCESSING";
-
 type PayrollOption = {
   payrollConfigId: string;
-  priceListItemId: string;
-  kind: PayrollKind;
-  kindLabel: string;
-  amountRub: number;
-  description: string;
-  code: string;
   name: string;
-  sectionTitle: string | null;
-  subsectionTitle: string | null;
+  amountRub: number;
+  matchedOrder?: boolean;
+  description?: string;
+  code?: string;
+  priceListItemId?: string | null;
 };
 
 type PayrollEntry = {
   id: string;
   payrollConfigId: string | null;
-  priceListItemId: string;
-  kind: PayrollKind;
-  kindLabel: string;
+  priceListItemId: string | null;
   quantity: number;
   amountRub: number;
   userDisplayName: string;
@@ -31,10 +24,11 @@ type PayrollEntry = {
   priceCode: string;
   priceName: string;
   configDescription: string;
+  configName?: string;
 };
 
-let payrollOptionsCache: PayrollOption[] | null = null;
-let payrollOptionsInflight: Promise<PayrollOption[]> | null = null;
+const optionsCacheByOrder = new Map<string, PayrollOption[]>();
+const optionsInflightByOrder = new Map<string, Promise<PayrollOption[]>>();
 let payrollNextLoadAllowedAt = 0;
 
 function retryAfterMs(value: string | null): number {
@@ -49,11 +43,15 @@ async function readJson<T>(res: Response): Promise<T> {
   return (await res.json().catch(() => ({}))) as T;
 }
 
-async function loadPayrollOptions(): Promise<PayrollOption[]> {
-  if (payrollOptionsCache) return payrollOptionsCache;
-  if (payrollOptionsInflight) return payrollOptionsInflight;
-  payrollOptionsInflight = (async () => {
-    const res = await fetch("/api/payroll/options", { cache: "no-store" });
+async function loadPayrollOptions(orderId: string): Promise<PayrollOption[]> {
+  const key = orderId || "_";
+  const cached = optionsCacheByOrder.get(key);
+  if (cached) return cached;
+  const inflight = optionsInflightByOrder.get(key);
+  if (inflight) return inflight;
+  const promise = (async () => {
+    const qs = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "";
+    const res = await fetch(`/api/payroll/options${qs}`, { cache: "no-store" });
     const json = await readJson<{ items?: PayrollOption[]; error?: string }>(res);
     if (!res.ok) {
       const err = new Error(json.error || "Не удалось загрузить ФОТ");
@@ -63,13 +61,15 @@ async function loadPayrollOptions(): Promise<PayrollOption[]> {
       );
       throw err;
     }
-    payrollOptionsCache = Array.isArray(json.items) ? json.items : [];
-    return payrollOptionsCache;
+    const items = Array.isArray(json.items) ? json.items : [];
+    optionsCacheByOrder.set(key, items);
+    return items;
   })();
+  optionsInflightByOrder.set(key, promise);
   try {
-    return await payrollOptionsInflight;
+    return await promise;
   } finally {
-    payrollOptionsInflight = null;
+    optionsInflightByOrder.delete(key);
   }
 }
 
@@ -130,7 +130,7 @@ export function PayrollDonePanel({
     setNotice(null);
     try {
       const [nextOptions, entRes] = await Promise.all([
-        loadPayrollOptions(),
+        loadPayrollOptions(orderId),
         fetch(`/api/payroll/entries?orderId=${encodeURIComponent(orderId)}`, {
           cache: "no-store",
         }),
@@ -263,11 +263,28 @@ export function PayrollDonePanel({
           {options.length === 0 ? (
             <option value="">ФОТ не настроен</option>
           ) : (
-            options.map((opt) => (
-              <option key={opt.payrollConfigId} value={opt.payrollConfigId}>
-                {opt.kindLabel} · {opt.description} · {opt.code}
-              </option>
-            ))
+            <>
+              {options.some((o) => o.matchedOrder) ? (
+                <optgroup label="По составу заказа">
+                  {options
+                    .filter((o) => o.matchedOrder)
+                    .map((opt) => (
+                      <option key={opt.payrollConfigId} value={opt.payrollConfigId}>
+                        {opt.name} · {rub(opt.amountRub)}
+                      </option>
+                    ))}
+                </optgroup>
+              ) : null}
+              <optgroup label={options.some((o) => o.matchedOrder) ? "Остальные" : "ФОТ"}>
+                {options
+                  .filter((o) => !o.matchedOrder)
+                  .map((opt) => (
+                    <option key={opt.payrollConfigId} value={opt.payrollConfigId}>
+                      {opt.name} · {rub(opt.amountRub)}
+                    </option>
+                  ))}
+              </optgroup>
+            </>
           )}
         </select>
         {selected ? (
@@ -285,9 +302,10 @@ export function PayrollDonePanel({
               className="mt-1 w-24 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-input)] px-2 py-1.5 text-[0.78rem] text-[var(--kaiten-modal-text)] outline-none"
             />
             <div className="mt-2 rounded-md border border-[var(--kaiten-modal-border)] bg-[var(--kaiten-modal-control)] px-2 py-2 text-[0.72rem] text-[var(--kaiten-modal-text)]">
-              <div className="font-semibold">{selected.kindLabel} · {selected.description}</div>
+              <div className="font-semibold">{selected.name}</div>
               <div className="mt-0.5 text-[var(--kaiten-modal-muted)]">
-                {selected.code} · {selected.name}
+                {rub(selected.amountRub)}
+                {selected.code ? ` · ${selected.code}` : ""}
               </div>
               <button
                 type="button"
@@ -341,7 +359,7 @@ export function PayrollDonePanel({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-[0.78rem] font-semibold text-[var(--kaiten-modal-text)]">
-                      {e.kindLabel} · {e.configDescription} · {rub(e.amountRub)}
+                      {e.configName || e.configDescription || e.priceName} · {rub(e.amountRub)}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 text-[0.68rem] text-[var(--kaiten-modal-muted)]">
                       <span>Кол-во</span>

@@ -326,6 +326,22 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
         payrollTrack: PayrollUserTrack.MANUAL,
       },
     ];
+    const staffRoleByTrack = new Map<PayrollUserTrack, string>();
+    for (const seed of [
+      { name: "Цифра", track: PayrollUserTrack.DIGITAL, sortOrder: 10 },
+      { name: "Мануал", track: PayrollUserTrack.MANUAL, sortOrder: 20 },
+      { name: "Цифра+Мануал", track: PayrollUserTrack.DIGITAL_MANUAL, sortOrder: 30 },
+      { name: "Производство", track: PayrollUserTrack.SHOP_FLOOR, sortOrder: 40 },
+    ] as const) {
+      const role = await tx.payrollStaffRole.create({
+        data: {
+          tenantId: DEFAULT_TENANT_ID,
+          name: seed.name,
+          sortOrder: seed.sortOrder,
+        },
+      });
+      staffRoleByTrack.set(seed.track, role.id);
+    }
     for (let si = 0; si < staffSeeds.length; si++) {
       const u = staffSeeds[si]!;
       await tx.user.create({
@@ -338,6 +354,9 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
           passwordHash: demoStaffPasswordHash,
           isActive: true,
           payrollTrack: u.payrollTrack ?? null,
+          payrollStaffRoleId: u.payrollTrack
+            ? staffRoleByTrack.get(u.payrollTrack) ?? null
+            : null,
           lastLoginAt: hoursAgo(12 + si),
         },
       });
@@ -602,11 +621,22 @@ export async function seedDemoDatabase(db: PrismaClient): Promise<void> {
             priceListItemId: pi.id,
             kind: row.kind,
             amountRub: row.amountRub,
-            description: row.description,
+            name: row.description,
             sortOrder: ri,
+            priceItems: { create: [{ priceListItemId: pi.id }] },
+            staffRoles: {
+              create: [
+                {
+                  staffRoleId:
+                    staffRoleByTrack.get(
+                      DEFAULT_PAYROLL_KIND_TRACK_MAP[row.kind],
+                    ) ?? staffRoleByTrack.get(PayrollUserTrack.DIGITAL_MANUAL)!,
+                },
+              ],
+            },
           },
         });
-        seeded.push({ id: cfg.id, kind: cfg.kind, amountRub: cfg.amountRub });
+        seeded.push({ id: cfg.id, kind: row.kind, amountRub: cfg.amountRub });
       }
       payrollConfigsByItemId.set(pi.id, seeded);
     }

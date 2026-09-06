@@ -22,7 +22,7 @@ import { resolveTenantPrismaClient } from "@/lib/tenant-prisma-resolver";
 export async function getEffectiveModuleAccess(
   tenantId: string | null | undefined,
   role: UserRole,
-  options?: { db?: PrismaClient },
+  options?: { db?: PrismaClient; payrollStaffRoleId?: string | null },
 ): Promise<Record<AppModule, boolean>> {
   if (isSingleUserPortable() || !tenantId || role === "OWNER") {
     const all = {} as Record<AppModule, boolean>;
@@ -62,7 +62,49 @@ export async function getEffectiveModuleAccess(
   for (const m of CLICKMIG_OWNER_ONLY_MODULES) {
     out[m] = false;
   }
-  return expandBundles(out);
+  let expanded = expandBundles(out);
+
+  const staffRoleId = options?.payrollStaffRoleId?.trim() || null;
+  if (role === "USER" && staffRoleId) {
+    const staffRows = await db.staffRoleModuleAccess.findMany({
+      where: { tenantId, staffRoleId },
+      select: { module: true, allowed: true },
+    });
+    if (staffRows.length > 0) {
+      const staffMap = new Map(staffRows.map((r) => [r.module, r.allowed]));
+      const merged = { ...expanded };
+      for (const m of ALL_APP_MODULES) {
+        if (staffMap.has(m)) merged[m] = staffMap.get(m)!;
+      }
+      for (const m of CLICKMIG_OWNER_ONLY_MODULES) {
+        merged[m] = false;
+      }
+      expanded = expandBundles(merged);
+    }
+  }
+
+  return expanded;
+}
+
+/** Эффективный доступ с подгрузкой payrollStaffRoleId пользователя. */
+export async function getEffectiveModuleAccessForSessionUser(
+  tenantId: string | null | undefined,
+  role: UserRole,
+  userId: string | null | undefined,
+  options?: { db?: PrismaClient },
+): Promise<Record<AppModule, boolean>> {
+  if (!tenantId || !userId || role !== "USER") {
+    return getEffectiveModuleAccess(tenantId, role, options);
+  }
+  const db = options?.db ?? (await resolveTenantPrismaClient(tenantId));
+  const user = await db.user.findFirst({
+    where: { id: userId, tenantId },
+    select: { payrollStaffRoleId: true },
+  });
+  return getEffectiveModuleAccess(tenantId, role, {
+    db,
+    payrollStaffRoleId: user?.payrollStaffRoleId,
+  });
 }
 
 export function moduleAccessForResponse(

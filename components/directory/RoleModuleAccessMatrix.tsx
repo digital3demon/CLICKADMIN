@@ -15,11 +15,14 @@ import {
 } from "@/lib/role-module-bundles";
 
 type BundleRow = { id: BundleId; label: string };
+type StaffRoleCol = { id: string; name: string };
 
 type LoadPayload = {
   bundles: BundleRow[];
   roles: UserRole[];
   effective: Record<string, Record<string, boolean>>;
+  staffRoles: StaffRoleCol[];
+  staffEffective: Record<string, Record<string, boolean>>;
 };
 
 export function RoleModuleAccessMatrix() {
@@ -43,6 +46,8 @@ export function RoleModuleAccessMatrix() {
         bundles: j.bundles,
         roles: j.roles,
         effective: j.effective,
+        staffRoles: Array.isArray(j.staffRoles) ? j.staffRoles : [],
+        staffEffective: j.staffEffective ?? {},
       });
     } catch {
       setError("Сеть недоступна");
@@ -64,7 +69,13 @@ export function RoleModuleAccessMatrix() {
     return map;
   }, [data?.bundles]);
 
-  const setCell = async (role: UserRole, bundle: BundleId, allowed: boolean) => {
+  const colCount = 1 + ROLES_IN_ACCESS_MATRIX.length + (data?.staffRoles.length ?? 0);
+
+  const setSystemCell = async (
+    role: UserRole,
+    bundle: BundleId,
+    allowed: boolean,
+  ) => {
     const key = `${role}:${bundle}`;
     setSaving(key);
     setError(null);
@@ -91,6 +102,50 @@ export function RoleModuleAccessMatrix() {
             effective: {
               ...prev.effective,
               [role]: j.effective!,
+            },
+          };
+        });
+        return;
+      }
+    } catch {
+      setError("Сеть недоступна");
+      await load();
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const setStaffCell = async (
+    staffRoleId: string,
+    bundle: BundleId,
+    allowed: boolean,
+  ) => {
+    const key = `staff:${staffRoleId}:${bundle}`;
+    setSaving(key);
+    setError(null);
+    try {
+      const res = await fetch("/api/role-module-access", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffRoleId, bundle, allowed }),
+      });
+      const j = (await res.json()) as {
+        error?: string;
+        effective?: Record<string, boolean>;
+      };
+      if (!res.ok) {
+        setError(j.error ?? "Сохранение не удалось");
+        await load();
+        return;
+      }
+      if (j.effective) {
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            staffEffective: {
+              ...prev.staffEffective,
+              [staffRoleId]: j.effective!,
             },
           };
         });
@@ -140,9 +195,48 @@ export function RoleModuleAccessMatrix() {
               disabled={cellDisabled}
               title={cellTitle}
               onChange={(e) => {
-                void setCell(r, b.id, e.target.checked);
+                void setSystemCell(r, b.id, e.target.checked);
               }}
               aria-label={`${USER_ROLE_LABELS[r]} — ${b.label}`}
+            />
+          </td>
+        );
+      })}
+      {data!.staffRoles.map((sr) => {
+        const on = data!.staffEffective[sr.id]?.[b.id] === true;
+        const busy = saving === `staff:${sr.id}:${b.id}`;
+        const parent = requiredParentBundle(b.id);
+        const parentOn = parent
+          ? data!.staffEffective[sr.id]?.[parent] === true
+          : true;
+        const gatedByParent = parent != null && !parentOn;
+        const clickMigOwnerOnly = isClickMigOwnerOnlyBundle(b.id);
+        const impliedByChild =
+          !on &&
+          childBundlesOf(b.id).some(
+            (c) => data!.staffEffective[sr.id]?.[c] === true,
+          );
+        const cellDisabled =
+          busy || gatedByParent || clickMigOwnerOnly || impliedByChild;
+        const cellTitle = clickMigOwnerOnly
+          ? "КликМиг временно только у владельца (OWNER)."
+          : gatedByParent && parent
+            ? `Сначала включите «${bundleById.get(parent)?.label ?? parent}».`
+            : impliedByChild
+              ? "Включено через дочерний пакет — отключите его сначала."
+              : undefined;
+        return (
+          <td key={`staff-${sr.id}`} className="p-1 text-center align-middle">
+            <input
+              type="checkbox"
+              className="h-4 w-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              checked={on || impliedByChild}
+              disabled={cellDisabled}
+              title={cellTitle}
+              onChange={(e) => {
+                void setStaffCell(sr.id, b.id, e.target.checked);
+              }}
+              aria-label={`${sr.name} — ${b.label}`}
             />
           </td>
         );
@@ -171,7 +265,7 @@ export function RoleModuleAccessMatrix() {
         Пакеты прав: канбан — 3 уровня (доски → работа → координация), заказы —
         просмотр с чатом, ведение, общие уведомления. Персональные @ник — без
         галочки. «Прочитано» @лаборатория — только админы. У владельца полный
-        доступ.
+        доступ. Колонки после системных ролей — роли сотрудников (ФОТ).
       </p>
       <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
         <table className="min-w-full text-left text-sm">
@@ -188,6 +282,15 @@ export function RoleModuleAccessMatrix() {
                   {USER_ROLE_LABELS[r]}
                 </th>
               ))}
+              {data.staffRoles.map((sr) => (
+                <th
+                  key={`staff-h-${sr.id}`}
+                  className="whitespace-nowrap px-1 py-2 text-center text-xs font-medium text-[var(--text-body)]"
+                  title="Роль сотрудника (ФОТ)"
+                >
+                  {sr.name}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -199,10 +302,7 @@ export function RoleModuleAccessMatrix() {
               return (
                 <Fragment key={`hdr-${group.id}`}>
                   <tr className="border-b border-[var(--card-border)] bg-[color-mix(in_srgb,var(--surface-muted)_70%,transparent)]">
-                    <td
-                      colSpan={1 + ROLES_IN_ACCESS_MATRIX.length}
-                      className="px-2 py-2"
-                    >
+                    <td colSpan={colCount} className="px-2 py-2">
                       <div className="text-xs font-bold uppercase tracking-wide text-[var(--text-body)]">
                         {group.title}
                       </div>

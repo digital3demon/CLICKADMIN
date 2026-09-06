@@ -20,6 +20,10 @@ type Entry = {
 
 type PayrollUser = { id: string; displayName: string; email: string };
 
+type CatalogItem = { id: string; name: string; amountRub: number };
+
+type TabKey = "mine" | "review" | "catalog";
+
 function monthStartYmd(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -67,7 +71,7 @@ export function PayrollPageClient({
   currentUserId: string;
 }) {
   const isSenior = role === "SENIOR_TECHNICIAN" || role === "OWNER";
-  const [tab, setTab] = useState<"mine" | "review">("mine");
+  const [tab, setTab] = useState<TabKey>("mine");
   const [period] = useState(() => ({
     from: monthStartYmd(),
     to: monthEndYmd(),
@@ -77,12 +81,13 @@ export function PayrollPageClient({
   const [selectedUserId, setSelectedUserId] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [totalRub, setTotalRub] = useState(0);
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const targetUserId = tab === "mine" ? currentUserId : selectedUserId;
 
-  const load = useCallback(async () => {
+  const loadEntries = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -114,28 +119,70 @@ export function PayrollPageClient({
     }
   }, [period.from, period.to, isSenior, targetUserId]);
 
+  const loadCatalog = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/payroll/config", { cache: "no-store" });
+      const data = (await res.json()) as {
+        configs?: { id: string; name: string; amountRub: number }[];
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || "Не удалось загрузить справочник ФОТ");
+      }
+      setCatalog(
+        Array.isArray(data.configs)
+          ? data.configs.map((c) => ({
+              id: c.id,
+              name: c.name,
+              amountRub: c.amountRub,
+            }))
+          : [],
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка загрузки");
+      setCatalog([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (tab === "catalog") {
+      void loadCatalog();
+      return;
+    }
+    void loadEntries();
+  }, [tab, loadCatalog, loadEntries]);
+
+  const tabs = useMemo(() => {
+    const list: { key: TabKey; label: string }[] = [
+      { key: "mine", label: "Начисления" },
+    ];
+    if (isSenior) list.push({ key: "review", label: "Проверка" });
+    list.push({ key: "catalog", label: "Справочник ФОТ" });
+    return list;
+  }, [isSenior]);
 
   const title = useMemo(() => {
+    if (tab === "catalog") return "Справочник ФОТ";
     if (tab === "mine") return "Мои начисления";
     const u = users.find((x) => x.id === selectedUserId);
     return u ? `Проверка: ${u.displayName}` : "Проверка начислений";
   }, [tab, users, selectedUserId]);
 
+  const showTabs = tabs.length > 1;
+
   return (
     <div className="w-full max-w-6xl space-y-4">
-      {isSenior ? (
+      {showTabs ? (
         <div className="flex flex-wrap gap-2">
-          {[
-            ["mine", "Начисления"],
-            ["review", "Проверка"],
-          ].map(([key, label]) => (
+          {tabs.map(({ key, label }) => (
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key as "mine" | "review")}
+              onClick={() => setTab(key)}
               className={
                 tab === key
                   ? "rounded-full bg-[var(--sidebar-blue)] px-4 py-1.5 text-sm font-semibold text-white"
@@ -148,103 +195,174 @@ export function PayrollPageClient({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
-        {isSenior && tab === "review" ? (
-          <label className="min-w-[260px] flex-1 text-sm">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-              Пользователь
-            </span>
-            <select
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              className="w-full rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
+      {tab === "catalog" ? (
+        <>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">{title}</h2>
+            <button
+              type="button"
+              onClick={() => void loadCatalog()}
+              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.displayName} · {u.email}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <div className="text-sm">
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-            Месяц
+              Обновить
+            </button>
           </div>
-          <div className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 font-semibold text-[var(--text-strong)]">
-            {period.label}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Показать
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold text-[var(--app-text)]">{title}</h2>
-        <div className="text-sm text-[var(--text-muted)]">
-          Итого: <span className="font-semibold text-[var(--text-strong)]">{rub(totalRub)}</span>
-        </div>
-      </div>
-      {error ? <p className="text-sm font-medium text-red-600 dark:text-red-300">{error}</p> : null}
-
-      <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-[var(--surface-subtle)] text-xs uppercase tracking-wide text-[var(--text-muted)]">
-            <tr>
-              <th className="px-3 py-2">Дата</th>
-              <th className="px-3 py-2">Наряд</th>
-              <th className="px-3 py-2">Доктор</th>
-              <th className="px-3 py-2">Пациент</th>
-              <th className="px-3 py-2">Позиция</th>
-              <th className="px-3 py-2">Что сделано</th>
-              <th className="px-3 py-2 text-right">Кол-во</th>
-              {isSenior && tab === "review" ? <th className="px-3 py-2">Пользователь</th> : null}
-              <th className="px-3 py-2 text-right">Сумма</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--card-border)]">
-            {loading ? (
-              <tr>
-                <td className="px-3 py-5 text-[var(--text-muted)]" colSpan={8}>
-                  Загрузка…
-                </td>
-              </tr>
-            ) : entries.length === 0 ? (
-              <tr>
-                <td className="px-3 py-5 text-[var(--text-muted)]" colSpan={8}>
-                  За выбранный период начислений нет.
-                </td>
-              </tr>
-            ) : (
-              entries.map((e) => (
-                <tr key={e.id}>
-                  <td className="whitespace-nowrap px-3 py-2 text-[var(--text-muted)]">{dt(e.createdAt)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono font-semibold text-[var(--text-strong)]">
-                    {e.orderNumber}
-                  </td>
-                  <td className="px-3 py-2">{e.doctorName}</td>
-                  <td className="px-3 py-2">{e.patientName}</td>
-                  <td className="px-3 py-2">
-                    {e.priceCode} · {e.priceName}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div>{e.kindLabel}</div>
-                    <div className="text-xs text-[var(--text-muted)]">{e.configDescription}</div>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{e.quantity}</td>
-                  {isSenior && tab === "review" ? <td className="px-3 py-2">{e.userDisplayName}</td> : null}
-                  <td className="whitespace-nowrap px-3 py-2 text-right font-semibold">{rub(e.amountRub)}</td>
+          {error ? (
+            <p className="text-sm font-medium text-red-600 dark:text-red-300">{error}</p>
+          ) : null}
+          <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-[var(--surface-subtle)] text-xs uppercase tracking-wide text-[var(--text-muted)]">
+                <tr>
+                  <th className="px-3 py-2">Название</th>
+                  <th className="px-3 py-2 text-right">Сумма</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody className="divide-y divide-[var(--card-border)]">
+                {loading ? (
+                  <tr>
+                    <td className="px-3 py-5 text-[var(--text-muted)]" colSpan={2}>
+                      Загрузка…
+                    </td>
+                  </tr>
+                ) : catalog.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-5 text-[var(--text-muted)]" colSpan={2}>
+                      Нет позиций в справочнике ФОТ.
+                    </td>
+                  </tr>
+                ) : (
+                  catalog.map((c) => (
+                    <tr key={c.id}>
+                      <td className="px-3 py-2 text-[var(--text-strong)]">{c.name}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
+                        {rub(c.amountRub)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-4">
+            {isSenior && tab === "review" ? (
+              <label className="min-w-[260px] flex-1 text-sm">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Пользователь
+                </span>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="w-full rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-strong)] outline-none"
+                >
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.displayName} · {u.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <div className="text-sm">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Месяц
+              </div>
+              <div className="rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 font-semibold text-[var(--text-strong)]">
+                {period.label}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadEntries()}
+              className="rounded-md bg-[var(--sidebar-blue)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            >
+              Показать
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-lg font-semibold text-[var(--app-text)]">{title}</h2>
+            <div className="text-sm text-[var(--text-muted)]">
+              Итого:{" "}
+              <span className="font-semibold text-[var(--text-strong)]">
+                {rub(totalRub)}
+              </span>
+            </div>
+          </div>
+          {error ? (
+            <p className="text-sm font-medium text-red-600 dark:text-red-300">{error}</p>
+          ) : null}
+
+          <div className="overflow-x-auto rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-[var(--surface-subtle)] text-xs uppercase tracking-wide text-[var(--text-muted)]">
+                <tr>
+                  <th className="px-3 py-2">Дата</th>
+                  <th className="px-3 py-2">Наряд</th>
+                  <th className="px-3 py-2">Доктор</th>
+                  <th className="px-3 py-2">Пациент</th>
+                  <th className="px-3 py-2">Позиция</th>
+                  <th className="px-3 py-2">Что сделано</th>
+                  <th className="px-3 py-2 text-right">Кол-во</th>
+                  {isSenior && tab === "review" ? (
+                    <th className="px-3 py-2">Пользователь</th>
+                  ) : null}
+                  <th className="px-3 py-2 text-right">Сумма</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--card-border)]">
+                {loading ? (
+                  <tr>
+                    <td className="px-3 py-5 text-[var(--text-muted)]" colSpan={8}>
+                      Загрузка…
+                    </td>
+                  </tr>
+                ) : entries.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-5 text-[var(--text-muted)]" colSpan={8}>
+                      За выбранный период начислений нет.
+                    </td>
+                  </tr>
+                ) : (
+                  entries.map((e) => (
+                    <tr key={e.id}>
+                      <td className="whitespace-nowrap px-3 py-2 text-[var(--text-muted)]">
+                        {dt(e.createdAt)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 font-mono font-semibold text-[var(--text-strong)]">
+                        {e.orderNumber}
+                      </td>
+                      <td className="px-3 py-2">{e.doctorName}</td>
+                      <td className="px-3 py-2">{e.patientName}</td>
+                      <td className="px-3 py-2">
+                        {e.priceCode} · {e.priceName}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div>{e.kindLabel}</div>
+                        <div className="text-xs text-[var(--text-muted)]">
+                          {e.configDescription}
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                        {e.quantity}
+                      </td>
+                      {isSenior && tab === "review" ? (
+                        <td className="px-3 py-2">{e.userDisplayName}</td>
+                      ) : null}
+                      <td className="whitespace-nowrap px-3 py-2 text-right font-semibold">
+                        {rub(e.amountRub)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
